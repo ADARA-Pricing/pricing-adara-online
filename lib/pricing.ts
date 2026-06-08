@@ -1,4 +1,4 @@
-import type { MercadoLibreCategoryFee, MercadoLibrePriceOption, Product, RoundingMode, TaxSettings } from "@/lib/types";
+import type { MercadoLibreCategoryFee, MercadoLibrePriceOption, MercadoLibreShippingCost, Product, RoundingMode, TaxSettings } from "@/lib/types";
 
 export function money(value?: number | null) {
   if (value === undefined || value === null || Number.isNaN(value)) return "-";
@@ -41,6 +41,7 @@ export function calculateMercadoLibrePrice(
   option: MercadoLibrePriceOption,
   categoryFee?: MercadoLibreCategoryFee | null,
   taxes: TaxSettings = defaultTaxSettings(),
+  shippingCost?: MercadoLibreShippingCost | null,
   desiredProfitRate = 10,
   roundTo = 100,
   roundingMode: RoundingMode = "nearest"
@@ -50,6 +51,9 @@ export function calculateMercadoLibrePrice(
   const marketplaceFeeRate = Number(categoryFee?.marketplace_fee_rate || 0);
   const financingFeeRate = Number(option.financing_fee_rate || 0);
   const marginRate = Number(desiredProfitRate || 0);
+  const fixedFeeAmount = Number(shippingCost?.fixed_fee_amount || 0);
+  const shippingCostAmount = Number(shippingCost?.shipping_cost_amount || 0);
+  const fixedCosts = fixedFeeAmount + shippingCostAmount;
 
   const taxesRate =
     Number(taxes.iibb_rate || 0) +
@@ -72,18 +76,21 @@ export function calculateMercadoLibrePrice(
       financingFeeRate,
       marginRate,
       taxesRate,
+      fixedFeeAmount,
+      shippingCostAmount,
+      fixedCosts,
       variableRate,
       error: "La suma de ganancia, comisión, cuotas e impuestos llega o supera el 100%."
     };
   }
 
-  const netSalePrice = costWithoutVat / denominator;
+  const netSalePrice = (costWithoutVat + fixedCosts) / denominator;
   const price = netSalePrice * (1 + productVatRate / 100);
   const roundedPrice = roundPrice(price, roundTo, roundingMode);
   const roundedNetSalePrice = roundedPrice / (1 + productVatRate / 100);
 
   const realVariableCostWithoutMargin = roundedNetSalePrice * rateToDecimal(marketplaceFeeRate + financingFeeRate + taxesRate);
-  const netProfit = roundedNetSalePrice - costWithoutVat - realVariableCostWithoutMargin;
+  const netProfit = roundedNetSalePrice - costWithoutVat - fixedCosts - realVariableCostWithoutMargin;
   const marginOnCost = costWithoutVat > 0 ? (netProfit / costWithoutVat) * 100 : 0;
   const marginOnNetSale = roundedNetSalePrice > 0 ? (netProfit / roundedNetSalePrice) * 100 : 0;
 
@@ -98,6 +105,9 @@ export function calculateMercadoLibrePrice(
     financingFeeRate,
     marginRate,
     taxesRate,
+    fixedFeeAmount,
+    shippingCostAmount,
+    fixedCosts,
     variableRate,
     error: null
   };

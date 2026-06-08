@@ -36,3 +36,7 @@ npm run dev
 ## Nota
 
 Si ya habías ejecutado `002_channels_pricing.sql`, no pasa nada. La nueva versión usa las tablas nuevas de MercadoLibre e Impuestos y deja la lógica anterior separada.
+
+
+## v5 - Envíos Meli
+Ejecutar `database/005_meli_shipping_costs.sql` en Supabase. Agrega la pestaña `/envios-meli` y suma costo fijo + envío Meli al cálculo de `/precios`.

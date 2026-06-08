@@ -56,6 +56,20 @@ export type MercadoLibreCategoryFee = {
   updated_at?: string;
 };
 
+export type MercadoLibreShippingCost = {
+  id?: string;
+  product_id: string;
+  sku?: string | null;
+  fixed_fee_amount: number;
+  shipping_cost_amount: number;
+  free_shipping: boolean;
+  shipping_method?: string | null;
+  notes?: string | null;
+  active: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type TaxSettings = {
   key: string;
   iibb_rate: number;

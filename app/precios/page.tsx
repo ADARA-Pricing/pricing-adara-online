@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppNav } from "@/components/AppNav";
 import { createClient } from "@/lib/supabase";
 import { calculateMercadoLibrePrice, defaultTaxSettings, mercadoLibreClassicOption, money, percent } from "@/lib/pricing";
-import type { MercadoLibreCategoryFee, MercadoLibreInstallmentFee, MercadoLibrePriceOption, Product, RoundingMode, TaxSettings } from "@/lib/types";
+import type { MercadoLibreCategoryFee, MercadoLibreInstallmentFee, MercadoLibrePriceOption, MercadoLibreShippingCost, Product, RoundingMode, TaxSettings } from "@/lib/types";
 
 export default function PricesPage() {
   const router = useRouter();
@@ -14,6 +14,7 @@ export default function PricesPage() {
   const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
   const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
+  const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
   const [query, setQuery] = useState("");
   const [selectedOption, setSelectedOption] = useState("all");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -36,11 +37,12 @@ export default function PricesPage() {
   async function loadData() {
     setLoading(true);
     setError(null);
-    const [productsResponse, installmentsResponse, categoryFeesResponse, taxesResponse] = await Promise.all([
+    const [productsResponse, installmentsResponse, categoryFeesResponse, taxesResponse, shippingResponse] = await Promise.all([
       supabase.from("products").select("*").eq("status", "active").order("name", { ascending: true }),
       supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
-      supabase.from("tax_settings").select("*").eq("key", "default").single()
+      supabase.from("tax_settings").select("*").eq("key", "default").single(),
+      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true)
     ]);
     setLoading(false);
 
@@ -55,6 +57,9 @@ export default function PricesPage() {
 
     if (taxesResponse.error) setError(taxesResponse.error.message);
     else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
+
+    if (shippingResponse.error) setError(shippingResponse.error.message);
+    else setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
   }
 
   useEffect(() => {
@@ -85,6 +90,7 @@ export default function PricesPage() {
       product: Product;
       option: MercadoLibrePriceOption;
       categoryFee?: MercadoLibreCategoryFee;
+      shippingCost?: MercadoLibreShippingCost;
       result: ReturnType<typeof calculateMercadoLibrePrice>;
     }> = [];
 
@@ -99,18 +105,20 @@ export default function PricesPage() {
 
     filteredProducts.forEach((product) => {
       const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase());
+      const shippingCost = shippingCosts.find((item) => item.product_id === product.id);
       filteredOptions.forEach((option) => {
         output.push({
           product,
           option,
           categoryFee,
-          result: calculateMercadoLibrePrice(product, option, categoryFee, taxes, desiredProfitRate, roundTo, roundingMode)
+          shippingCost,
+          result: calculateMercadoLibrePrice(product, option, categoryFee, taxes, shippingCost, desiredProfitRate, roundTo, roundingMode)
         });
       });
     });
 
     return output;
-  }, [products, pricingOptions, categoryFees, taxes, query, selectedOption, selectedCategory, desiredProfitRate, roundTo, roundingMode]);
+  }, [products, pricingOptions, categoryFees, shippingCosts, taxes, query, selectedOption, selectedCategory, desiredProfitRate, roundTo, roundingMode]);
 
   return (
     <main className="container wide">
@@ -177,7 +185,7 @@ export default function PricesPage() {
         </div>
 
         <p className="small" style={{ marginBottom: 0, marginTop: 12 }}>
-          Fórmula actual: costo sin IVA / (1 - ganancia deseada - comisión ML categoría - costo cuotas - impuestos) x IVA del producto. La ganancia y el redondeo se definen acá para simular precios, no en MercadoLibre.
+          Fórmula actual: (costo sin IVA + costos fijos Meli + envío Meli) / (1 - ganancia deseada - comisión ML categoría - costo cuotas - impuestos) x IVA del producto. La ganancia y el redondeo se definen acá para simular precios, no en MercadoLibre.
         </p>
       </section>
 
@@ -196,6 +204,7 @@ export default function PricesPage() {
                   <th>Comisión categoría</th>
                   <th>Costo cuotas</th>
                   <th>Impuestos</th>
+                  <th>Costos fijos / envío</th>
                   <th>Ganancia</th>
                   <th>Variable total</th>
                   <th>Precio calculado</th>
@@ -217,6 +226,7 @@ export default function PricesPage() {
                     <td>{percent(result.marketplaceFeeRate)}</td>
                     <td>{percent(result.financingFeeRate)}</td>
                     <td>{percent(result.taxesRate)}</td>
+                    <td>{money(result.fixedCosts)}</td>
                     <td>{percent(result.marginRate)}</td>
                     <td>{percent(result.variableRate)}</td>
                     <td>{result.valid ? money(result.price) : result.error}</td>
@@ -226,7 +236,7 @@ export default function PricesPage() {
                     <td>{categoryFee ? <span className="badge">configurada</span> : <span className="badge">sin comisión</span>}</td>
                   </tr>
                 ))}
-                {rows.length === 0 && <tr><td colSpan={16}>No hay precios para mostrar. Cargá productos activos y configuraciones activas de MercadoLibre.</td></tr>}
+                {rows.length === 0 && <tr><td colSpan={17}>No hay precios para mostrar. Cargá productos activos y configuraciones activas de MercadoLibre.</td></tr>}
               </tbody>
             </table>
           </div>
