@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppNav } from "@/components/AppNav";
 import { createClient } from "@/lib/supabase";
-import { calculateMercadoLibrePrice, defaultTaxSettings, money, percent } from "@/lib/pricing";
-import type { MercadoLibreCategoryFee, MercadoLibreInstallmentFee, Product, TaxSettings } from "@/lib/types";
+import { calculateMercadoLibrePrice, defaultTaxSettings, mercadoLibreClassicOption, money, percent } from "@/lib/pricing";
+import type { MercadoLibreCategoryFee, MercadoLibreInstallmentFee, MercadoLibrePriceOption, Product, RoundingMode, TaxSettings } from "@/lib/types";
 
 export default function PricesPage() {
   const router = useRouter();
@@ -15,8 +15,11 @@ export default function PricesPage() {
   const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
   const [query, setQuery] = useState("");
-  const [selectedInstallment, setSelectedInstallment] = useState("all");
+  const [selectedOption, setSelectedOption] = useState("all");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [desiredProfitRate, setDesiredProfitRate] = useState(10);
+  const [roundTo, setRoundTo] = useState(100);
+  const [roundingMode, setRoundingMode] = useState<RoundingMode>("nearest");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +35,7 @@ export default function PricesPage() {
 
   async function loadData() {
     setLoading(true);
+    setError(null);
     const [productsResponse, installmentsResponse, categoryFeesResponse, taxesResponse] = await Promise.all([
       supabase.from("products").select("*").eq("status", "active").order("name", { ascending: true }),
       supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
@@ -44,7 +48,7 @@ export default function PricesPage() {
     else setProducts((productsResponse.data || []) as Product[]);
 
     if (installmentsResponse.error) setError(installmentsResponse.error.message);
-    else setInstallments((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]);
+    else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
 
     if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
     else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
@@ -65,11 +69,21 @@ export default function PricesPage() {
     return Array.from(set).sort();
   }, [products]);
 
+  const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
+    return [mercadoLibreClassicOption(), ...installments.map((item) => ({
+      code: item.code,
+      name: item.name,
+      installment_count: item.installment_count,
+      financing_fee_rate: item.financing_fee_rate,
+      active: item.active
+    }))];
+  }, [installments]);
+
   const rows = useMemo(() => {
     const normalizedQuery = query.toLowerCase();
     const output: Array<{
       product: Product;
-      installment: MercadoLibreInstallmentFee;
+      option: MercadoLibrePriceOption;
       categoryFee?: MercadoLibreCategoryFee;
       result: ReturnType<typeof calculateMercadoLibrePrice>;
     }> = [];
@@ -81,24 +95,29 @@ export default function PricesPage() {
       return matchesQuery && matchesCategory;
     });
 
-    const filteredInstallments = installments.filter((item) => selectedInstallment === "all" || item.code === selectedInstallment);
+    const filteredOptions = pricingOptions.filter((item) => selectedOption === "all" || item.code === selectedOption);
 
     filteredProducts.forEach((product) => {
       const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase());
-      filteredInstallments.forEach((installment) => {
-        output.push({ product, installment, categoryFee, result: calculateMercadoLibrePrice(product, installment, categoryFee, taxes) });
+      filteredOptions.forEach((option) => {
+        output.push({
+          product,
+          option,
+          categoryFee,
+          result: calculateMercadoLibrePrice(product, option, categoryFee, taxes, desiredProfitRate, roundTo, roundingMode)
+        });
       });
     });
 
     return output;
-  }, [products, installments, categoryFees, taxes, query, selectedInstallment, selectedCategory]);
+  }, [products, pricingOptions, categoryFees, taxes, query, selectedOption, selectedCategory, desiredProfitRate, roundTo, roundingMode]);
 
   return (
     <main className="container wide">
       <header className="header">
         <div className="brand">
           <h1>Precios MercadoLibre</h1>
-          <p>Cálculo usando comisión por categoría + costo de cuotas + impuestos configurables</p>
+          <p>ML Clásica usa solo comisión por categoría. Premium suma costo de cuotas. Los impuestos van por separado.</p>
         </div>
         <div className="nav">
           <button className="button ghost" onClick={loadData}>Actualizar</button>
@@ -115,10 +134,10 @@ export default function PricesPage() {
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SKU, nombre, marca, modelo" />
           </div>
           <div className="field">
-            <label>Publicación / cuotas ML</label>
-            <select value={selectedInstallment} onChange={(e) => setSelectedInstallment(e.target.value)}>
+            <label>Tipo de publicación</label>
+            <select value={selectedOption} onChange={(e) => setSelectedOption(e.target.value)}>
               <option value="all">Todas</option>
-              {installments.map((item) => <option key={item.id || item.code} value={item.code}>{item.code} - {item.name}</option>)}
+              {pricingOptions.map((item) => <option key={item.code} value={item.code}>{item.code} - {item.name}</option>)}
             </select>
           </div>
           <div className="field">
@@ -133,8 +152,32 @@ export default function PricesPage() {
             <input value={`${rows.length} combinaciones`} disabled />
           </div>
         </div>
-        <p className="small" style={{ marginBottom: 0 }}>
-          Fórmula actual: costo sin IVA / (1 - ganancia - comisión categoría ML - costo cuotas - impuestos) x IVA del producto. La comisión de categoría y el costo de cuotas están separados para poder actualizarlos cuando MercadoLibre cambie las condiciones.
+
+        <div className="grid" style={{ marginTop: 14 }}>
+          <div className="field">
+            <label>Ganancia deseada %</label>
+            <input type="number" step="0.01" value={desiredProfitRate} onChange={(e) => setDesiredProfitRate(Number(e.target.value))} />
+          </div>
+          <div className="field">
+            <label>Redondear a</label>
+            <input type="number" min="1" step="1" value={roundTo} onChange={(e) => setRoundTo(Number(e.target.value || 1))} />
+          </div>
+          <div className="field">
+            <label>Modo redondeo</label>
+            <select value={roundingMode} onChange={(e) => setRoundingMode(e.target.value as RoundingMode)}>
+              <option value="nearest">Más cercano</option>
+              <option value="up">Hacia arriba</option>
+              <option value="down">Hacia abajo</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Impuestos activos</label>
+            <input value={`IIBB ${taxes.iibb_rate}% / IDC ${taxes.idc_rate}% / IIGG ${taxes.iigg_rate}% / Est. ${taxes.structure_rate}%`} disabled />
+          </div>
+        </div>
+
+        <p className="small" style={{ marginBottom: 0, marginTop: 12 }}>
+          Fórmula actual: costo sin IVA / (1 - ganancia deseada - comisión ML categoría - costo cuotas - impuestos) x IVA del producto. La ganancia y el redondeo se definen acá para simular precios, no en MercadoLibre.
         </p>
       </section>
 
@@ -163,12 +206,12 @@ export default function PricesPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ product, installment, categoryFee, result }) => (
-                  <tr key={`${product.id}-${installment.id || installment.code}`}>
+                {rows.map(({ product, option, categoryFee, result }) => (
+                  <tr key={`${product.id}-${option.code}`}>
                     <td>{product.sku}</td>
                     <td><strong>{product.name}</strong><br /><span className="small">{product.brand || ""} {product.model || ""}</span></td>
                     <td>{product.category || "-"}</td>
-                    <td>{installment.code}</td>
+                    <td><strong>{option.code}</strong><br /><span className="small">{option.name}</span></td>
                     <td>{money(product.cost_without_vat)}</td>
                     <td>{product.vat_rate}%</td>
                     <td>{percent(result.marketplaceFeeRate)}</td>

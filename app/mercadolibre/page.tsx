@@ -12,9 +12,6 @@ const emptyInstallment: MercadoLibreInstallmentFee = {
   name: "",
   installment_count: null,
   financing_fee_rate: 0,
-  default_margin_rate: 10,
-  round_to: 100,
-  rounding_mode: "nearest",
   active: true,
   notes: ""
 };
@@ -92,9 +89,6 @@ export default function MercadoLibrePage() {
       name: installmentForm.name.trim(),
       installment_count: installmentForm.installment_count ?? null,
       financing_fee_rate: Number(installmentForm.financing_fee_rate || 0),
-      default_margin_rate: Number(installmentForm.default_margin_rate || 0),
-      round_to: Number(installmentForm.round_to || 100),
-      rounding_mode: installmentForm.rounding_mode,
       active: Boolean(installmentForm.active),
       notes: installmentForm.notes?.trim() || null
     };
@@ -180,7 +174,7 @@ export default function MercadoLibrePage() {
 
       <section className="card" style={{ marginBottom: 20 }}>
         <h2 style={{ marginTop: 0 }}>Costos por cuotas</h2>
-        <p className="small">Estos porcentajes son iguales para todas las categorías. Ejemplos: MC, MP3, MP6, MP9, MP12.</p>
+        <p className="small">Estos porcentajes son iguales para todas las categorías. Ejemplos: MP3, MP6, MP9, MP12.</p>
         <form onSubmit={saveInstallment}>
           <div className="grid">
             <div className="field"><label>Código *</label><input value={installmentForm.code} onChange={(e) => updateInstallment("code", e.target.value)} placeholder="MP6" required /></div>
@@ -190,13 +184,9 @@ export default function MercadoLibrePage() {
           </div>
 
           <div className="grid" style={{ marginTop: 12 }}>
-            <div className="field"><label>Ganancia deseada %</label><input type="number" step="0.01" value={installmentForm.default_margin_rate} onChange={(e) => updateInstallment("default_margin_rate", Number(e.target.value))} /></div>
-            <div className="field"><label>Redondear a</label><input type="number" min="1" value={installmentForm.round_to} onChange={(e) => updateInstallment("round_to", Number(e.target.value))} /></div>
-            <div className="field"><label>Modo redondeo</label><select value={installmentForm.rounding_mode} onChange={(e) => updateInstallment("rounding_mode", e.target.value as MercadoLibreInstallmentFee["rounding_mode"])}><option value="nearest">Más cercano</option><option value="up">Siempre arriba</option><option value="down">Siempre abajo</option></select></div>
             <div className="field"><label>Estado</label><select value={installmentForm.active ? "true" : "false"} onChange={(e) => updateInstallment("active", e.target.value === "true")}><option value="true">Activo</option><option value="false">Inactivo</option></select></div>
+            <div className="field wide-field"><label>Notas</label><input value={installmentForm.notes || ""} onChange={(e) => updateInstallment("notes", e.target.value)} /></div>
           </div>
-
-          <div className="field" style={{ marginTop: 12 }}><label>Notas</label><input value={installmentForm.notes || ""} onChange={(e) => updateInstallment("notes", e.target.value)} /></div>
           <button className="button" disabled={saving} style={{ marginTop: 14 }}>{saving ? "Guardando..." : "Guardar cuotas"}</button>
         </form>
       </section>
@@ -221,7 +211,7 @@ export default function MercadoLibrePage() {
           {loading ? <p>Cargando...</p> : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Código</th><th>Nombre</th><th>Cuotas</th><th>Costo cuotas</th><th>Ganancia</th><th>Redondeo</th><th>Estado</th><th></th></tr></thead>
+                <thead><tr><th>Código</th><th>Nombre</th><th>Cuotas</th><th>Costo cuotas</th><th>Estado</th><th></th></tr></thead>
                 <tbody>
                   {installments.map((item) => (
                     <tr key={item.id || item.code}>
@@ -229,8 +219,6 @@ export default function MercadoLibrePage() {
                       <td>{item.name}</td>
                       <td>{item.installment_count || "-"}</td>
                       <td>{percent(item.financing_fee_rate)}</td>
-                      <td>{percent(item.default_margin_rate)}</td>
-                      <td>{item.round_to} / {item.rounding_mode}</td>
                       <td>{item.active ? <span className="badge">activo</span> : <span className="badge">inactivo</span>}</td>
                       <td><button className="button ghost" onClick={() => editInstallment(item)}>Editar</button></td>
                     </tr>

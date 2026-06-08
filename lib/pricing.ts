@@ -1,4 +1,4 @@
-import type { MercadoLibreCategoryFee, MercadoLibreInstallmentFee, Product, TaxSettings } from "@/lib/types";
+import type { MercadoLibreCategoryFee, MercadoLibrePriceOption, Product, RoundingMode, TaxSettings } from "@/lib/types";
 
 export function money(value?: number | null) {
   if (value === undefined || value === null || Number.isNaN(value)) return "-";
@@ -21,7 +21,7 @@ export function rateToDecimal(rate?: number | null) {
   return Number(rate || 0) / 100;
 }
 
-export function roundPrice(value: number, roundTo: number, mode: "nearest" | "up" | "down") {
+export function roundPrice(value: number, roundTo: number, mode: RoundingMode) {
   const step = Math.max(1, Number(roundTo || 1));
   if (mode === "up") return Math.ceil(value / step) * step;
   if (mode === "down") return Math.floor(value / step) * step;
@@ -32,17 +32,24 @@ export function defaultTaxSettings(): TaxSettings {
   return { key: "default", iibb_rate: 0, idc_rate: 0, iigg_rate: 0, structure_rate: 0, notes: "" };
 }
 
+export function mercadoLibreClassicOption(): MercadoLibrePriceOption {
+  return { code: "MC", name: "MercadoLibre Clásica", installment_count: null, financing_fee_rate: 0, active: true };
+}
+
 export function calculateMercadoLibrePrice(
   product: Product,
-  installment: MercadoLibreInstallmentFee,
+  option: MercadoLibrePriceOption,
   categoryFee?: MercadoLibreCategoryFee | null,
-  taxes: TaxSettings = defaultTaxSettings()
+  taxes: TaxSettings = defaultTaxSettings(),
+  desiredProfitRate = 10,
+  roundTo = 100,
+  roundingMode: RoundingMode = "nearest"
 ) {
   const costWithoutVat = Number(product.cost_without_vat || 0);
   const productVatRate = Number(product.vat_rate || 21);
   const marketplaceFeeRate = Number(categoryFee?.marketplace_fee_rate || 0);
-  const financingFeeRate = Number(installment.financing_fee_rate || 0);
-  const marginRate = Number(installment.default_margin_rate || 0);
+  const financingFeeRate = Number(option.financing_fee_rate || 0);
+  const marginRate = Number(desiredProfitRate || 0);
 
   const taxesRate =
     Number(taxes.iibb_rate || 0) +
@@ -72,7 +79,7 @@ export function calculateMercadoLibrePrice(
 
   const netSalePrice = costWithoutVat / denominator;
   const price = netSalePrice * (1 + productVatRate / 100);
-  const roundedPrice = roundPrice(price, installment.round_to || 100, installment.rounding_mode || "nearest");
+  const roundedPrice = roundPrice(price, roundTo, roundingMode);
   const roundedNetSalePrice = roundedPrice / (1 + productVatRate / 100);
 
   const realVariableCostWithoutMargin = roundedNetSalePrice * rateToDecimal(marketplaceFeeRate + financingFeeRate + taxesRate);

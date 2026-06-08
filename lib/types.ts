@@ -32,13 +32,18 @@ export type MercadoLibreInstallmentFee = {
   name: string;
   installment_count?: number | null;
   financing_fee_rate: number;
-  default_margin_rate: number;
-  round_to: number;
-  rounding_mode: RoundingMode;
   active: boolean;
   notes?: string | null;
   created_at?: string;
   updated_at?: string;
+};
+
+export type MercadoLibrePriceOption = {
+  code: string;
+  name: string;
+  installment_count?: number | null;
+  financing_fee_rate: number;
+  active?: boolean;
 };
 
 export type MercadoLibreCategoryFee = {
