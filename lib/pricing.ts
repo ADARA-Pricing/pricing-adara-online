@@ -93,7 +93,8 @@ export function calculatePriceSummary(
   const idcRate = Number(taxes.idc_rate || 0);
   const iiggRate = Number(taxes.iigg_rate || 0);
   const structureRate = Number(taxes.structure_rate || 0);
-  const taxesRate = iibbRate + idcRate + iiggRate + structureRate;
+  const salesTaxRate = iibbRate + idcRate + structureRate;
+  const iiggDecimal = rateToDecimal(iiggRate);
   const channelFeeRate = marketplaceFeeRate + financingFeeRate;
 
   // MercadoLibre informa comisiones como porcentaje sobre el precio de venta con IVA.
@@ -102,20 +103,27 @@ export function calculatePriceSummary(
   // Expresado sobre el precio sin IVA del producto, el factor variable es:
   // (1 + IVA producto) / 1.21 * % comisión/costo cuotas.
   const channelFeeRateOnNetSale = ((1 + productVatRate / 100) / 1.21) * channelFeeRate;
-  const saleCostRate = channelFeeRateOnNetSale + taxesRate;
+  // IIGG no se aplica sobre la venta, sino sobre el margen bruto.
+  // Por eso no entra como porcentaje variable directo del precio.
+  const saleCostRate = channelFeeRateOnNetSale + salesTaxRate;
 
   let netSalePrice: number;
   let effectiveMarginRate = marginRate;
 
+  if (iiggDecimal >= 1) {
+    return invalidResult("Impuesto a las ganancias no puede ser 100% o mayor.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, fixedCosts, variableRate: saleCostRate });
+  }
+
   if (desiredNetProfit !== null && Number.isFinite(Number(desiredNetProfit))) {
     const denominator = 1 - rateToDecimal(saleCostRate);
-    if (denominator <= 0) return invalidResult("La suma de comisión, cuotas e impuestos llega o supera el 100%.", { marketplaceFeeRate, financingFeeRate, marginRate, taxesRate, fixedFeeAmount, shippingCostAmount, fixedCosts, variableRate: saleCostRate });
-    netSalePrice = (costWithoutVat + fixedCosts + Number(desiredNetProfit)) / denominator;
+    if (denominator <= 0) return invalidResult("La suma de comisión, cuotas e impuestos de venta llega o supera el 100%.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, fixedCosts, variableRate: saleCostRate });
+    const requiredGrossProfit = Number(desiredNetProfit) / (1 - iiggDecimal);
+    netSalePrice = (costWithoutVat + fixedCosts + requiredGrossProfit) / denominator;
     effectiveMarginRate = netSalePrice > 0 ? (Number(desiredNetProfit) / netSalePrice) * 100 : 0;
   } else {
-    const variableRate = saleCostRate + marginRate;
-    const denominator = 1 - rateToDecimal(variableRate);
-    if (denominator <= 0) return invalidResult("La suma de margen, comisión, cuotas e impuestos llega o supera el 100%.", { marketplaceFeeRate, financingFeeRate, marginRate, taxesRate, fixedFeeAmount, shippingCostAmount, fixedCosts, variableRate });
+    const desiredNetMarginDecimal = rateToDecimal(marginRate);
+    const denominator = 1 - rateToDecimal(saleCostRate) - desiredNetMarginDecimal / (1 - iiggDecimal);
+    if (denominator <= 0) return invalidResult("La suma de margen, comisión, cuotas e impuestos de venta llega o supera el 100%.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, fixedCosts, variableRate: saleCostRate + marginRate });
     netSalePrice = (costWithoutVat + fixedCosts) / denominator;
   }
 
@@ -129,7 +137,8 @@ export function calculatePriceSummary(
   const idcAmount = roundedNetSalePrice * rateToDecimal(idcRate);
   const structureAmount = roundedNetSalePrice * rateToDecimal(structureRate);
   const grossProfit = roundedNetSalePrice - costWithoutVat - fixedCosts - marketplaceFeeAmount - iibbAmount - idcAmount - structureAmount;
-  const incomeTaxAmount = roundedNetSalePrice * rateToDecimal(iiggRate);
+  // Impuesto a las ganancias se aplica únicamente sobre el margen bruto positivo.
+  const incomeTaxAmount = Math.max(grossProfit, 0) * rateToDecimal(iiggRate);
   const netProfit = grossProfit - incomeTaxAmount;
   const marginOnCost = costWithoutVat > 0 ? (netProfit / costWithoutVat) * 100 : 0;
   const marginOnNetSale = roundedNetSalePrice > 0 ? (netProfit / roundedNetSalePrice) * 100 : 0;
@@ -154,7 +163,8 @@ export function calculatePriceSummary(
     financingFeeRate,
     marginRate: effectiveMarginRate,
     desiredNetProfit: desiredNetProfit ?? netProfit,
-    taxesRate,
+    taxesRate: salesTaxRate + iiggRate,
+    salesTaxRate,
     iibbRate,
     idcRate,
     iiggRate,
