@@ -258,7 +258,7 @@ export default function MercadoLibrePage() {
     <main className="container wide">
       <header className="header">
         <div className="brand">
-          <h1>Costo x canal</h1>
+          <h1>Costo x canal prueba</h1>
           <p>Configuración separada de costos, financiación y comisiones por categoría/canal</p>
         </div>
         <div className="nav">
