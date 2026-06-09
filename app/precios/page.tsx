@@ -299,35 +299,36 @@ export default function PricesPage() {
 
             <p className="small">El resumen completo se muestra sobre MercadoLibre Clásica. Las demás condiciones se listan debajo con su precio, ganancia y margen.</p>
 
-            <div className="card soft" style={{ marginBottom: 16 }}>
-              <div className="grid three">
-                <div>
-                  <h3 style={{ marginTop: 0 }}>Condición base: MC</h3>
+            <div className="card soft pricing-modal-card" style={{ marginBottom: 16 }}>
+              <div className="pricing-modal-grid">
+                <div className="pricing-panel">
+                  <h3>Condición base: MC</h3>
                   <p className="small">MercadoLibre Clásica</p>
-                  <div className="grid two">
+
+                  <div className="grid two compact-input-grid">
                     <div className="field">
                       <label>Margen deseado %</label>
-                      <input type="number" step="0.01" value={modal.margins.MC ?? 5} onChange={(e) => updateMargin("MC", e.target.value)} disabled={modal.syncMode === "net"} style={modal.syncMode === "net" ? { background: "#e5e7eb", color: "#6b7280" } : undefined} />
+                      <input type="number" step="0.01" value={modal.margins.MC ?? 5} onChange={(e) => updateMargin("MC", e.target.value)} disabled={modal.syncMode === "net"} className={modal.syncMode === "net" ? "input-disabled" : ""} />
                     </div>
                     <div className="field">
                       <label>Ganancia neta objetivo</label>
-                      <input type="number" step="0.01" value={modal.netProfits.MC ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit("MC", e.target.value)} disabled={modal.syncMode === "margin"} style={modal.syncMode === "margin" ? { background: "#e5e7eb", color: "#6b7280" } : undefined} />
+                      <input type="number" step="0.01" value={modal.netProfits.MC ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit("MC", e.target.value)} disabled={modal.syncMode === "margin"} className={modal.syncMode === "margin" ? "input-disabled" : ""} />
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start", marginTop: 12 }}>
-                    <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontWeight: 600, cursor: "pointer" }}>
+                  <div className="sync-options">
+                    <label className="checkbox-row">
                       <input type="checkbox" checked={modal.syncMode === "margin"} onChange={(e) => setSyncMode(e.target.checked ? "margin" : "none")} />
-                      Aplicar % a todos
+                      <span>Aplicar % a todos</span>
                     </label>
-                    <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontWeight: 600, cursor: "pointer" }}>
+                    <label className="checkbox-row">
                       <input type="checkbox" checked={modal.syncMode === "net"} onChange={(e) => setSyncMode(e.target.checked ? "net" : "none")} />
-                      Aplicar margen a todos
+                      <span>Aplicar margen a todos</span>
                     </label>
                   </div>
                   <p className="small">Solo puede estar activa una opción. Cuando está activa, las demás condiciones toman el valor de MC y quedan bloqueadas.</p>
 
-                  <h4 style={{ marginBottom: 8 }}>Datos de cálculo</h4>
+                  <h4>Datos de cálculo</h4>
                   <div className="calc-summary compact">
                     <div>Categoría: {modal.product.category || "-"}</div>
                     <div>Comisión: {mcRow?.result?.valid ? percent(mcRow.result.marketplaceFeeRate) : "-"}</div>
@@ -337,10 +338,10 @@ export default function PricesPage() {
                   </div>
                 </div>
 
-                <div>
-                  <h4 style={{ marginTop: 0 }}>Impuestos para esta prueba</h4>
+                <div className="pricing-panel">
+                  <h4>Impuestos para esta prueba</h4>
                   <p className="small">Estos valores modifican solo este cálculo. No cambian la solapa Impuestos.</p>
-                  <div className="grid two">
+                  <div className="grid two compact-input-grid">
                     <div className="field">
                       <label>IIBB %</label>
                       <input type="number" step="0.01" value={modal.taxOverrides.iibb_rate} onChange={(e) => updateTaxOverride("iibb_rate", e.target.value)} />
@@ -361,8 +362,8 @@ export default function PricesPage() {
                   <button className="button ghost" type="button" onClick={resetTaxOverrides}>Restablecer impuestos globales</button>
                 </div>
 
-                <div>
-                  <h4 style={{ marginTop: 0 }}>Resumen MC</h4>
+                <div className="pricing-panel summary-panel">
+                  <h4>Resumen MC</h4>
                   {mcRow?.result?.valid ? (
                     <div className="calc-summary">
                       <div><strong>Precio de venta:</strong> {moneyWithCents(mcRow.result.roundedPrice)}</div>
@@ -402,15 +403,15 @@ export default function PricesPage() {
                   {otherRows.map(({ option, result, desiredMargin, desiredNetProfit }) => {
                     const lockMargin = modal.syncMode === "margin";
                     const lockNet = modal.syncMode === "net";
-                    const disabledStyle = { background: "#e5e7eb", color: "#6b7280" };
+                    
                     return (
                       <tr key={option.code}>
                         <td><strong>{option.code}</strong><br /><span className="small">{option.name}</span></td>
                         <td style={{ minWidth: 130 }}>
-                          <input type="number" step="0.01" value={desiredMargin} onChange={(e) => updateMargin(option.code, e.target.value)} disabled={lockMargin || lockNet} style={(lockMargin || lockNet) ? disabledStyle : undefined} />
+                          <input type="number" step="0.01" value={desiredMargin} onChange={(e) => updateMargin(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
                         </td>
                         <td style={{ minWidth: 150 }}>
-                          <input type="number" step="0.01" value={desiredNetProfit ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} disabled={lockMargin || lockNet} style={(lockMargin || lockNet) ? disabledStyle : undefined} />
+                          <input type="number" step="0.01" value={desiredNetProfit ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
                         </td>
                         <td><strong>{result.valid ? moneyWithCents(result.roundedPrice) : "-"}</strong></td>
                         <td>{result.valid ? moneyWithCents(result.netProfit) : "-"}</td>
