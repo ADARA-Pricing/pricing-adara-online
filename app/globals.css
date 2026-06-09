@@ -137,3 +137,8 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 @media (max-width: 1100px) {
   .pricing-modal-grid { grid-template-columns: 1fr; }
 }
+
+.tax-reset-button {
+  margin-top: 12px;
+  align-self: flex-start;
+}

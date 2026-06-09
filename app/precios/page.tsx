@@ -216,6 +216,18 @@ export default function PricesPage() {
     });
   }
 
+  function calculateMcPriceForProduct(product: Product) {
+    const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase());
+    const shippingCost = shippingCosts.find((item) => item.product_id === product.id || item.sku === product.sku);
+    const result = calculatePriceSummary(product, mercadoLibreClassicOption(), categoryFee, taxes, shippingCost, {
+      desiredMarginRate: getMargin(product.id, "MC"),
+      desiredNetProfit: getNetProfit(product.id, "MC"),
+      roundTo: 100,
+      roundingMode: "nearest"
+    }) as any;
+    return result.valid ? moneyWithCents(result.roundedPrice) : "-";
+  }
+
   const currentRows = modalRows();
   const mcRow = currentRows.find((row) => row.option.code === "MC");
   const otherRows = currentRows.filter((row) => row.option.code !== "MC");
@@ -264,6 +276,7 @@ export default function PricesPage() {
                   <th>Costo s/IVA</th>
                   <th>IVA</th>
                   <th>Margen base</th>
+                  <th>Precio MC</th>
                   <th></th>
                 </tr>
               </thead>
@@ -276,10 +289,11 @@ export default function PricesPage() {
                     <td>{money(product.cost_without_vat)}</td>
                     <td>{product.vat_rate}%</td>
                     <td>{percent(getMargin(product.id, "MC"))}</td>
+                    <td><strong>{calculateMcPriceForProduct(product)}</strong></td>
                     <td><button className="button ghost" onClick={() => openProductModal(product)}>Calcular / editar</button></td>
                   </tr>
                 ))}
-                {filteredProducts.length === 0 && <tr><td colSpan={7}>No se encontraron productos.</td></tr>}
+                {filteredProducts.length === 0 && <tr><td colSpan={8}>No se encontraron productos.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -359,7 +373,7 @@ export default function PricesPage() {
                       <input type="number" step="0.01" value={modal.taxOverrides.structure_rate} onChange={(e) => updateTaxOverride("structure_rate", e.target.value)} />
                     </div>
                   </div>
-                  <button className="button ghost" type="button" onClick={resetTaxOverrides}>Restablecer impuestos globales</button>
+                  <button className="button ghost tax-reset-button" type="button" onClick={resetTaxOverrides}>Restablecer impuestos globales</button>
                 </div>
 
                 <div className="pricing-panel summary-panel">
