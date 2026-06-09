@@ -81,7 +81,10 @@ export function calculatePriceSummary(
   const marginRate = Number(target.desiredMarginRate ?? 5);
   const desiredNetProfit = target.desiredNetProfit ?? null;
   const fixedFeeAmount = Number(shippingCost?.fixed_fee_amount || 0);
-  const shippingCostAmount = Number(shippingCost?.shipping_cost_amount || 0);
+  // MercadoLibre informa/factura el costo de envío con IVA incluido.
+  // Para rentabilidad lo usamos neto, dividiendo por 1.21.
+  const shippingCostAmountGross = Number(shippingCost?.shipping_cost_amount || 0);
+  const shippingCostAmount = shippingCostAmountGross / 1.21;
   const fixedCosts = fixedFeeAmount + shippingCostAmount;
   const roundTo = target.roundTo ?? 100;
   const roundingMode = target.roundingMode ?? "nearest";
@@ -150,6 +153,7 @@ export function calculatePriceSummary(
     structureRate,
     fixedFeeAmount,
     shippingCostAmount,
+    shippingCostAmountGross,
     fixedCosts,
     variableRate,
     error: null

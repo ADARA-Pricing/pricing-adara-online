@@ -315,16 +315,14 @@ export default function PricesPage() {
                     </div>
                   </div>
 
-                  <div className="field" style={{ marginTop: 12 }}>
-                    <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 600 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start", marginTop: 12 }}>
+                    <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontWeight: 600, cursor: "pointer" }}>
                       <input type="checkbox" checked={modal.syncMode === "margin"} onChange={(e) => setSyncMode(e.target.checked ? "margin" : "none")} />
-                      Usar margen % MC en todas
+                      Aplicar % a todos
                     </label>
-                  </div>
-                  <div className="field">
-                    <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 600 }}>
+                    <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontWeight: 600, cursor: "pointer" }}>
                       <input type="checkbox" checked={modal.syncMode === "net"} onChange={(e) => setSyncMode(e.target.checked ? "net" : "none")} />
-                      Usar ganancia neta MC en todas
+                      Aplicar margen a todos
                     </label>
                   </div>
                   <p className="small">Solo puede estar activa una opción. Cuando está activa, las demás condiciones toman el valor de MC y quedan bloqueadas.</p>
@@ -333,7 +331,8 @@ export default function PricesPage() {
                   <div className="calc-summary compact">
                     <div>Categoría: {modal.product.category || "-"}</div>
                     <div>Comisión: {mcRow?.result?.valid ? percent(mcRow.result.marketplaceFeeRate) : "-"}</div>
-                    <div>Envío: {mcRow?.result?.valid ? moneyWithCents(mcRow.result.shippingCostAmount) : "-"}</div>
+                    <div>Envío c/IVA: {mcRow?.result?.valid ? moneyWithCents(mcRow.result.shippingCostAmountGross) : "-"}</div>
+                    <div>Envío s/IVA: {mcRow?.result?.valid ? moneyWithCents(mcRow.result.shippingCostAmount) : "-"}</div>
                     <div>IVA: {percent(modal.product.vat_rate)}</div>
                   </div>
                 </div>
@@ -372,7 +371,7 @@ export default function PricesPage() {
                       <div>Comisión x venta: -{moneyWithCents(mcRow.result.marketplaceFeeAmount)}</div>
                       <div>Ingresos brutos: -{moneyWithCents(mcRow.result.iibbAmount)}</div>
                       <br />
-                      <div>Envío: -{moneyWithCents(mcRow.result.shippingCostAmount)}</div>
+                      <div>Envío s/IVA: -{moneyWithCents(mcRow.result.shippingCostAmount)}</div>
                       <div>Gasto de estructura: -{moneyWithCents(mcRow.result.structureAmount)}</div>
                       <div>Costo: -{moneyWithCents(modal.product.cost_without_vat)}</div>
                       <br />
