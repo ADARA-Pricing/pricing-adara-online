@@ -497,6 +497,24 @@ export default function PricesPage() {
                   {selectedSummaryRow?.result?.valid ? (
                     <div className="calc-summary">
                       <div className="field inline-price-field"><label>Precio de venta</label><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides[selectedSummaryRow.option.code] ?? selectedSummaryRow.result.roundedPrice, 0)} onChange={(e) => updateSalePrice(selectedSummaryRow.option.code, e.target.value)} /></div>
+                      <div className="grid two compact-input-grid summary-extra-grid">
+                        {allowsExtraSalesCommission(selectedSummaryRow.option) && (
+                          <div className="field">
+                            <label>Comisión venta %</label>
+                            <input type="text" inputMode="decimal" value={formatInputNumber(modal.salesCommissionRates[selectedSummaryRow.option.code] || 0)} onChange={(e) => updateChannelExtra(selectedSummaryRow.option.code, "salesCommissionRates", e.target.value)} />
+                          </div>
+                        )}
+                        {!selectedSummaryRow.option.applies_shipping && (
+                          <div className="field">
+                            <label>Envío manual $</label>
+                            <input type="text" inputMode="decimal" value={formatInputNumber(modal.manualShippingAmounts[selectedSummaryRow.option.code] || 0, 0)} onChange={(e) => updateChannelExtra(selectedSummaryRow.option.code, "manualShippingAmounts", e.target.value)} />
+                          </div>
+                        )}
+                        <div className="field">
+                          <label>Estructura $</label>
+                          <input type="text" inputMode="decimal" value={formatInputNumber(modal.structureAmounts[selectedSummaryRow.option.code] || 0, 0)} onChange={(e) => updateChannelExtra(selectedSummaryRow.option.code, "structureAmounts", e.target.value)} />
+                        </div>
+                      </div>
                       <div>IVA venta: -{moneyWithCents(selectedSummaryRow.result.vatAmount)}</div>
                       <div>Precio sin IVA: {moneyWithCents(selectedSummaryRow.result.netSalePrice)}</div>
                       <div>Comisión canal: -{moneyWithCents(selectedSummaryRow.result.marketplaceFeeAmount)}</div>

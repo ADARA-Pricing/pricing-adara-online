@@ -284,3 +284,11 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 .price-input-cell input {
   font-weight: 700;
 }
+
+.summary-extra-grid {
+  margin: 10px 0 12px;
+}
+
+.summary-extra-grid .field label {
+  font-size: 12px;
+}
