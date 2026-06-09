@@ -271,3 +271,16 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
     grid-template-columns: 1fr;
   }
 }
+
+.inline-price-field {
+  max-width: 260px;
+  margin-bottom: 8px;
+}
+
+.inline-price-field input {
+  font-weight: 700;
+}
+
+.price-input-cell input {
+  font-weight: 700;
+}

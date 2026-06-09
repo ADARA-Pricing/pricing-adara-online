@@ -58,6 +58,7 @@ export function mercadoLibreClassicOption(): MercadoLibrePriceOption {
 type PricingTarget = {
   desiredMarginRate?: number;
   desiredNetProfit?: number | null;
+  salePrice?: number | null;
   roundTo?: number;
   roundingMode?: RoundingMode;
 };
@@ -146,27 +147,36 @@ export function calculatePriceSummary(
   const saleCostRate = channelFeeRateOnNetSale + salesTaxRate;
 
   let netSalePrice: number;
+  let price: number;
+  let roundedPrice: number;
   let effectiveMarginRate = marginRate;
+  const explicitSalePrice = target.salePrice ?? null;
 
   if (iiggDecimal >= 1) {
     return invalidResult("Impuesto a las ganancias no puede ser 100% o mayor.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, shippingCostAmountGross, fixedCosts, variableRate: saleCostRate });
   }
 
-  if (desiredNetProfit !== null && Number.isFinite(Number(desiredNetProfit))) {
+  if (explicitSalePrice !== null && Number.isFinite(Number(explicitSalePrice)) && Number(explicitSalePrice) > 0) {
+    price = Number(explicitSalePrice);
+    roundedPrice = price;
+    netSalePrice = price / (1 + saleVatRate / 100);
+  } else if (desiredNetProfit !== null && Number.isFinite(Number(desiredNetProfit))) {
     const denominator = 1 - rateToDecimal(saleCostRate);
     if (denominator <= 0) return invalidResult("La suma de comisión, cuotas e impuestos de venta llega o supera el 100%.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, shippingCostAmountGross, fixedCosts, variableRate: saleCostRate });
     const requiredGrossProfit = Number(desiredNetProfit) / (1 - iiggDecimal);
     netSalePrice = (costWithoutVat + fixedCosts + requiredGrossProfit) / denominator;
     effectiveMarginRate = netSalePrice > 0 ? (Number(desiredNetProfit) / netSalePrice) * 100 : 0;
+    price = netSalePrice * (1 + saleVatRate / 100);
+    roundedPrice = roundPrice(price, roundTo, roundingMode);
   } else {
     const desiredNetMarginDecimal = rateToDecimal(marginRate);
     const denominator = 1 - rateToDecimal(saleCostRate) - desiredNetMarginDecimal / (1 - iiggDecimal);
     if (denominator <= 0) return invalidResult("La suma de margen, comisión, cuotas e impuestos de venta llega o supera el 100%.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, shippingCostAmountGross, fixedCosts, variableRate: saleCostRate + marginRate });
     netSalePrice = (costWithoutVat + fixedCosts) / denominator;
+    price = netSalePrice * (1 + saleVatRate / 100);
+    roundedPrice = roundPrice(price, roundTo, roundingMode);
   }
 
-  const price = netSalePrice * (1 + saleVatRate / 100);
-  const roundedPrice = roundPrice(price, roundTo, roundingMode);
   const roundedNetSalePrice = roundedPrice / (1 + saleVatRate / 100);
 
   const vatAmount = roundedPrice - roundedNetSalePrice;
@@ -179,6 +189,9 @@ export function calculatePriceSummary(
   const netProfit = grossProfit - incomeTaxAmount;
   const marginOnCost = costWithoutVat > 0 ? (netProfit / costWithoutVat) * 100 : 0;
   const marginOnNetSale = roundedNetSalePrice > 0 ? (netProfit / roundedNetSalePrice) * 100 : 0;
+  if (explicitSalePrice !== null && Number.isFinite(Number(explicitSalePrice)) && Number(explicitSalePrice) > 0) {
+    effectiveMarginRate = marginOnNetSale;
+  }
   const variableRate = saleCostRate + effectiveMarginRate;
 
   return {

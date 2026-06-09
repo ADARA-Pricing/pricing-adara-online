@@ -16,6 +16,7 @@ type ModalState = {
   syncMode: SyncMode;
   margins: Record<string, number>;
   netProfits: Record<string, number | null>;
+  priceOverrides: Record<string, number | null>;
   taxOverrides: TaxSettings;
 };
 
@@ -121,11 +122,13 @@ export default function PricesPage() {
   function openProductModal(product: Product) {
     const margins: Record<string, number> = {};
     const netProfits: Record<string, number | null> = {};
+    const priceOverrides: Record<string, number | null> = {};
     pricingOptions.forEach((option) => {
       margins[option.code] = getMargin(product.id, option.code);
       netProfits[option.code] = getNetProfit(product.id, option.code);
+      priceOverrides[option.code] = null;
     });
-    setModal({ product, mode: "margin", syncMode: "none", margins, netProfits, taxOverrides: { ...taxes } });
+    setModal({ product, mode: "margin", syncMode: "none", margins, netProfits, priceOverrides, taxOverrides: { ...taxes } });
   }
 
   function effectiveMargin(channelCode: string) {
@@ -147,11 +150,11 @@ export default function PricesPage() {
     setError(null);
     setMessage(null);
 
-    const rows = pricingOptions.map((option) => ({
+    const rows = modalRows().map(({ option, result }) => ({
       product_id: modal.product.id,
       sku: modal.product.sku,
       channel_code: option.code,
-      desired_margin_rate: effectiveMargin(option.code),
+      desired_margin_rate: result.valid ? Number(result.marginOnNetSale || 0) : effectiveMargin(option.code),
       desired_net_profit: effectiveNetProfit(option.code)
     }));
 
@@ -171,7 +174,8 @@ export default function PricesPage() {
       ...modal,
       mode: "margin",
       margins: { ...modal.margins, [channelCode]: margin },
-      netProfits: { ...modal.netProfits, [channelCode]: null }
+      netProfits: { ...modal.netProfits, [channelCode]: null },
+      priceOverrides: { ...modal.priceOverrides, [channelCode]: null }
     });
   }
 
@@ -181,7 +185,49 @@ export default function PricesPage() {
     setModal({
       ...modal,
       mode: "net",
-      netProfits: { ...modal.netProfits, [channelCode]: net }
+      netProfits: { ...modal.netProfits, [channelCode]: net },
+      priceOverrides: { ...modal.priceOverrides, [channelCode]: null }
+    });
+  }
+
+  function updateSalePrice(channelCode: string, value: string) {
+    if (!modal) return;
+    const salePrice = toNumber(value);
+    if (salePrice === null) {
+      setModal({
+        ...modal,
+        priceOverrides: { ...modal.priceOverrides, [channelCode]: null }
+      });
+      return;
+    }
+
+    const product = modal.product;
+    const option = pricingOptions.find((item) => item.code === channelCode);
+    if (!option) return;
+    const normalizedOption = normalizeOption(option);
+    const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase());
+    const shippingCost = shippingCosts.find((item) => item.product_id === product.id || item.sku === product.sku);
+    const result = calculatePriceSummary(
+      product,
+      normalizedOption,
+      normalizedOption.applies_marketplace_fee ? categoryFee : null,
+      modal.taxOverrides,
+      normalizedOption.applies_shipping ? shippingCost : null,
+      {
+        salePrice,
+        desiredMarginRate: effectiveMargin(channelCode),
+        desiredNetProfit: null,
+        roundTo: 100,
+        roundingMode: "nearest"
+      }
+    ) as any;
+
+    setModal({
+      ...modal,
+      mode: "margin",
+      margins: { ...modal.margins, [channelCode]: result.valid ? Number(result.marginOnNetSale || 0) : Number(modal.margins[channelCode] || 0) },
+      netProfits: { ...modal.netProfits, [channelCode]: null },
+      priceOverrides: { ...modal.priceOverrides, [channelCode]: salePrice }
     });
   }
 
@@ -217,13 +263,15 @@ export default function PricesPage() {
       const normalizedOption = normalizeOption(option);
       const feeForOption = normalizedOption.applies_marketplace_fee ? categoryFee : null;
       const shippingForOption = normalizedOption.applies_shipping ? shippingCost : null;
+      const salePriceOverride = modal.priceOverrides[option.code] ?? null;
       const result = calculatePriceSummary(product, normalizedOption, feeForOption, modal.taxOverrides, shippingForOption, {
         desiredMarginRate: desiredMargin,
         desiredNetProfit,
+        salePrice: salePriceOverride,
         roundTo: 100,
         roundingMode: "nearest"
       });
-      return { option: normalizedOption, categoryFee: feeForOption, shippingCost: shippingForOption, result: result as any, desiredMargin, desiredNetProfit };
+      return { option: normalizedOption, categoryFee: feeForOption, shippingCost: shippingForOption, result: result as any, desiredMargin, desiredNetProfit, salePriceOverride };
     });
   }
 
@@ -391,7 +439,7 @@ export default function PricesPage() {
                   <h4>Resumen MC</h4>
                   {mcRow?.result?.valid ? (
                     <div className="calc-summary">
-                      <div><strong>Precio de venta:</strong> {moneyWithCents(mcRow.result.roundedPrice)}</div>
+                      <div className="field inline-price-field"><label>Precio de venta</label><input type="number" step="100" value={modal.priceOverrides.MC ?? mcRow.result.roundedPrice ?? ""} onChange={(e) => updateSalePrice("MC", e.target.value)} /></div>
                       <div>IVA venta: -{moneyWithCents(mcRow.result.vatAmount)}</div>
                       <div>Precio sin IVA: {moneyWithCents(mcRow.result.netSalePrice)}</div>
                       <div>Comisión x venta: -{moneyWithCents(mcRow.result.marketplaceFeeAmount)}</div>
@@ -438,7 +486,7 @@ export default function PricesPage() {
                         <td style={{ minWidth: 150 }}>
                           <input type="number" step="0.01" value={desiredNetProfit ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
                         </td>
-                        <td><strong>{result.valid ? moneyWithCents(result.roundedPrice) : "-"}</strong></td>
+                        <td className="price-input-cell" style={{ minWidth: 150 }}><input type="number" step="100" value={modal.priceOverrides[option.code] ?? (result.valid ? result.roundedPrice : "")} onChange={(e) => updateSalePrice(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} /></td>
                         <td>{result.valid ? moneyWithCents(result.netProfit) : "-"}</td>
                         <td>{result.valid ? percent(result.marginOnNetSale) : result.error}</td>
                       </tr>
