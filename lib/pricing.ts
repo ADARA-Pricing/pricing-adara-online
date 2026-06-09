@@ -94,7 +94,15 @@ export function calculatePriceSummary(
   const iiggRate = Number(taxes.iigg_rate || 0);
   const structureRate = Number(taxes.structure_rate || 0);
   const taxesRate = iibbRate + idcRate + iiggRate + structureRate;
-  const saleCostRate = marketplaceFeeRate + financingFeeRate + taxesRate;
+  const channelFeeRate = marketplaceFeeRate + financingFeeRate;
+
+  // MercadoLibre informa comisiones como porcentaje sobre el precio de venta con IVA.
+  // Como MercadoLibre factura esas comisiones con IVA 21%, para la rentabilidad usamos el neto:
+  // comisión/costo cuotas neto = precio_venta_con_iva * % / 1.21.
+  // Expresado sobre el precio sin IVA del producto, el factor variable es:
+  // (1 + IVA producto) / 1.21 * % comisión/costo cuotas.
+  const channelFeeRateOnNetSale = ((1 + productVatRate / 100) / 1.21) * channelFeeRate;
+  const saleCostRate = channelFeeRateOnNetSale + taxesRate;
 
   let netSalePrice: number;
   let effectiveMarginRate = marginRate;
@@ -116,7 +124,7 @@ export function calculatePriceSummary(
   const roundedNetSalePrice = roundedPrice / (1 + productVatRate / 100);
 
   const vatAmount = roundedPrice - roundedNetSalePrice;
-  const marketplaceFeeAmount = roundedNetSalePrice * rateToDecimal(marketplaceFeeRate + financingFeeRate);
+  const marketplaceFeeAmount = roundedPrice * rateToDecimal(channelFeeRate) / 1.21;
   const iibbAmount = roundedNetSalePrice * rateToDecimal(iibbRate);
   const idcAmount = roundedNetSalePrice * rateToDecimal(idcRate);
   const structureAmount = roundedNetSalePrice * rateToDecimal(structureRate);
