@@ -160,8 +160,8 @@ export default function MercadoLibrePage() {
     <main className="container wide">
       <header className="header">
         <div className="brand">
-          <h1>MercadoLibre</h1>
-          <p>Configuración separada de cuotas y comisiones por categoría</p>
+          <h1>Costo x canal</h1>
+          <p>Configuración separada de costos, financiación y comisiones por categoría/canal</p>
         </div>
         <div className="nav">
           <button className="button ghost" onClick={loadData}>Actualizar</button>
@@ -173,8 +173,8 @@ export default function MercadoLibrePage() {
       {error && <div className="message error">{error}</div>}
 
       <section className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Costos por cuotas</h2>
-        <p className="small">Estos porcentajes son iguales para todas las categorías. Ejemplos: MP3, MP6, MP9, MP12.</p>
+        <h2 style={{ marginTop: 0 }}>Costos por canal / financiación</h2>
+        <p className="small">Estos porcentajes se usan para canales o financiación. Ejemplos: MP3, MP6, MP9, MP12, Tienda Nube, Posnet.</p>
         <form onSubmit={saveInstallment}>
           <div className="grid">
             <div className="field"><label>Código *</label><input value={installmentForm.code} onChange={(e) => updateInstallment("code", e.target.value)} placeholder="MP6" required /></div>
@@ -192,7 +192,7 @@ export default function MercadoLibrePage() {
       </section>
 
       <section className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Comisiones por categoría</h2>
+        <h2 style={{ marginTop: 0 }}>Comisiones por categoría / canal</h2>
         <p className="small">Esta comisión cambia según la categoría del producto. El cálculo de precio suma esta comisión + el costo de cuotas correspondiente.</p>
         <form onSubmit={saveCategory}>
           <div className="grid">

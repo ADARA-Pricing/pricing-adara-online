@@ -79,3 +79,13 @@ export type TaxSettings = {
   notes?: string | null;
   updated_at?: string;
 };
+
+export type ProductChannelMargin = {
+  id?: string;
+  product_id: string;
+  sku?: string | null;
+  channel_code: string;
+  desired_margin_rate: number;
+  desired_net_profit?: number | null;
+  updated_at?: string;
+};

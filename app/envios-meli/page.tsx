@@ -135,8 +135,8 @@ export default function EnviosMeliPage() {
     <main className="container wide">
       <header className="header">
         <div className="brand">
-          <h1>Envíos Meli</h1>
-          <p>Costos fijos y costos de envío de MercadoLibre por producto. Se suman al cálculo de precios como costo fijo por unidad.</p>
+          <h1>Envíos</h1>
+          <p>Costos de envío por producto. Por ahora usamos estos valores para MercadoLibre, y queda preparado para otros canales.</p>
         </div>
         <div className="nav">
           <button className="button ghost" onClick={loadData}>Actualizar</button>
@@ -161,8 +161,8 @@ export default function EnviosMeliPage() {
                 ))}
               </select>
             </div>
-            <div className="field"><label>Costo fijo Meli $</label><input type="number" step="0.01" value={numberValue(form.fixed_fee_amount)} onChange={(e) => update("fixed_fee_amount", Number(toNumber(e.target.value) || 0))} /></div>
-            <div className="field"><label>Costo envío Meli $</label><input type="number" step="0.01" value={numberValue(form.shipping_cost_amount)} onChange={(e) => update("shipping_cost_amount", Number(toNumber(e.target.value) || 0))} /></div>
+            <div className="field"><label>Costo fijo $</label><input type="number" step="0.01" value={numberValue(form.fixed_fee_amount)} onChange={(e) => update("fixed_fee_amount", Number(toNumber(e.target.value) || 0))} /></div>
+            <div className="field"><label>Costo envío $</label><input type="number" step="0.01" value={numberValue(form.shipping_cost_amount)} onChange={(e) => update("shipping_cost_amount", Number(toNumber(e.target.value) || 0))} /></div>
             <div className="field"><label>Tipo</label><select value={form.free_shipping ? "true" : "false"} onChange={(e) => update("free_shipping", e.target.value === "true")}><option value="true">Envío gratis / cargo vendedor</option><option value="false">Envío a cargo comprador</option></select></div>
           </div>
           <div className="grid" style={{ marginTop: 12 }}>
@@ -170,7 +170,7 @@ export default function EnviosMeliPage() {
             <div className="field"><label>Estado</label><select value={form.active ? "true" : "false"} onChange={(e) => update("active", e.target.value === "true")}><option value="true">Activo</option><option value="false">Inactivo</option></select></div>
             <div className="field wide-field"><label>Notas</label><input value={form.notes || ""} onChange={(e) => update("notes", e.target.value)} placeholder="Ej: tarifa calculada en simulador ML / producto grande / TV" /></div>
           </div>
-          <button className="button" disabled={saving} style={{ marginTop: 14 }}>{saving ? "Guardando..." : "Guardar envío Meli"}</button>
+          <button className="button" disabled={saving} style={{ marginTop: 14 }}>{saving ? "Guardando..." : "Guardar envío"}</button>
         </form>
       </section>
 
@@ -182,7 +182,7 @@ export default function EnviosMeliPage() {
         {loading ? <p>Cargando...</p> : (
           <div className="table-wrap">
             <table>
-              <thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Costo fijo</th><th>Envío Meli</th><th>Total fijo</th><th>Tipo</th><th>Modalidad</th><th>Estado</th><th></th></tr></thead>
+              <thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Costo fijo</th><th>Envío</th><th>Total fijo</th><th>Tipo</th><th>Modalidad</th><th>Estado</th><th></th></tr></thead>
               <tbody>
                 {rows.map(({ product, shipping }) => {
                   const total = Number(shipping?.fixed_fee_amount || 0) + Number(shipping?.shipping_cost_amount || 0);

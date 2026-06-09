@@ -68,3 +68,24 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 .login { max-width: 420px; margin: 70px auto; }
 @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 620px) { .grid, .grid-2 { grid-template-columns: 1fr; } .header { align-items: flex-start; flex-direction: column; } }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.42);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 28px;
+  z-index: 50;
+  overflow-y: auto;
+}
+.modal-card {
+  width: min(1280px, 100%);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+.calc-red { color: #dc2626; line-height: 1.7; min-width: 220px; }
+.calc-green { color: #166534; line-height: 1.7; min-width: 280px; }
