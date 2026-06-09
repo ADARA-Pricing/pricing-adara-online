@@ -170,3 +170,104 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 .button.danger:hover {
   background: #fee2e2;
 }
+
+/* Costo x canal - limpieza visual */
+.container.wide {
+  max-width: 1420px;
+}
+
+.channel-card {
+  padding: 18px 20px;
+}
+
+.channel-form-grid {
+  display: grid;
+  grid-template-columns: 150px minmax(260px, 1.3fr) 190px 120px 170px 150px;
+  gap: 12px;
+  align-items: end;
+}
+
+.category-form-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 180px 160px minmax(240px, 1.4fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.channel-footer {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+  margin-top: 12px;
+}
+
+.channel-notes input {
+  min-height: 40px;
+}
+
+.channel-flags {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  padding: 12px;
+  background: #fcfcfd;
+}
+
+.channel-flags .checkbox-row {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.channel-tables {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.channel-table-card table {
+  font-size: 13px;
+}
+
+.channel-table-card th,
+.channel-table-card td {
+  padding: 9px 8px;
+  vertical-align: middle;
+}
+
+.channel-table-card td:nth-child(2) {
+  min-width: 210px;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+.small-button {
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+@media (max-width: 1200px) {
+  .channel-form-grid,
+  .category-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .channel-footer {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .channel-form-grid,
+  .category-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -258,7 +258,7 @@ export default function MercadoLibrePage() {
     <main className="container wide">
       <header className="header">
         <div className="brand">
-          <h1>Costo x canal prueba</h1>
+          <h1>Costo x canal</h1>
           <p>Configuración separada de costos, financiación y comisiones por categoría/canal</p>
         </div>
         <div className="nav">
@@ -270,11 +270,11 @@ export default function MercadoLibrePage() {
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}
 
-      <section className="card" style={{ marginBottom: 20 }}>
+      <section className="card channel-card" style={{ marginBottom: 20 }}>
         <h2 style={{ marginTop: 0 }}>Condiciones de venta / canales</h2>
         <p className="small">Configurá canales como MercadoLibre, efectivo, transferencia, Tienda Nube, Posnet u otros. Los checks definen qué costos/impuestos aplican en el cálculo.</p>
         <form onSubmit={saveInstallment}>
-          <div className="grid">
+          <div className="channel-form-grid">
             <div className="field"><label>Código *</label><input value={installmentForm.code} onChange={(e) => updateInstallment("code", e.target.value)} placeholder="EF, MP6, TN" required /></div>
             <div className="field"><label>Nombre *</label><input value={installmentForm.name} onChange={(e) => updateInstallment("name", e.target.value)} placeholder="Efectivo / ML Premium 6 cuotas" required /></div>
             <div className="field"><label>Tipo de canal</label><select value={installmentForm.channel_type || "mercadolibre"} onChange={(e) => applyChannelPreset(e.target.value)}><option value="mercadolibre">MercadoLibre</option><option value="directo">Directo / efectivo</option><option value="web">Web / Tienda Nube</option><option value="posnet">Posnet</option><option value="otro">Otro</option></select></div>
@@ -293,18 +293,18 @@ export default function MercadoLibrePage() {
             <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_vat)} onChange={(e) => updateInstallment("applies_vat", e.target.checked)} /><span>Aplica IVA venta</span></label>
           </div>
 
-          <div className="grid" style={{ marginTop: 12 }}>
-            <div className="field wide-field"><label>Notas</label><input value={installmentForm.notes || ""} onChange={(e) => updateInstallment("notes", e.target.value)} /></div>
+          <div className="channel-footer">
+            <div className="field channel-notes"><label>Notas</label><input value={installmentForm.notes || ""} onChange={(e) => updateInstallment("notes", e.target.value)} /></div>
+            <button className="button" disabled={saving}>{saving ? "Guardando..." : "Guardar canal"}</button>
           </div>
-          <button className="button" disabled={saving} style={{ marginTop: 14 }}>{saving ? "Guardando..." : "Guardar canal"}</button>
         </form>
       </section>
 
-      <section className="card" style={{ marginBottom: 20 }}>
+      <section className="card channel-card" style={{ marginBottom: 20 }}>
         <h2 style={{ marginTop: 0 }}>Comisiones por categoría / canal</h2>
         <p className="small">Esta comisión cambia según la categoría del producto y se usa solo en canales que tengan activo “Aplica comisión ML por categoría”.</p>
         <form onSubmit={saveCategory}>
-          <div className="grid">
+          <div className="category-form-grid">
             <div className="field"><label>Categoría *</label><input value={categoryForm.category} onChange={(e) => updateCategory("category", e.target.value)} placeholder="TV" required /></div>
             <div className="field"><label>Comisión MercadoLibre %</label><input type="number" step="0.01" value={categoryForm.marketplace_fee_rate} onChange={(e) => updateCategory("marketplace_fee_rate", Number(e.target.value))} /></div>
             <div className="field"><label>Estado</label><select value={categoryForm.active ? "true" : "false"} onChange={(e) => updateCategory("active", e.target.value === "true")}><option value="true">Activa</option><option value="false">Inactiva</option></select></div>
@@ -314,8 +314,8 @@ export default function MercadoLibrePage() {
         </form>
       </section>
 
-      <section className="grid-2">
-        <div className="card">
+      <section className="channel-tables">
+        <div className="card channel-table-card">
           <h2 style={{ marginTop: 0 }}>Tabla de canales</h2>
           {loading ? <p>Cargando...</p> : (
             <div className="table-wrap">
@@ -337,7 +337,7 @@ export default function MercadoLibrePage() {
                         <td>{boolLabel(defaultFlag(item.applies_iigg, isMl))}</td>
                         <td>{boolLabel(defaultFlag(item.applies_vat, isMl))}</td>
                         <td>{item.active ? <span className="badge">activo</span> : <span className="badge">inactivo</span>}</td>
-                        <td className="actions-cell"><button className="button ghost" onClick={() => editInstallment(item)}>Editar</button><button className="button danger" onClick={() => deleteInstallment(item)}>Eliminar</button></td>
+                        <td className="actions-cell"><button className="button ghost small-button" onClick={() => editInstallment(item)}>Editar</button><button className="button danger small-button" onClick={() => deleteInstallment(item)}>Eliminar</button></td>
                       </tr>
                     );
                   })}
@@ -348,7 +348,7 @@ export default function MercadoLibrePage() {
           )}
         </div>
 
-        <div className="card">
+        <div className="card channel-table-card">
           <h2 style={{ marginTop: 0 }}>Tabla de categorías</h2>
           {loading ? <p>Cargando...</p> : (
             <div className="table-wrap">
@@ -361,7 +361,7 @@ export default function MercadoLibrePage() {
                       <td>{percent(item.marketplace_fee_rate)}</td>
                       <td>{item.active ? <span className="badge">activa</span> : <span className="badge">inactiva</span>}</td>
                       <td>{item.notes || "-"}</td>
-                      <td className="actions-cell"><button className="button ghost" onClick={() => editCategory(item)}>Editar</button><button className="button danger" onClick={() => deleteCategory(item)}>Eliminar</button></td>
+                      <td className="actions-cell"><button className="button ghost small-button" onClick={() => editCategory(item)}>Editar</button><button className="button danger small-button" onClick={() => deleteCategory(item)}>Eliminar</button></td>
                     </tr>
                   ))}
                   {categories.length === 0 && <tr><td colSpan={5}>Sin categorías cargadas.</td></tr>}
