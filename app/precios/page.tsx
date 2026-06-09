@@ -16,6 +16,7 @@ type ModalState = {
   syncMode: SyncMode;
   margins: Record<string, number>;
   netProfits: Record<string, number | null>;
+  taxOverrides: TaxSettings;
 };
 
 export default function PricesPage() {
@@ -116,7 +117,7 @@ export default function PricesPage() {
       margins[option.code] = getMargin(product.id, option.code);
       netProfits[option.code] = getNetProfit(product.id, option.code);
     });
-    setModal({ product, mode: "margin", syncMode: "none", margins, netProfits });
+    setModal({ product, mode: "margin", syncMode: "none", margins, netProfits, taxOverrides: { ...taxes } });
   }
 
   function effectiveMargin(channelCode: string) {
@@ -181,6 +182,22 @@ export default function PricesPage() {
     setModal({ ...modal, syncMode });
   }
 
+  function updateTaxOverride(field: keyof Pick<TaxSettings, "iibb_rate" | "idc_rate" | "iigg_rate" | "structure_rate">, value: string) {
+    if (!modal) return;
+    setModal({
+      ...modal,
+      taxOverrides: {
+        ...modal.taxOverrides,
+        [field]: Number(toNumber(value) ?? 0)
+      }
+    });
+  }
+
+  function resetTaxOverrides() {
+    if (!modal) return;
+    setModal({ ...modal, taxOverrides: { ...taxes } });
+  }
+
   function modalRows() {
     if (!modal) return [];
     const product = modal.product;
@@ -189,7 +206,7 @@ export default function PricesPage() {
     return pricingOptions.map((option) => {
       const desiredNetProfit = effectiveNetProfit(option.code);
       const desiredMargin = effectiveMargin(option.code);
-      const result = calculatePriceSummary(product, option, categoryFee, taxes, shippingCost, {
+      const result = calculatePriceSummary(product, option, categoryFee, modal.taxOverrides, shippingCost, {
         desiredMarginRate: desiredMargin,
         desiredNetProfit,
         roundTo: 100,
@@ -283,7 +300,7 @@ export default function PricesPage() {
             <p className="small">El resumen completo se muestra sobre MercadoLibre Clásica. Las demás condiciones se listan debajo con su precio, ganancia y margen.</p>
 
             <div className="card soft" style={{ marginBottom: 16 }}>
-              <div className="grid two">
+              <div className="grid three">
                 <div>
                   <h3 style={{ marginTop: 0 }}>Condición base: MC</h3>
                   <p className="small">MercadoLibre Clásica</p>
@@ -297,14 +314,56 @@ export default function PricesPage() {
                       <input type="number" step="0.01" value={modal.netProfits.MC ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit("MC", e.target.value)} disabled={modal.syncMode === "margin"} style={modal.syncMode === "margin" ? { background: "#e5e7eb", color: "#6b7280" } : undefined} />
                     </div>
                   </div>
-                  <div className="actions" style={{ marginTop: 10 }}>
-                    <button className={modal.syncMode === "margin" ? "button" : "button ghost"} onClick={() => setSyncMode(modal.syncMode === "margin" ? "none" : "margin")}>Usar margen % MC en todas</button>
-                    <button className={modal.syncMode === "net" ? "button" : "button ghost"} onClick={() => setSyncMode(modal.syncMode === "net" ? "none" : "net")}>Usar ganancia neta MC en todas</button>
+
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 600 }}>
+                      <input type="checkbox" checked={modal.syncMode === "margin"} onChange={(e) => setSyncMode(e.target.checked ? "margin" : "none")} />
+                      Usar margen % MC en todas
+                    </label>
                   </div>
-                  <p className="small" style={{ marginTop: 10 }}>Cuando una opción está activa, los campos de las otras condiciones quedan bloqueados y toman el valor de MC.</p>
+                  <div className="field">
+                    <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 600 }}>
+                      <input type="checkbox" checked={modal.syncMode === "net"} onChange={(e) => setSyncMode(e.target.checked ? "net" : "none")} />
+                      Usar ganancia neta MC en todas
+                    </label>
+                  </div>
+                  <p className="small">Solo puede estar activa una opción. Cuando está activa, las demás condiciones toman el valor de MC y quedan bloqueadas.</p>
+
+                  <h4 style={{ marginBottom: 8 }}>Datos de cálculo</h4>
+                  <div className="calc-summary compact">
+                    <div>Categoría: {modal.product.category || "-"}</div>
+                    <div>Comisión: {mcRow?.result?.valid ? percent(mcRow.result.marketplaceFeeRate) : "-"}</div>
+                    <div>Envío: {mcRow?.result?.valid ? moneyWithCents(mcRow.result.shippingCostAmount) : "-"}</div>
+                    <div>IVA: {percent(modal.product.vat_rate)}</div>
+                  </div>
                 </div>
 
                 <div>
+                  <h4 style={{ marginTop: 0 }}>Impuestos para esta prueba</h4>
+                  <p className="small">Estos valores modifican solo este cálculo. No cambian la solapa Impuestos.</p>
+                  <div className="grid two">
+                    <div className="field">
+                      <label>IIBB %</label>
+                      <input type="number" step="0.01" value={modal.taxOverrides.iibb_rate} onChange={(e) => updateTaxOverride("iibb_rate", e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>IDC %</label>
+                      <input type="number" step="0.01" value={modal.taxOverrides.idc_rate} onChange={(e) => updateTaxOverride("idc_rate", e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>IIGG %</label>
+                      <input type="number" step="0.01" value={modal.taxOverrides.iigg_rate} onChange={(e) => updateTaxOverride("iigg_rate", e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>Estructura %</label>
+                      <input type="number" step="0.01" value={modal.taxOverrides.structure_rate} onChange={(e) => updateTaxOverride("structure_rate", e.target.value)} />
+                    </div>
+                  </div>
+                  <button className="button ghost" type="button" onClick={resetTaxOverrides}>Restablecer impuestos globales</button>
+                </div>
+
+                <div>
+                  <h4 style={{ marginTop: 0 }}>Resumen MC</h4>
                   {mcRow?.result?.valid ? (
                     <div className="calc-summary">
                       <div><strong>Precio de venta:</strong> {moneyWithCents(mcRow.result.roundedPrice)}</div>
@@ -322,15 +381,6 @@ export default function PricesPage() {
                       <br />
                       <div><strong>Ganancia:</strong> {moneyWithCents(mcRow.result.netProfit)}</div>
                       <div><strong>Margen real:</strong> {percent(mcRow.result.marginOnNetSale)}</div>
-                      <hr />
-                      <div>Categoría: {modal.product.category || "-"}</div>
-                      <div>Comisión: {percent(mcRow.result.marketplaceFeeRate)}</div>
-                      <div>Envío: {moneyWithCents(mcRow.result.shippingCostAmount)}</div>
-                      <div>IVA: {percent(modal.product.vat_rate)}</div>
-                      <div>Ganancias: {percent(mcRow.result.iiggRate)}</div>
-                      <div>IDC: {percent(mcRow.result.idcRate)}</div>
-                      <div>IIBB: {percent(mcRow.result.iibbRate)}</div>
-                      <div>Estructura: {percent(mcRow.result.structureRate)}</div>
                     </div>
                   ) : <span className="message error">{mcRow?.result?.error || "No se pudo calcular MC."}</span>}
                 </div>
