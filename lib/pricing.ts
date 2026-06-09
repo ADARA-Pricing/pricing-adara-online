@@ -134,7 +134,7 @@ export function calculatePriceSummary(
   const idcRate = option.applies_idc ? Number(taxes.idc_rate || 0) : 0;
   const iiggRate = option.applies_iigg ? Number(taxes.iigg_rate || 0) : 0;
   const structureAmount = option.applies_structure ? Number(target.structureAmount || 0) : 0;
-  const salesCommissionRate = Number(target.salesCommissionRate || 0);
+  const salesCommissionRate = option.applies_marketplace_fee ? 0 : Number(target.salesCommissionRate || 0);
 
   const fixedFeeAmount = Number(shippingCost?.fixed_fee_amount || 0);
   const shippingCostAmountGross = option.applies_shipping ? Number(shippingCost?.shipping_cost_amount || 0) : 0;

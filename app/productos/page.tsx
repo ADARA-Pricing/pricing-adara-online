@@ -85,6 +85,31 @@ export default function ProductsPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+
+  async function deleteProduct(product: Product) {
+    const ok = window.confirm(`¿Seguro que querés eliminar el producto ${product.sku} - ${product.name}?`);
+    if (!ok) return;
+
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+
+    const { error } = await supabase.from("products").delete().eq("sku", product.sku);
+    setSaving(false);
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    if (form.sku === product.sku) {
+      setForm(emptyProduct);
+    }
+
+    setMessage(`Producto eliminado: ${product.sku}`);
+    await loadProducts();
+  }
+
   async function saveProduct(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -112,7 +137,6 @@ export default function ProductsPage() {
       height_cm: form.height_cm ?? null,
       width_cm: form.width_cm ?? null,
       depth_cm: form.depth_cm ?? null,
-      stock: form.stock ?? 0,
       supplier: form.supplier?.trim() || null,
       warranty_months: form.warranty_months ?? null,
       status: form.status || "active"
@@ -228,10 +252,6 @@ export default function ProductsPage() {
               <label>Costo con IVA automático</label>
               <input value={money(costWithVatPreview)} disabled />
             </div>
-            <div className="field">
-              <label>Stock</label>
-              <input type="number" min="0" value={form.stock ?? 0} onChange={(e) => update("stock", Number(e.target.value))} />
-            </div>
           </div>
 
           <div className="grid" style={{ marginTop: 12 }}>
@@ -300,7 +320,6 @@ export default function ProductsPage() {
                   <th>Costo s/IVA</th>
                   <th>IVA</th>
                   <th>Costo c/IVA</th>
-                  <th>Stock</th>
                   <th>Estado</th>
                   <th>Acciones</th>
                 </tr>
@@ -317,16 +336,16 @@ export default function ProductsPage() {
                     <td>{money(product.cost_without_vat)}</td>
                     <td>{product.vat_rate}%</td>
                     <td>{money(product.cost_with_vat)}</td>
-                    <td>{product.stock ?? 0}</td>
                     <td><span className="badge">{product.status}</span></td>
-                    <td>
+                    <td className="actions-cell">
                       <button className="button ghost" onClick={() => editProduct(product)}>Editar</button>
+                      <button className="button danger" onClick={() => deleteProduct(product)}>Eliminar</button>
                     </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={9}>Todavía no hay productos cargados.</td>
+                    <td colSpan={8}>Todavía no hay productos cargados.</td>
                   </tr>
                 )}
               </tbody>

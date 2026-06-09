@@ -133,6 +133,11 @@ export default function PricesPage() {
     return fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
   }
 
+  function allowsExtraSalesCommission(option?: MercadoLibrePriceOption | null) {
+    if (!option) return false;
+    return !normalizeOption(option).applies_marketplace_fee;
+  }
+
   function openProductModal(product: Product) {
     const margins: Record<string, number> = {};
     const netProfits: Record<string, number | null> = {};
@@ -179,7 +184,7 @@ export default function PricesPage() {
       desired_net_profit: effectiveNetProfit(option.code),
       structure_amount: Number(modal.structureAmounts[option.code] || 0),
       manual_shipping_amount: Number(modal.manualShippingAmounts[option.code] || 0),
-      sales_commission_rate: Number(modal.salesCommissionRates[option.code] || 0)
+      sales_commission_rate: allowsExtraSalesCommission(option) ? Number(modal.salesCommissionRates[option.code] || 0) : 0
     }));
 
     const { error } = await supabase.from("product_channel_margins").upsert(rows, { onConflict: "product_id,channel_code" });
@@ -438,10 +443,6 @@ export default function PricesPage() {
 
                   <div className="grid two compact-input-grid" style={{ marginTop: 10 }}>
                     <div className="field">
-                      <label>Comisión venta %</label>
-                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.salesCommissionRates.MC || 0)} onChange={(e) => updateChannelExtra("MC", "salesCommissionRates", e.target.value)} />
-                    </div>
-                    <div className="field">
                       <label>Estructura $</label>
                       <input type="text" inputMode="decimal" value={formatInputNumber(modal.structureAmounts.MC || 0, 0)} onChange={(e) => updateChannelExtra("MC", "structureAmounts", e.target.value)} />
                     </div>
@@ -464,7 +465,7 @@ export default function PricesPage() {
                     <div>Categoría: {modal.product.category || "-"}</div>
                     <div>Canal resumen: {selectedSummaryRow?.option.code || "-"}</div>
                     <div>Comisión canal/categoría: {selectedSummaryRow?.result?.valid ? percent((selectedSummaryRow.result.marketplaceFeeRate || 0) + (selectedSummaryRow.result.financingFeeRate || 0)) : "-"}</div>
-                    <div>Comisión venta extra: {selectedSummaryRow?.result?.valid ? percent(selectedSummaryRow.result.salesCommissionRate) : "-"}</div>
+                    {selectedSummaryRow?.result?.valid && allowsExtraSalesCommission(selectedSummaryRow.option) && <div>Comisión venta extra: {percent(selectedSummaryRow.result.salesCommissionRate)}</div>}
                     <div>Envío c/IVA ML: {selectedSummaryRow?.result?.valid ? moneyWithCents(selectedSummaryRow.result.shippingCostAmountGross) : "-"}</div>
                     <div>Envío usado: {selectedSummaryRow?.result?.valid ? moneyWithCents(selectedSummaryRow.result.shippingCostAmount) : "-"}</div>
                     <div>IVA venta: {selectedSummaryRow?.result?.valid ? percent(selectedSummaryRow.result.saleVatRate) : percent(modal.product.vat_rate)}</div>
@@ -499,7 +500,7 @@ export default function PricesPage() {
                       <div>IVA venta: -{moneyWithCents(selectedSummaryRow.result.vatAmount)}</div>
                       <div>Precio sin IVA: {moneyWithCents(selectedSummaryRow.result.netSalePrice)}</div>
                       <div>Comisión canal: -{moneyWithCents(selectedSummaryRow.result.marketplaceFeeAmount)}</div>
-                      <div>Comisión venta extra: -{moneyWithCents(selectedSummaryRow.result.salesCommissionAmount)}</div>
+                      {allowsExtraSalesCommission(selectedSummaryRow.option) && <div>Comisión venta extra: -{moneyWithCents(selectedSummaryRow.result.salesCommissionAmount)}</div>}
                       <div>Ingresos brutos: -{moneyWithCents(selectedSummaryRow.result.iibbAmount)}</div>
                       <br />
                       <div>Envío s/IVA: -{moneyWithCents(selectedSummaryRow.result.shippingCostAmount)}</div>
@@ -547,7 +548,13 @@ export default function PricesPage() {
                           <input type="text" inputMode="decimal" value={formatInputNumber(desiredNetProfit)} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
                         </td>
                         <td className="price-input-cell" style={{ minWidth: 150 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides[option.code] ?? (result.valid ? result.roundedPrice : null), 0)} onChange={(e) => updateSalePrice(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} /></td>
-                        <td style={{ minWidth: 120 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.salesCommissionRates[option.code] || 0)} onChange={(e) => updateChannelExtra(option.code, "salesCommissionRates", e.target.value)} /></td>
+                        <td style={{ minWidth: 120 }}>
+                          {allowsExtraSalesCommission(option) ? (
+                            <input type="text" inputMode="decimal" value={formatInputNumber(modal.salesCommissionRates[option.code] || 0)} onChange={(e) => updateChannelExtra(option.code, "salesCommissionRates", e.target.value)} />
+                          ) : (
+                            <span className="small">No aplica</span>
+                          )}
+                        </td>
                         <td style={{ minWidth: 120 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.manualShippingAmounts[option.code] || 0, 0)} onChange={(e) => updateChannelExtra(option.code, "manualShippingAmounts", e.target.value)} disabled={Boolean(option.applies_shipping)} className={option.applies_shipping ? "input-disabled" : ""} /></td>
                         <td style={{ minWidth: 120 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.structureAmounts[option.code] || 0, 0)} onChange={(e) => updateChannelExtra(option.code, "structureAmounts", e.target.value)} /></td>
                         <td>{result.valid ? moneyWithCents(result.netProfit) : "-"}</td>
