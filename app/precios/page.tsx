@@ -17,6 +17,10 @@ type ModalState = {
   margins: Record<string, number>;
   netProfits: Record<string, number | null>;
   priceOverrides: Record<string, number | null>;
+  structureAmounts: Record<string, number>;
+  manualShippingAmounts: Record<string, number>;
+  salesCommissionRates: Record<string, number>;
+  summaryChannelCode: string;
   taxOverrides: TaxSettings;
 };
 
@@ -119,6 +123,10 @@ export default function PricesPage() {
     return setting?.desired_net_profit ?? null;
   }
 
+  function getChannelSetting(productId: string | undefined, channelCode: string) {
+    return marginSettings.find((item) => item.product_id === productId && item.channel_code === channelCode);
+  }
+
   function formatInputNumber(value: number | null | undefined, decimals = 2) {
     if (value === null || value === undefined || Number.isNaN(Number(value))) return "";
     const fixed = Number(value).toFixed(decimals);
@@ -129,12 +137,19 @@ export default function PricesPage() {
     const margins: Record<string, number> = {};
     const netProfits: Record<string, number | null> = {};
     const priceOverrides: Record<string, number | null> = {};
+    const structureAmounts: Record<string, number> = {};
+    const manualShippingAmounts: Record<string, number> = {};
+    const salesCommissionRates: Record<string, number> = {};
     pricingOptions.forEach((option) => {
+      const setting = getChannelSetting(product.id, option.code);
       margins[option.code] = getMargin(product.id, option.code);
       netProfits[option.code] = getNetProfit(product.id, option.code);
       priceOverrides[option.code] = null;
+      structureAmounts[option.code] = Number(setting?.structure_amount || 0);
+      manualShippingAmounts[option.code] = Number(setting?.manual_shipping_amount || 0);
+      salesCommissionRates[option.code] = Number(setting?.sales_commission_rate || 0);
     });
-    setModal({ product, mode: "margin", syncMode: "none", margins, netProfits, priceOverrides, taxOverrides: { ...taxes } });
+    setModal({ product, mode: "margin", syncMode: "none", margins, netProfits, priceOverrides, structureAmounts, manualShippingAmounts, salesCommissionRates, summaryChannelCode: "MC", taxOverrides: { ...taxes } });
   }
 
   function effectiveMargin(channelCode: string) {
@@ -161,7 +176,10 @@ export default function PricesPage() {
       sku: modal.product.sku,
       channel_code: option.code,
       desired_margin_rate: result.valid ? Number(result.marginOnNetSale || 0) : effectiveMargin(option.code),
-      desired_net_profit: effectiveNetProfit(option.code)
+      desired_net_profit: effectiveNetProfit(option.code),
+      structure_amount: Number(modal.structureAmounts[option.code] || 0),
+      manual_shipping_amount: Number(modal.manualShippingAmounts[option.code] || 0),
+      sales_commission_rate: Number(modal.salesCommissionRates[option.code] || 0)
     }));
 
     const { error } = await supabase.from("product_channel_margins").upsert(rows, { onConflict: "product_id,channel_code" });
@@ -223,6 +241,9 @@ export default function PricesPage() {
         salePrice,
         desiredMarginRate: effectiveMargin(channelCode),
         desiredNetProfit: null,
+        structureAmount: modal.structureAmounts[channelCode] || 0,
+        manualShippingAmount: modal.manualShippingAmounts[channelCode] || 0,
+        salesCommissionRate: modal.salesCommissionRates[channelCode] || 0,
         roundTo: 100,
         roundingMode: "nearest"
       }
@@ -242,7 +263,7 @@ export default function PricesPage() {
     setModal({ ...modal, syncMode });
   }
 
-  function updateTaxOverride(field: keyof Pick<TaxSettings, "iibb_rate" | "idc_rate" | "iigg_rate" | "structure_rate">, value: string) {
+  function updateTaxOverride(field: keyof Pick<TaxSettings, "iibb_rate" | "idc_rate" | "iigg_rate">, value: string) {
     if (!modal) return;
     setModal({
       ...modal,
@@ -256,6 +277,22 @@ export default function PricesPage() {
   function resetTaxOverrides() {
     if (!modal) return;
     setModal({ ...modal, taxOverrides: { ...taxes } });
+  }
+
+  function updateChannelExtra(channelCode: string, field: "structureAmounts" | "manualShippingAmounts" | "salesCommissionRates", value: string) {
+    if (!modal) return;
+    setModal({
+      ...modal,
+      [field]: {
+        ...modal[field],
+        [channelCode]: Number(toNumber(value) ?? 0)
+      }
+    });
+  }
+
+  function setSummaryChannel(channelCode: string) {
+    if (!modal) return;
+    setModal({ ...modal, summaryChannelCode: channelCode });
   }
 
   function modalRows() {
@@ -274,6 +311,9 @@ export default function PricesPage() {
         desiredMarginRate: desiredMargin,
         desiredNetProfit,
         salePrice: salePriceOverride,
+        structureAmount: modal.structureAmounts[option.code] || 0,
+        manualShippingAmount: modal.manualShippingAmounts[option.code] || 0,
+        salesCommissionRate: modal.salesCommissionRates[option.code] || 0,
         roundTo: 100,
         roundingMode: "nearest"
       });
@@ -295,6 +335,7 @@ export default function PricesPage() {
 
   const currentRows = modalRows();
   const mcRow = currentRows.find((row) => row.option.code === "MC");
+  const selectedSummaryRow = currentRows.find((row) => row.option.code === (modal?.summaryChannelCode || "MC")) || mcRow;
   const otherRows = currentRows.filter((row) => row.option.code !== "MC");
 
   return (
@@ -376,7 +417,7 @@ export default function PricesPage() {
               <button className="button ghost" onClick={() => setModal(null)}>Cerrar</button>
             </div>
 
-            <p className="small">El resumen completo se muestra sobre MercadoLibre Clásica. Las demás condiciones/canales se listan debajo con su precio, ganancia y margen.</p>
+            <p className="small">Podés elegir qué canal ver en el resumen. Ajustá margen, precio de venta, comisiones, envío manual y estructura para analizar rentabilidad.</p>
 
             <div className="card soft pricing-modal-card" style={{ marginBottom: 16 }}>
               <div className="pricing-modal-grid">
@@ -395,6 +436,17 @@ export default function PricesPage() {
                     </div>
                   </div>
 
+                  <div className="grid two compact-input-grid" style={{ marginTop: 10 }}>
+                    <div className="field">
+                      <label>Comisión venta %</label>
+                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.salesCommissionRates.MC || 0)} onChange={(e) => updateChannelExtra("MC", "salesCommissionRates", e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>Estructura $</label>
+                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.structureAmounts.MC || 0, 0)} onChange={(e) => updateChannelExtra("MC", "structureAmounts", e.target.value)} />
+                    </div>
+                  </div>
+
                   <div className="sync-options">
                     <label className="checkbox-row">
                       <input type="checkbox" checked={modal.syncMode === "margin"} onChange={(e) => setSyncMode(e.target.checked ? "margin" : "none")} />
@@ -410,10 +462,12 @@ export default function PricesPage() {
                   <h4>Datos de cálculo</h4>
                   <div className="calc-summary compact">
                     <div>Categoría: {modal.product.category || "-"}</div>
-                    <div>Comisión: {mcRow?.result?.valid ? percent(mcRow.result.marketplaceFeeRate) : "-"}</div>
-                    <div>Envío c/IVA: {mcRow?.result?.valid ? moneyWithCents(mcRow.result.shippingCostAmountGross) : "-"}</div>
-                    <div>Envío s/IVA: {mcRow?.result?.valid ? moneyWithCents(mcRow.result.shippingCostAmount) : "-"}</div>
-                    <div>IVA: {percent(modal.product.vat_rate)}</div>
+                    <div>Canal resumen: {selectedSummaryRow?.option.code || "-"}</div>
+                    <div>Comisión canal/categoría: {selectedSummaryRow?.result?.valid ? percent((selectedSummaryRow.result.marketplaceFeeRate || 0) + (selectedSummaryRow.result.financingFeeRate || 0)) : "-"}</div>
+                    <div>Comisión venta extra: {selectedSummaryRow?.result?.valid ? percent(selectedSummaryRow.result.salesCommissionRate) : "-"}</div>
+                    <div>Envío c/IVA ML: {selectedSummaryRow?.result?.valid ? moneyWithCents(selectedSummaryRow.result.shippingCostAmountGross) : "-"}</div>
+                    <div>Envío usado: {selectedSummaryRow?.result?.valid ? moneyWithCents(selectedSummaryRow.result.shippingCostAmount) : "-"}</div>
+                    <div>IVA venta: {selectedSummaryRow?.result?.valid ? percent(selectedSummaryRow.result.saleVatRate) : percent(modal.product.vat_rate)}</div>
                   </div>
                 </div>
 
@@ -433,35 +487,32 @@ export default function PricesPage() {
                       <label>IIGG %</label>
                       <input type="text" inputMode="decimal" value={formatInputNumber(modal.taxOverrides.iigg_rate)} onChange={(e) => updateTaxOverride("iigg_rate", e.target.value)} />
                     </div>
-                    <div className="field">
-                      <label>Estructura %</label>
-                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.taxOverrides.structure_rate)} onChange={(e) => updateTaxOverride("structure_rate", e.target.value)} />
-                    </div>
                   </div>
                   <button className="button ghost tax-reset-button" type="button" onClick={resetTaxOverrides}>Restablecer impuestos globales</button>
                 </div>
 
                 <div className="pricing-panel summary-panel">
-                  <h4>Resumen MC</h4>
-                  {mcRow?.result?.valid ? (
+                  <div className="field" style={{ marginBottom: 10 }}><label>Resumen</label><select value={modal.summaryChannelCode} onChange={(e) => setSummaryChannel(e.target.value)}>{currentRows.map((row) => <option key={row.option.code} value={row.option.code}>{row.option.code} - {row.option.name}</option>)}</select></div>
+                  {selectedSummaryRow?.result?.valid ? (
                     <div className="calc-summary">
-                      <div className="field inline-price-field"><label>Precio de venta</label><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides.MC ?? mcRow.result.roundedPrice, 0)} onChange={(e) => updateSalePrice("MC", e.target.value)} /></div>
-                      <div>IVA venta: -{moneyWithCents(mcRow.result.vatAmount)}</div>
-                      <div>Precio sin IVA: {moneyWithCents(mcRow.result.netSalePrice)}</div>
-                      <div>Comisión x venta: -{moneyWithCents(mcRow.result.marketplaceFeeAmount)}</div>
-                      <div>Ingresos brutos: -{moneyWithCents(mcRow.result.iibbAmount)}</div>
+                      <div className="field inline-price-field"><label>Precio de venta</label><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides[selectedSummaryRow.option.code] ?? selectedSummaryRow.result.roundedPrice, 0)} onChange={(e) => updateSalePrice(selectedSummaryRow.option.code, e.target.value)} /></div>
+                      <div>IVA venta: -{moneyWithCents(selectedSummaryRow.result.vatAmount)}</div>
+                      <div>Precio sin IVA: {moneyWithCents(selectedSummaryRow.result.netSalePrice)}</div>
+                      <div>Comisión canal: -{moneyWithCents(selectedSummaryRow.result.marketplaceFeeAmount)}</div>
+                      <div>Comisión venta extra: -{moneyWithCents(selectedSummaryRow.result.salesCommissionAmount)}</div>
+                      <div>Ingresos brutos: -{moneyWithCents(selectedSummaryRow.result.iibbAmount)}</div>
                       <br />
-                      <div>Envío s/IVA: -{moneyWithCents(mcRow.result.shippingCostAmount)}</div>
-                      <div>Gasto de estructura: -{moneyWithCents(mcRow.result.structureAmount)}</div>
+                      <div>Envío s/IVA: -{moneyWithCents(selectedSummaryRow.result.shippingCostAmount)}</div>
+                      <div>Gasto de estructura: -{moneyWithCents(selectedSummaryRow.result.structureAmount)}</div>
                       <div>Costo: -{moneyWithCents(modal.product.cost_without_vat)}</div>
                       <br />
-                      <div>Margen bruto: {moneyWithCents(mcRow.result.grossProfit)}</div>
-                      <div>Imp. Ganancias: -{moneyWithCents(mcRow.result.incomeTaxAmount)}</div>
+                      <div>Margen bruto: {moneyWithCents(selectedSummaryRow.result.grossProfit)}</div>
+                      <div>Imp. Ganancias: -{moneyWithCents(selectedSummaryRow.result.incomeTaxAmount)}</div>
                       <br />
-                      <div><strong>Ganancia:</strong> {moneyWithCents(mcRow.result.netProfit)}</div>
-                      <div><strong>Margen real:</strong> {percent(mcRow.result.marginOnNetSale)}</div>
+                      <div><strong>Ganancia:</strong> {moneyWithCents(selectedSummaryRow.result.netProfit)}</div>
+                      <div><strong>Margen real:</strong> {percent(selectedSummaryRow.result.marginOnNetSale)}</div>
                     </div>
-                  ) : <span className="message error">{mcRow?.result?.error || "No se pudo calcular MC."}</span>}
+                  ) : <span className="message error">{selectedSummaryRow?.result?.error || "No se pudo calcular el resumen."}</span>}
                 </div>
               </div>
             </div>
@@ -474,6 +525,9 @@ export default function PricesPage() {
                     <th>Margen deseado %</th>
                     <th>Ganancia neta objetivo</th>
                     <th>Precio de venta</th>
+                    <th>Comisión venta %</th>
+                    <th>Envío manual $</th>
+                    <th>Estructura $</th>
                     <th>Ganancia</th>
                     <th>Margen real</th>
                   </tr>
@@ -493,6 +547,9 @@ export default function PricesPage() {
                           <input type="text" inputMode="decimal" value={formatInputNumber(desiredNetProfit)} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
                         </td>
                         <td className="price-input-cell" style={{ minWidth: 150 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides[option.code] ?? (result.valid ? result.roundedPrice : null), 0)} onChange={(e) => updateSalePrice(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} /></td>
+                        <td style={{ minWidth: 120 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.salesCommissionRates[option.code] || 0)} onChange={(e) => updateChannelExtra(option.code, "salesCommissionRates", e.target.value)} /></td>
+                        <td style={{ minWidth: 120 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.manualShippingAmounts[option.code] || 0, 0)} onChange={(e) => updateChannelExtra(option.code, "manualShippingAmounts", e.target.value)} disabled={Boolean(option.applies_shipping)} className={option.applies_shipping ? "input-disabled" : ""} /></td>
+                        <td style={{ minWidth: 120 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.structureAmounts[option.code] || 0, 0)} onChange={(e) => updateChannelExtra(option.code, "structureAmounts", e.target.value)} /></td>
                         <td>{result.valid ? moneyWithCents(result.netProfit) : "-"}</td>
                         <td>{result.valid ? percent(result.marginOnNetSale) : result.error}</td>
                       </tr>

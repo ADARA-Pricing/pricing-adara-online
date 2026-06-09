@@ -105,5 +105,8 @@ export type ProductChannelMargin = {
   channel_code: string;
   desired_margin_rate: number;
   desired_net_profit?: number | null;
+  structure_amount?: number | null;
+  manual_shipping_amount?: number | null;
+  sales_commission_rate?: number | null;
   updated_at?: string;
 };

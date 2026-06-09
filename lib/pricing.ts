@@ -59,6 +59,9 @@ type PricingTarget = {
   desiredMarginRate?: number;
   desiredNetProfit?: number | null;
   salePrice?: number | null;
+  structureAmount?: number | null;
+  manualShippingAmount?: number | null;
+  salesCommissionRate?: number | null;
   roundTo?: number;
   roundingMode?: RoundingMode;
 };
@@ -124,19 +127,21 @@ export function calculatePriceSummary(
   const marginRate = Number(target.desiredMarginRate ?? 5);
   const desiredNetProfit = target.desiredNetProfit ?? null;
 
-  const fixedFeeAmount = Number(shippingCost?.fixed_fee_amount || 0);
-  const shippingCostAmountGross = option.applies_shipping ? Number(shippingCost?.shipping_cost_amount || 0) : 0;
-  const shippingCostAmount = shippingCostAmountGross / 1.21;
-  const fixedCosts = fixedFeeAmount + shippingCostAmount;
-
   const roundTo = target.roundTo ?? 100;
   const roundingMode = target.roundingMode ?? "nearest";
 
   const iibbRate = option.applies_iibb ? Number(taxes.iibb_rate || 0) : 0;
   const idcRate = option.applies_idc ? Number(taxes.idc_rate || 0) : 0;
   const iiggRate = option.applies_iigg ? Number(taxes.iigg_rate || 0) : 0;
-  const structureRate = option.applies_structure ? Number(taxes.structure_rate || 0) : 0;
-  const salesTaxRate = iibbRate + idcRate + structureRate;
+  const structureAmount = option.applies_structure ? Number(target.structureAmount || 0) : 0;
+  const salesCommissionRate = Number(target.salesCommissionRate || 0);
+
+  const fixedFeeAmount = Number(shippingCost?.fixed_fee_amount || 0);
+  const shippingCostAmountGross = option.applies_shipping ? Number(shippingCost?.shipping_cost_amount || 0) : 0;
+  const shippingCostAmount = option.applies_shipping ? shippingCostAmountGross / 1.21 : Number(target.manualShippingAmount || 0);
+  const manualShippingAmount = option.applies_shipping ? 0 : shippingCostAmount;
+  const fixedCosts = fixedFeeAmount + shippingCostAmount + structureAmount;
+  const salesTaxRate = iibbRate + idcRate;
   const iiggDecimal = rateToDecimal(iiggRate);
   const channelFeeRate = marketplaceFeeRate + financingFeeRate;
 
@@ -144,7 +149,8 @@ export function calculatePriceSummary(
   // Si están facturados con IVA 21%, para rentabilidad usamos el neto: precio bruto * % / 1,21.
   // Expresado sobre precio sin IVA de la venta, el factor cambia según si la venta lleva IVA o no.
   const channelFeeRateOnNetSale = ((1 + saleVatRate / 100) / 1.21) * channelFeeRate;
-  const saleCostRate = channelFeeRateOnNetSale + salesTaxRate;
+  const salesCommissionRateOnNetSale = (1 + saleVatRate / 100) * salesCommissionRate;
+  const saleCostRate = channelFeeRateOnNetSale + salesTaxRate + salesCommissionRateOnNetSale;
 
   let netSalePrice: number;
   let price: number;
@@ -181,10 +187,10 @@ export function calculatePriceSummary(
 
   const vatAmount = roundedPrice - roundedNetSalePrice;
   const marketplaceFeeAmount = roundedPrice * rateToDecimal(channelFeeRate) / 1.21;
+  const salesCommissionAmount = roundedPrice * rateToDecimal(salesCommissionRate);
   const iibbAmount = roundedNetSalePrice * rateToDecimal(iibbRate);
   const idcAmount = roundedNetSalePrice * rateToDecimal(idcRate);
-  const structureAmount = roundedNetSalePrice * rateToDecimal(structureRate);
-  const grossProfit = roundedNetSalePrice - costWithoutVat - fixedCosts - marketplaceFeeAmount - iibbAmount - idcAmount - structureAmount;
+  const grossProfit = roundedNetSalePrice - costWithoutVat - fixedCosts - marketplaceFeeAmount - salesCommissionAmount - iibbAmount - idcAmount;
   const incomeTaxAmount = Math.max(grossProfit, 0) * rateToDecimal(iiggRate);
   const netProfit = grossProfit - incomeTaxAmount;
   const marginOnCost = costWithoutVat > 0 ? (netProfit / costWithoutVat) * 100 : 0;
@@ -203,7 +209,6 @@ export function calculatePriceSummary(
     marketplaceFeeAmount,
     iibbAmount,
     idcAmount,
-    structureAmount,
     grossProfit,
     incomeTaxAmount,
     netProfit,
@@ -218,10 +223,14 @@ export function calculatePriceSummary(
     iibbRate,
     idcRate,
     iiggRate,
-    structureRate,
+    structureRate: 0,
+    structureAmount,
+    salesCommissionRate,
+    salesCommissionAmount,
     fixedFeeAmount,
     shippingCostAmount,
     shippingCostAmountGross,
+    manualShippingAmount,
     fixedCosts,
     saleVatRate,
     appliesVat: Boolean(option.applies_vat),
@@ -240,6 +249,7 @@ function invalidResult(message: string, values: Record<string, number>) {
     netSalePrice: null,
     vatAmount: null,
     marketplaceFeeAmount: null,
+    salesCommissionAmount: null,
     iibbAmount: null,
     idcAmount: null,
     structureAmount: null,
