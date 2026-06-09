@@ -161,8 +161,8 @@ export default function EnviosMeliPage() {
                 ))}
               </select>
             </div>
-            <div className="field"><label>Costo fijo $</label><input type="number" step="0.01" value={numberValue(form.fixed_fee_amount)} onChange={(e) => update("fixed_fee_amount", Number(toNumber(e.target.value) || 0))} /></div>
-            <div className="field"><label>Costo envío $</label><input type="number" step="0.01" value={numberValue(form.shipping_cost_amount)} onChange={(e) => update("shipping_cost_amount", Number(toNumber(e.target.value) || 0))} /></div>
+            <div className="field"><label>Costo fijo $</label><input type="text" inputMode="decimal" value={numberValue(form.fixed_fee_amount)} onChange={(e) => update("fixed_fee_amount", Number(toNumber(e.target.value) || 0))} /></div>
+            <div className="field"><label>Costo envío $</label><input type="text" inputMode="decimal" value={numberValue(form.shipping_cost_amount)} onChange={(e) => update("shipping_cost_amount", Number(toNumber(e.target.value) || 0))} /></div>
             <div className="field"><label>Tipo</label><select value={form.free_shipping ? "true" : "false"} onChange={(e) => update("free_shipping", e.target.value === "true")}><option value="true">Envío gratis / cargo vendedor</option><option value="false">Envío a cargo comprador</option></select></div>
           </div>
           <div className="grid" style={{ marginTop: 12 }}>

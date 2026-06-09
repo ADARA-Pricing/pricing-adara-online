@@ -119,6 +119,12 @@ export default function PricesPage() {
     return setting?.desired_net_profit ?? null;
   }
 
+  function formatInputNumber(value: number | null | undefined, decimals = 2) {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return "";
+    const fixed = Number(value).toFixed(decimals);
+    return fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  }
+
   function openProductModal(product: Product) {
     const margins: Record<string, number> = {};
     const netProfits: Record<string, number | null> = {};
@@ -225,7 +231,7 @@ export default function PricesPage() {
     setModal({
       ...modal,
       mode: "margin",
-      margins: { ...modal.margins, [channelCode]: result.valid ? Number(result.marginOnNetSale || 0) : Number(modal.margins[channelCode] || 0) },
+      margins: { ...modal.margins, [channelCode]: result.valid ? Number((result.marginOnNetSale || 0).toFixed(2)) : Number(modal.margins[channelCode] || 0) },
       netProfits: { ...modal.netProfits, [channelCode]: null },
       priceOverrides: { ...modal.priceOverrides, [channelCode]: salePrice }
     });
@@ -381,11 +387,11 @@ export default function PricesPage() {
                   <div className="grid two compact-input-grid">
                     <div className="field">
                       <label>Margen deseado %</label>
-                      <input type="number" step="0.01" value={modal.margins.MC ?? 5} onChange={(e) => updateMargin("MC", e.target.value)} disabled={modal.syncMode === "net"} className={modal.syncMode === "net" ? "input-disabled" : ""} />
+                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.margins.MC ?? 5)} onChange={(e) => updateMargin("MC", e.target.value)} disabled={modal.syncMode === "net"} className={modal.syncMode === "net" ? "input-disabled" : ""} />
                     </div>
                     <div className="field">
                       <label>Ganancia neta objetivo</label>
-                      <input type="number" step="0.01" value={modal.netProfits.MC ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit("MC", e.target.value)} disabled={modal.syncMode === "margin"} className={modal.syncMode === "margin" ? "input-disabled" : ""} />
+                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.netProfits.MC)} placeholder="Opcional" onChange={(e) => updateNetProfit("MC", e.target.value)} disabled={modal.syncMode === "margin"} className={modal.syncMode === "margin" ? "input-disabled" : ""} />
                     </div>
                   </div>
 
@@ -417,19 +423,19 @@ export default function PricesPage() {
                   <div className="grid two compact-input-grid">
                     <div className="field">
                       <label>IIBB %</label>
-                      <input type="number" step="0.01" value={modal.taxOverrides.iibb_rate} onChange={(e) => updateTaxOverride("iibb_rate", e.target.value)} />
+                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.taxOverrides.iibb_rate)} onChange={(e) => updateTaxOverride("iibb_rate", e.target.value)} />
                     </div>
                     <div className="field">
                       <label>IDC %</label>
-                      <input type="number" step="0.01" value={modal.taxOverrides.idc_rate} onChange={(e) => updateTaxOverride("idc_rate", e.target.value)} />
+                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.taxOverrides.idc_rate)} onChange={(e) => updateTaxOverride("idc_rate", e.target.value)} />
                     </div>
                     <div className="field">
                       <label>IIGG %</label>
-                      <input type="number" step="0.01" value={modal.taxOverrides.iigg_rate} onChange={(e) => updateTaxOverride("iigg_rate", e.target.value)} />
+                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.taxOverrides.iigg_rate)} onChange={(e) => updateTaxOverride("iigg_rate", e.target.value)} />
                     </div>
                     <div className="field">
                       <label>Estructura %</label>
-                      <input type="number" step="0.01" value={modal.taxOverrides.structure_rate} onChange={(e) => updateTaxOverride("structure_rate", e.target.value)} />
+                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.taxOverrides.structure_rate)} onChange={(e) => updateTaxOverride("structure_rate", e.target.value)} />
                     </div>
                   </div>
                   <button className="button ghost tax-reset-button" type="button" onClick={resetTaxOverrides}>Restablecer impuestos globales</button>
@@ -439,7 +445,7 @@ export default function PricesPage() {
                   <h4>Resumen MC</h4>
                   {mcRow?.result?.valid ? (
                     <div className="calc-summary">
-                      <div className="field inline-price-field"><label>Precio de venta</label><input type="number" step="100" value={modal.priceOverrides.MC ?? mcRow.result.roundedPrice ?? ""} onChange={(e) => updateSalePrice("MC", e.target.value)} /></div>
+                      <div className="field inline-price-field"><label>Precio de venta</label><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides.MC ?? mcRow.result.roundedPrice, 0)} onChange={(e) => updateSalePrice("MC", e.target.value)} /></div>
                       <div>IVA venta: -{moneyWithCents(mcRow.result.vatAmount)}</div>
                       <div>Precio sin IVA: {moneyWithCents(mcRow.result.netSalePrice)}</div>
                       <div>Comisión x venta: -{moneyWithCents(mcRow.result.marketplaceFeeAmount)}</div>
@@ -481,12 +487,12 @@ export default function PricesPage() {
                       <tr key={option.code}>
                         <td><strong>{option.code}</strong><br /><span className="small">{option.name}</span></td>
                         <td style={{ minWidth: 130 }}>
-                          <input type="number" step="0.01" value={desiredMargin} onChange={(e) => updateMargin(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
+                          <input type="text" inputMode="decimal" value={formatInputNumber(desiredMargin)} onChange={(e) => updateMargin(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
                         </td>
                         <td style={{ minWidth: 150 }}>
-                          <input type="number" step="0.01" value={desiredNetProfit ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
+                          <input type="text" inputMode="decimal" value={formatInputNumber(desiredNetProfit)} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
                         </td>
-                        <td className="price-input-cell" style={{ minWidth: 150 }}><input type="number" step="100" value={modal.priceOverrides[option.code] ?? (result.valid ? result.roundedPrice : "")} onChange={(e) => updateSalePrice(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} /></td>
+                        <td className="price-input-cell" style={{ minWidth: 150 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides[option.code] ?? (result.valid ? result.roundedPrice : null), 0)} onChange={(e) => updateSalePrice(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} /></td>
                         <td>{result.valid ? moneyWithCents(result.netProfit) : "-"}</td>
                         <td>{result.valid ? percent(result.marginOnNetSale) : result.error}</td>
                       </tr>
