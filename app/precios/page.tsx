@@ -8,10 +8,12 @@ import { calculatePriceSummary, defaultTaxSettings, mercadoLibreClassicOption, m
 import type { MercadoLibreCategoryFee, MercadoLibreInstallmentFee, MercadoLibrePriceOption, MercadoLibreShippingCost, Product, ProductChannelMargin, TaxSettings } from "@/lib/types";
 
 type MarginMode = "margin" | "net";
+type SyncMode = "none" | "margin" | "net";
 
 type ModalState = {
   product: Product;
   mode: MarginMode;
+  syncMode: SyncMode;
   margins: Record<string, number>;
   netProfits: Record<string, number | null>;
 };
@@ -114,7 +116,20 @@ export default function PricesPage() {
       margins[option.code] = getMargin(product.id, option.code);
       netProfits[option.code] = getNetProfit(product.id, option.code);
     });
-    setModal({ product, mode: "margin", margins, netProfits });
+    setModal({ product, mode: "margin", syncMode: "none", margins, netProfits });
+  }
+
+  function effectiveMargin(channelCode: string) {
+    if (!modal) return 5;
+    if (modal.syncMode === "margin" && channelCode !== "MC") return Number(modal.margins.MC ?? 5);
+    return Number(modal.margins[channelCode] ?? 5);
+  }
+
+  function effectiveNetProfit(channelCode: string) {
+    if (!modal) return null;
+    if (modal.syncMode === "net" && channelCode !== "MC") return modal.netProfits.MC ?? null;
+    if (modal.syncMode === "margin") return null;
+    return modal.netProfits[channelCode] ?? null;
   }
 
   async function saveMargins() {
@@ -127,8 +142,8 @@ export default function PricesPage() {
       product_id: modal.product.id,
       sku: modal.product.sku,
       channel_code: option.code,
-      desired_margin_rate: Number(modal.margins[option.code] ?? 5),
-      desired_net_profit: modal.netProfits[option.code]
+      desired_margin_rate: effectiveMargin(option.code),
+      desired_net_profit: effectiveNetProfit(option.code)
     }));
 
     const { error } = await supabase.from("product_channel_margins").upsert(rows, { onConflict: "product_id,channel_code" });
@@ -161,23 +176,32 @@ export default function PricesPage() {
     });
   }
 
+  function setSyncMode(syncMode: SyncMode) {
+    if (!modal) return;
+    setModal({ ...modal, syncMode });
+  }
+
   function modalRows() {
     if (!modal) return [];
     const product = modal.product;
     const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase());
     const shippingCost = shippingCosts.find((item) => item.product_id === product.id || item.sku === product.sku);
     return pricingOptions.map((option) => {
-      const desiredNetProfit = modal.netProfits[option.code];
-      const desiredMargin = modal.margins[option.code] ?? 5;
+      const desiredNetProfit = effectiveNetProfit(option.code);
+      const desiredMargin = effectiveMargin(option.code);
       const result = calculatePriceSummary(product, option, categoryFee, taxes, shippingCost, {
         desiredMarginRate: desiredMargin,
         desiredNetProfit,
         roundTo: 100,
         roundingMode: "nearest"
       });
-      return { option, categoryFee, shippingCost, result: result as any };
+      return { option, categoryFee, shippingCost, result: result as any, desiredMargin, desiredNetProfit };
     });
   }
+
+  const currentRows = modalRows();
+  const mcRow = currentRows.find((row) => row.option.code === "MC");
+  const otherRows = currentRows.filter((row) => row.option.code !== "MC");
 
   return (
     <main className="container wide">
@@ -256,62 +280,95 @@ export default function PricesPage() {
               <button className="button ghost" onClick={() => setModal(null)}>Cerrar</button>
             </div>
 
-            <p className="small">Los datos de categoría, costos por canal, envíos e impuestos se toman de la configuración. Los valores editables son margen deseado % o ganancia neta. Por defecto todos los canales se crean con 5%.</p>
+            <p className="small">El resumen completo se muestra sobre MercadoLibre Clásica. Las demás condiciones se listan debajo con su precio, ganancia y margen.</p>
+
+            <div className="card soft" style={{ marginBottom: 16 }}>
+              <div className="grid two">
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Condición base: MC</h3>
+                  <p className="small">MercadoLibre Clásica</p>
+                  <div className="grid two">
+                    <div className="field">
+                      <label>Margen deseado %</label>
+                      <input type="number" step="0.01" value={modal.margins.MC ?? 5} onChange={(e) => updateMargin("MC", e.target.value)} disabled={modal.syncMode === "net"} style={modal.syncMode === "net" ? { background: "#e5e7eb", color: "#6b7280" } : undefined} />
+                    </div>
+                    <div className="field">
+                      <label>Ganancia neta objetivo</label>
+                      <input type="number" step="0.01" value={modal.netProfits.MC ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit("MC", e.target.value)} disabled={modal.syncMode === "margin"} style={modal.syncMode === "margin" ? { background: "#e5e7eb", color: "#6b7280" } : undefined} />
+                    </div>
+                  </div>
+                  <div className="actions" style={{ marginTop: 10 }}>
+                    <button className={modal.syncMode === "margin" ? "button" : "button ghost"} onClick={() => setSyncMode(modal.syncMode === "margin" ? "none" : "margin")}>Usar margen % MC en todas</button>
+                    <button className={modal.syncMode === "net" ? "button" : "button ghost"} onClick={() => setSyncMode(modal.syncMode === "net" ? "none" : "net")}>Usar ganancia neta MC en todas</button>
+                  </div>
+                  <p className="small" style={{ marginTop: 10 }}>Cuando una opción está activa, los campos de las otras condiciones quedan bloqueados y toman el valor de MC.</p>
+                </div>
+
+                <div>
+                  {mcRow?.result?.valid ? (
+                    <div className="calc-summary">
+                      <div><strong>Precio de venta:</strong> {moneyWithCents(mcRow.result.roundedPrice)}</div>
+                      <div>IVA venta: -{moneyWithCents(mcRow.result.vatAmount)}</div>
+                      <div>Precio sin IVA: {moneyWithCents(mcRow.result.netSalePrice)}</div>
+                      <div>Comisión x venta: -{moneyWithCents(mcRow.result.marketplaceFeeAmount)}</div>
+                      <div>Ingresos brutos: -{moneyWithCents(mcRow.result.iibbAmount)}</div>
+                      <br />
+                      <div>Envío: -{moneyWithCents(mcRow.result.shippingCostAmount)}</div>
+                      <div>Gasto de estructura: -{moneyWithCents(mcRow.result.structureAmount)}</div>
+                      <div>Costo: -{moneyWithCents(modal.product.cost_without_vat)}</div>
+                      <br />
+                      <div>Margen bruto: {moneyWithCents(mcRow.result.grossProfit)}</div>
+                      <div>Imp. Ganancias: -{moneyWithCents(mcRow.result.incomeTaxAmount)}</div>
+                      <br />
+                      <div><strong>Ganancia:</strong> {moneyWithCents(mcRow.result.netProfit)}</div>
+                      <div><strong>Margen real:</strong> {percent(mcRow.result.marginOnNetSale)}</div>
+                      <hr />
+                      <div>Categoría: {modal.product.category || "-"}</div>
+                      <div>Comisión: {percent(mcRow.result.marketplaceFeeRate)}</div>
+                      <div>Envío: {moneyWithCents(mcRow.result.shippingCostAmount)}</div>
+                      <div>IVA: {percent(modal.product.vat_rate)}</div>
+                      <div>Ganancias: {percent(mcRow.result.iiggRate)}</div>
+                      <div>IDC: {percent(mcRow.result.idcRate)}</div>
+                      <div>IIBB: {percent(mcRow.result.iibbRate)}</div>
+                      <div>Estructura: {percent(mcRow.result.structureRate)}</div>
+                    </div>
+                  ) : <span className="message error">{mcRow?.result?.error || "No se pudo calcular MC."}</span>}
+                </div>
+              </div>
+            </div>
 
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Canal</th>
+                    <th>Condición de venta</th>
                     <th>Margen deseado %</th>
                     <th>Ganancia neta objetivo</th>
-                    <th>Datos de cálculo</th>
-                    <th>Resumen</th>
+                    <th>Precio de venta</th>
+                    <th>Ganancia</th>
+                    <th>Margen real</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {modalRows().map(({ option, result }) => (
-                    <tr key={option.code}>
-                      <td><strong>{option.code}</strong><br /><span className="small">{option.name}</span></td>
-                      <td style={{ minWidth: 130 }}>
-                        <input type="number" step="0.01" value={modal.margins[option.code] ?? 5} onChange={(e) => updateMargin(option.code, e.target.value)} />
-                      </td>
-                      <td style={{ minWidth: 150 }}>
-                        <input type="number" step="0.01" value={modal.netProfits[option.code] ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} />
-                      </td>
-                      <td className="calc-data">
-                        <div>Categoría: {modal.product.category || "-"}</div>
-                        <div>Comisión: {percent(result.marketplaceFeeRate)}</div>
-                        <div>Envío: {moneyWithCents(result.shippingCostAmount)}</div>
-                        <div>IVA: {percent(modal.product.vat_rate)}</div>
-                        <div>Ganancias: {percent(result.iiggRate)}</div>
-                        <div>IDC: {percent(result.idcRate)}</div>
-                        <div>IIBB: {percent(result.iibbRate)}</div>
-                        <div>Estructura: {percent(result.structureRate)}</div>
-                      </td>
-                      <td className="calc-summary">
-                        {result.valid ? (
-                          <>
-                            <div><strong>Precio de venta:</strong> {moneyWithCents(result.roundedPrice)}</div>
-                            <div>IVA venta: -{moneyWithCents(result.vatAmount)}</div>
-                            <div>Precio sin IVA: {moneyWithCents(result.netSalePrice)}</div>
-                            <div>Comisión x venta: -{moneyWithCents(result.marketplaceFeeAmount)}</div>
-                            <div>Ingresos brutos: -{moneyWithCents(result.iibbAmount)}</div>
-                            <br />
-                            <div>Envío: -{moneyWithCents(result.shippingCostAmount)}</div>
-                            <div>Gasto de estructura: -{moneyWithCents(result.structureAmount)}</div>
-                            <div>Costo: -{moneyWithCents(modal.product.cost_without_vat)}</div>
-                            <br />
-                            <div>Margen bruto: {moneyWithCents(result.grossProfit)}</div>
-                            <div>Imp. Ganancias: -{moneyWithCents(result.incomeTaxAmount)}</div>
-                            <br />
-                            <div><strong>Ganancia:</strong> {moneyWithCents(result.netProfit)}</div>
-                            <div><strong>Margen real:</strong> {percent(result.marginOnNetSale)}</div>
-                          </>
-                        ) : <span className="message error">{result.error}</span>}
-                      </td>
-                    </tr>
-                  ))}
+                  {otherRows.map(({ option, result, desiredMargin, desiredNetProfit }) => {
+                    const lockMargin = modal.syncMode === "margin";
+                    const lockNet = modal.syncMode === "net";
+                    const disabledStyle = { background: "#e5e7eb", color: "#6b7280" };
+                    return (
+                      <tr key={option.code}>
+                        <td><strong>{option.code}</strong><br /><span className="small">{option.name}</span></td>
+                        <td style={{ minWidth: 130 }}>
+                          <input type="number" step="0.01" value={desiredMargin} onChange={(e) => updateMargin(option.code, e.target.value)} disabled={lockMargin || lockNet} style={(lockMargin || lockNet) ? disabledStyle : undefined} />
+                        </td>
+                        <td style={{ minWidth: 150 }}>
+                          <input type="number" step="0.01" value={desiredNetProfit ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} disabled={lockMargin || lockNet} style={(lockMargin || lockNet) ? disabledStyle : undefined} />
+                        </td>
+                        <td><strong>{result.valid ? moneyWithCents(result.roundedPrice) : "-"}</strong></td>
+                        <td>{result.valid ? moneyWithCents(result.netProfit) : "-"}</td>
+                        <td>{result.valid ? percent(result.marginOnNetSale) : result.error}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
