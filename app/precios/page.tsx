@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppNav } from "@/components/AppNav";
 import { createClient } from "@/lib/supabase";
-import { calculatePriceSummary, defaultTaxSettings, mercadoLibreClassicOption, money, moneyWithCents, percent, toNumber } from "@/lib/pricing";
+import { calculatePriceSummary, defaultTaxSettings, mercadoLibreClassicOption, money, moneyWithCents, normalizeOption, percent, toNumber } from "@/lib/pricing";
 import type { MercadoLibreCategoryFee, MercadoLibreInstallmentFee, MercadoLibrePriceOption, MercadoLibreShippingCost, Product, ProductChannelMargin, TaxSettings } from "@/lib/types";
 
 type MarginMode = "margin" | "net";
@@ -74,11 +74,19 @@ export default function PricesPage() {
   }, []);
 
   const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
-    return [mercadoLibreClassicOption(), ...installments.map((item) => ({
+    return [mercadoLibreClassicOption(), ...installments.map((item) => normalizeOption({
       code: item.code,
       name: item.name,
+      channel_type: item.channel_type,
       installment_count: item.installment_count,
       financing_fee_rate: item.financing_fee_rate,
+      applies_marketplace_fee: item.applies_marketplace_fee,
+      applies_shipping: item.applies_shipping,
+      applies_iibb: item.applies_iibb,
+      applies_idc: item.applies_idc,
+      applies_iigg: item.applies_iigg,
+      applies_structure: item.applies_structure,
+      applies_vat: item.applies_vat,
       active: item.active
     }))];
   }, [installments]);
@@ -206,13 +214,16 @@ export default function PricesPage() {
     return pricingOptions.map((option) => {
       const desiredNetProfit = effectiveNetProfit(option.code);
       const desiredMargin = effectiveMargin(option.code);
-      const result = calculatePriceSummary(product, option, categoryFee, modal.taxOverrides, shippingCost, {
+      const normalizedOption = normalizeOption(option);
+      const feeForOption = normalizedOption.applies_marketplace_fee ? categoryFee : null;
+      const shippingForOption = normalizedOption.applies_shipping ? shippingCost : null;
+      const result = calculatePriceSummary(product, normalizedOption, feeForOption, modal.taxOverrides, shippingForOption, {
         desiredMarginRate: desiredMargin,
         desiredNetProfit,
         roundTo: 100,
         roundingMode: "nearest"
       });
-      return { option, categoryFee, shippingCost, result: result as any, desiredMargin, desiredNetProfit };
+      return { option: normalizedOption, categoryFee: feeForOption, shippingCost: shippingForOption, result: result as any, desiredMargin, desiredNetProfit };
     });
   }
 
@@ -311,7 +322,7 @@ export default function PricesPage() {
               <button className="button ghost" onClick={() => setModal(null)}>Cerrar</button>
             </div>
 
-            <p className="small">El resumen completo se muestra sobre MercadoLibre Clásica. Las demás condiciones se listan debajo con su precio, ganancia y margen.</p>
+            <p className="small">El resumen completo se muestra sobre MercadoLibre Clásica. Las demás condiciones/canales se listan debajo con su precio, ganancia y margen.</p>
 
             <div className="card soft pricing-modal-card" style={{ marginBottom: 16 }}>
               <div className="pricing-modal-grid">
@@ -405,7 +416,7 @@ export default function PricesPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Condición de venta</th>
+                    <th>Condición / canal</th>
                     <th>Margen deseado %</th>
                     <th>Ganancia neta objetivo</th>
                     <th>Precio de venta</th>

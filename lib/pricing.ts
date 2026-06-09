@@ -1,4 +1,4 @@
-import type { MercadoLibreCategoryFee, MercadoLibrePriceOption, MercadoLibreShippingCost, Product, RoundingMode, TaxSettings } from "@/lib/types";
+import type { MercadoLibreCategoryFee, MercadoLibrePriceOption, MercadoLibreShippingCost, Product, RoundingMode, TaxSettings } from "./types";
 
 export function money(value?: number | null) {
   if (value === undefined || value === null || Number.isNaN(value)) return "-";
@@ -38,7 +38,21 @@ export function defaultTaxSettings(): TaxSettings {
 }
 
 export function mercadoLibreClassicOption(): MercadoLibrePriceOption {
-  return { code: "MC", name: "MercadoLibre Clásica", installment_count: null, financing_fee_rate: 0, active: true };
+  return {
+    code: "MC",
+    name: "MercadoLibre Clásica",
+    channel_type: "mercadolibre",
+    installment_count: null,
+    financing_fee_rate: 0,
+    applies_marketplace_fee: true,
+    applies_shipping: true,
+    applies_iibb: true,
+    applies_idc: true,
+    applies_iigg: true,
+    applies_structure: true,
+    applies_vat: true,
+    active: true
+  };
 }
 
 type PricingTarget = {
@@ -47,6 +61,32 @@ type PricingTarget = {
   roundTo?: number;
   roundingMode?: RoundingMode;
 };
+
+function defaultTrue(value: boolean | null | undefined) {
+  return value !== false;
+}
+
+function defaultFalse(value: boolean | null | undefined) {
+  return value === true;
+}
+
+export function normalizeOption(option: MercadoLibrePriceOption): MercadoLibrePriceOption {
+  const channelType = option.channel_type || (option.code?.startsWith("MP") || option.code === "MC" ? "mercadolibre" : "directo");
+  const isMl = channelType === "mercadolibre" || option.code === "MC" || option.code?.startsWith("MP");
+
+  return {
+    ...option,
+    channel_type: channelType,
+    financing_fee_rate: Number(option.financing_fee_rate || 0),
+    applies_marketplace_fee: isMl ? defaultTrue(option.applies_marketplace_fee) : defaultFalse(option.applies_marketplace_fee),
+    applies_shipping: isMl ? defaultTrue(option.applies_shipping) : defaultFalse(option.applies_shipping),
+    applies_iibb: isMl ? defaultTrue(option.applies_iibb) : defaultFalse(option.applies_iibb),
+    applies_idc: isMl ? defaultTrue(option.applies_idc) : defaultFalse(option.applies_idc),
+    applies_iigg: isMl ? defaultTrue(option.applies_iigg) : defaultFalse(option.applies_iigg),
+    applies_structure: isMl ? defaultTrue(option.applies_structure) : defaultFalse(option.applies_structure),
+    applies_vat: isMl ? defaultTrue(option.applies_vat) : defaultFalse(option.applies_vat)
+  };
+}
 
 export function calculateMercadoLibrePrice(
   product: Product,
@@ -68,68 +108,66 @@ export function calculateMercadoLibrePrice(
 
 export function calculatePriceSummary(
   product: Product,
-  option: MercadoLibrePriceOption,
+  rawOption: MercadoLibrePriceOption,
   categoryFee?: MercadoLibreCategoryFee | null,
   taxes: TaxSettings = defaultTaxSettings(),
   shippingCost?: MercadoLibreShippingCost | null,
   target: PricingTarget = {}
 ) {
+  const option = normalizeOption(rawOption);
   const costWithoutVat = Number(product.cost_without_vat || 0);
   const productVatRate = Number(product.vat_rate || 21);
-  const marketplaceFeeRate = Number(categoryFee?.marketplace_fee_rate || 0);
+  const saleVatRate = option.applies_vat ? productVatRate : 0;
+  const marketplaceFeeRate = option.applies_marketplace_fee ? Number(categoryFee?.marketplace_fee_rate || 0) : 0;
   const financingFeeRate = Number(option.financing_fee_rate || 0);
   const marginRate = Number(target.desiredMarginRate ?? 5);
   const desiredNetProfit = target.desiredNetProfit ?? null;
+
   const fixedFeeAmount = Number(shippingCost?.fixed_fee_amount || 0);
-  // MercadoLibre informa/factura el costo de envío con IVA incluido.
-  // Para rentabilidad lo usamos neto, dividiendo por 1.21.
-  const shippingCostAmountGross = Number(shippingCost?.shipping_cost_amount || 0);
+  const shippingCostAmountGross = option.applies_shipping ? Number(shippingCost?.shipping_cost_amount || 0) : 0;
   const shippingCostAmount = shippingCostAmountGross / 1.21;
   const fixedCosts = fixedFeeAmount + shippingCostAmount;
+
   const roundTo = target.roundTo ?? 100;
   const roundingMode = target.roundingMode ?? "nearest";
 
-  const iibbRate = Number(taxes.iibb_rate || 0);
-  const idcRate = Number(taxes.idc_rate || 0);
-  const iiggRate = Number(taxes.iigg_rate || 0);
-  const structureRate = Number(taxes.structure_rate || 0);
+  const iibbRate = option.applies_iibb ? Number(taxes.iibb_rate || 0) : 0;
+  const idcRate = option.applies_idc ? Number(taxes.idc_rate || 0) : 0;
+  const iiggRate = option.applies_iigg ? Number(taxes.iigg_rate || 0) : 0;
+  const structureRate = option.applies_structure ? Number(taxes.structure_rate || 0) : 0;
   const salesTaxRate = iibbRate + idcRate + structureRate;
   const iiggDecimal = rateToDecimal(iiggRate);
   const channelFeeRate = marketplaceFeeRate + financingFeeRate;
 
-  // MercadoLibre informa comisiones como porcentaje sobre el precio de venta con IVA.
-  // Como MercadoLibre factura esas comisiones con IVA 21%, para la rentabilidad usamos el neto:
-  // comisión/costo cuotas neto = precio_venta_con_iva * % / 1.21.
-  // Expresado sobre el precio sin IVA del producto, el factor variable es:
-  // (1 + IVA producto) / 1.21 * % comisión/costo cuotas.
-  const channelFeeRateOnNetSale = ((1 + productVatRate / 100) / 1.21) * channelFeeRate;
-  // IIGG no se aplica sobre la venta, sino sobre el margen bruto.
-  // Por eso no entra como porcentaje variable directo del precio.
+  // Comisiones/costos de canal cargados como porcentaje sobre precio de venta con IVA.
+  // Si están facturados con IVA 21%, para rentabilidad usamos el neto: precio bruto * % / 1,21.
+  // Expresado sobre precio sin IVA de la venta, el factor cambia según si la venta lleva IVA o no.
+  const channelFeeRateOnNetSale = ((1 + saleVatRate / 100) / 1.21) * channelFeeRate;
   const saleCostRate = channelFeeRateOnNetSale + salesTaxRate;
 
   let netSalePrice: number;
   let effectiveMarginRate = marginRate;
 
   if (iiggDecimal >= 1) {
-    return invalidResult("Impuesto a las ganancias no puede ser 100% o mayor.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, fixedCosts, variableRate: saleCostRate });
+    return invalidResult("Impuesto a las ganancias no puede ser 100% o mayor.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, shippingCostAmountGross, fixedCosts, variableRate: saleCostRate });
   }
 
   if (desiredNetProfit !== null && Number.isFinite(Number(desiredNetProfit))) {
     const denominator = 1 - rateToDecimal(saleCostRate);
-    if (denominator <= 0) return invalidResult("La suma de comisión, cuotas e impuestos de venta llega o supera el 100%.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, fixedCosts, variableRate: saleCostRate });
+    if (denominator <= 0) return invalidResult("La suma de comisión, cuotas e impuestos de venta llega o supera el 100%.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, shippingCostAmountGross, fixedCosts, variableRate: saleCostRate });
     const requiredGrossProfit = Number(desiredNetProfit) / (1 - iiggDecimal);
     netSalePrice = (costWithoutVat + fixedCosts + requiredGrossProfit) / denominator;
     effectiveMarginRate = netSalePrice > 0 ? (Number(desiredNetProfit) / netSalePrice) * 100 : 0;
   } else {
     const desiredNetMarginDecimal = rateToDecimal(marginRate);
     const denominator = 1 - rateToDecimal(saleCostRate) - desiredNetMarginDecimal / (1 - iiggDecimal);
-    if (denominator <= 0) return invalidResult("La suma de margen, comisión, cuotas e impuestos de venta llega o supera el 100%.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, fixedCosts, variableRate: saleCostRate + marginRate });
+    if (denominator <= 0) return invalidResult("La suma de margen, comisión, cuotas e impuestos de venta llega o supera el 100%.", { marketplaceFeeRate, financingFeeRate, marginRate, salesTaxRate, iiggRate, fixedFeeAmount, shippingCostAmount, shippingCostAmountGross, fixedCosts, variableRate: saleCostRate + marginRate });
     netSalePrice = (costWithoutVat + fixedCosts) / denominator;
   }
 
-  const price = netSalePrice * (1 + productVatRate / 100);
+  const price = netSalePrice * (1 + saleVatRate / 100);
   const roundedPrice = roundPrice(price, roundTo, roundingMode);
-  const roundedNetSalePrice = roundedPrice / (1 + productVatRate / 100);
+  const roundedNetSalePrice = roundedPrice / (1 + saleVatRate / 100);
 
   const vatAmount = roundedPrice - roundedNetSalePrice;
   const marketplaceFeeAmount = roundedPrice * rateToDecimal(channelFeeRate) / 1.21;
@@ -137,7 +175,6 @@ export function calculatePriceSummary(
   const idcAmount = roundedNetSalePrice * rateToDecimal(idcRate);
   const structureAmount = roundedNetSalePrice * rateToDecimal(structureRate);
   const grossProfit = roundedNetSalePrice - costWithoutVat - fixedCosts - marketplaceFeeAmount - iibbAmount - idcAmount - structureAmount;
-  // Impuesto a las ganancias se aplica únicamente sobre el margen bruto positivo.
   const incomeTaxAmount = Math.max(grossProfit, 0) * rateToDecimal(iiggRate);
   const netProfit = grossProfit - incomeTaxAmount;
   const marginOnCost = costWithoutVat > 0 ? (netProfit / costWithoutVat) * 100 : 0;
@@ -173,6 +210,10 @@ export function calculatePriceSummary(
     shippingCostAmount,
     shippingCostAmountGross,
     fixedCosts,
+    saleVatRate,
+    appliesVat: Boolean(option.applies_vat),
+    appliesMarketplaceFee: Boolean(option.applies_marketplace_fee),
+    appliesShipping: Boolean(option.applies_shipping),
     variableRate,
     error: null
   };

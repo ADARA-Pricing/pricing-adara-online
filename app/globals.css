@@ -142,3 +142,31 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   margin-top: 12px;
   align-self: flex-start;
 }
+
+.channel-flags {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px 16px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fafafa;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.button.danger {
+  background: #fff;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.button.danger:hover {
+  background: #fee2e2;
+}

@@ -26,12 +26,22 @@ export type Product = {
 
 export type RoundingMode = "nearest" | "up" | "down";
 
+export type ChannelType = "mercadolibre" | "directo" | "web" | "posnet" | "otro";
+
 export type MercadoLibreInstallmentFee = {
   id?: string;
   code: string;
   name: string;
+  channel_type?: ChannelType | string | null;
   installment_count?: number | null;
   financing_fee_rate: number;
+  applies_marketplace_fee?: boolean | null;
+  applies_shipping?: boolean | null;
+  applies_iibb?: boolean | null;
+  applies_idc?: boolean | null;
+  applies_iigg?: boolean | null;
+  applies_structure?: boolean | null;
+  applies_vat?: boolean | null;
   active: boolean;
   notes?: string | null;
   created_at?: string;
@@ -41,8 +51,16 @@ export type MercadoLibreInstallmentFee = {
 export type MercadoLibrePriceOption = {
   code: string;
   name: string;
+  channel_type?: ChannelType | string | null;
   installment_count?: number | null;
   financing_fee_rate: number;
+  applies_marketplace_fee?: boolean | null;
+  applies_shipping?: boolean | null;
+  applies_iibb?: boolean | null;
+  applies_idc?: boolean | null;
+  applies_iigg?: boolean | null;
+  applies_structure?: boolean | null;
+  applies_vat?: boolean | null;
   active?: boolean;
 };
 
