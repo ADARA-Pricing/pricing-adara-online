@@ -26,6 +26,7 @@ export default function PricesPage() {
   const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
   const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,13 +80,22 @@ export default function PricesPage() {
     }))];
   }, [installments]);
 
+  const categories = useMemo(() => {
+    const values = products
+      .map((product) => product.category || "")
+      .filter(Boolean);
+    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "es"));
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
     const q = query.toLowerCase();
     return products.filter((product) => {
       const text = `${product.sku} ${product.name} ${product.brand || ""} ${product.model || ""} ${product.category || ""}`.toLowerCase();
-      return !q || text.includes(q);
+      const matchesQuery = !q || text.includes(q);
+      const matchesCategory = !categoryFilter || (product.category || "") === categoryFilter;
+      return matchesQuery && matchesCategory;
     });
-  }, [products, query]);
+  }, [products, query, categoryFilter]);
 
   function getMargin(productId: string | undefined, channelCode: string) {
     const setting = marginSettings.find((item) => item.product_id === productId && item.channel_code === channelCode);
@@ -186,9 +196,18 @@ export default function PricesPage() {
       {message && <div className="message success">{message}</div>}
 
       <section className="card" style={{ marginBottom: 20 }}>
-        <div className="field">
-          <label>Buscar producto</label>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por SKU, nombre, marca, modelo o categoría" />
+        <div className="grid two">
+          <div className="field">
+            <label>Buscar producto</label>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por SKU, nombre, marca o modelo" />
+          </div>
+          <div className="field">
+            <label>Categoría</label>
+            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+              <option value="">Todas las categorías</option>
+              {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+            </select>
+          </div>
         </div>
       </section>
 
@@ -237,7 +256,7 @@ export default function PricesPage() {
               <button className="button ghost" onClick={() => setModal(null)}>Cerrar</button>
             </div>
 
-            <p className="small">Los datos en rojo vienen de categoría, costos por canal, envíos e impuestos. Los valores editables son margen deseado % o ganancia neta. Por defecto todos los canales se crean con 5%.</p>
+            <p className="small">Los datos de categoría, costos por canal, envíos e impuestos se toman de la configuración. Los valores editables son margen deseado % o ganancia neta. Por defecto todos los canales se crean con 5%.</p>
 
             <div className="table-wrap">
               <table>
@@ -260,7 +279,7 @@ export default function PricesPage() {
                       <td style={{ minWidth: 150 }}>
                         <input type="number" step="0.01" value={modal.netProfits[option.code] ?? ""} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} />
                       </td>
-                      <td className="calc-red">
+                      <td className="calc-data">
                         <div>Categoría: {modal.product.category || "-"}</div>
                         <div>Comisión: {percent(result.marketplaceFeeRate)}</div>
                         <div>Envío: {moneyWithCents(result.shippingCostAmount)}</div>
@@ -270,7 +289,7 @@ export default function PricesPage() {
                         <div>IIBB: {percent(result.iibbRate)}</div>
                         <div>Estructura: {percent(result.structureRate)}</div>
                       </td>
-                      <td className="calc-green">
+                      <td className="calc-summary">
                         {result.valid ? (
                           <>
                             <div><strong>Precio de venta:</strong> {moneyWithCents(result.roundedPrice)}</div>

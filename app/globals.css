@@ -87,5 +87,5 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   padding: 20px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.2);
 }
-.calc-red { color: #dc2626; line-height: 1.7; min-width: 220px; }
-.calc-green { color: #166534; line-height: 1.7; min-width: 280px; }
+.calc-data { color: #111827; line-height: 1.7; min-width: 220px; }
+.calc-summary { color: #111827; line-height: 1.7; min-width: 280px; }
