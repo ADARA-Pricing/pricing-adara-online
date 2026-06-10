@@ -151,7 +151,7 @@ export default function PricesPage() {
   }, []);
 
   const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
-    return [
+    const options = [
       mercadoLibreClassicOption(),
       ...installments.map((item) =>
         normalizeOption({
@@ -171,6 +171,8 @@ export default function PricesPage() {
         }),
       ),
     ];
+
+    return sortPricingOptions(options);
   }, [installments]);
 
   const categories = useMemo(() => {
@@ -239,6 +241,25 @@ export default function PricesPage() {
       normalized.code?.startsWith("MP")
     );
   }
+
+  function sortPricingOptions(options: MercadoLibrePriceOption[]) {
+    const fixedOrder: Record<string, number> = {
+      MC: 1,
+      MP3: 2,
+      MP6: 3,
+      MP9: 4,
+      MP12: 5,
+    };
+
+    return [...options].sort((a, b) => {
+      const orderA = fixedOrder[a.code] ?? 1000;
+      const orderB = fixedOrder[b.code] ?? 1000;
+
+      if (orderA !== orderB) return orderA - orderB;
+      return a.code.localeCompare(b.code, "es");
+    });
+  }
+
 
   function getPromoDiscount(
     productId: string | undefined,
