@@ -1976,3 +1976,10 @@ td strong {
 .prices-page .nested-table td:nth-child(7) {
   font-weight: 800;
 }
+
+
+/* v7.29 - Precios: ordenar Ganancia antes de descuento promo */
+.prices-page .nested-table td:nth-child(4),
+.prices-page .nested-table td:nth-child(6) {
+  font-weight: 800;
+}

@@ -887,8 +887,8 @@ export default function PricesPage() {
                                     <th>Condición / canal</th>
                                     <th>Precio de venta</th>
                                     <th>Rentabilidad %</th>
-                                    <th>Desc. promo</th>
                                     <th>Ganancia</th>
+                                    <th>Desc. promo</th>
                                     <th>Precio promo</th>
                                   </tr>
                                 </thead>
@@ -923,13 +923,13 @@ export default function PricesPage() {
                                             : "-"}
                                         </td>
                                         <td>
-                                          {isMercadoLibreChannel(option)
-                                            ? percent(promoDiscountRate)
+                                          {result.valid
+                                            ? moneyWithCents(result.netProfit)
                                             : "-"}
                                         </td>
                                         <td>
-                                          {result.valid
-                                            ? moneyWithCents(result.netProfit)
+                                          {isMercadoLibreChannel(option)
+                                            ? percent(promoDiscountRate)
                                             : "-"}
                                         </td>
                                         <td className="promo-price-cell">
