@@ -97,6 +97,7 @@ type PricingTarget = {
   manualShippingAmount?: number | null;
   salesCommissionRate?: number | null;
   saleAppliesVat?: boolean | null;
+  costVatRate?: number | null;
   roundTo?: number;
   roundingMode?: RoundingMode;
 };
@@ -188,6 +189,10 @@ export function calculatePriceSummary(
   const productVatRate = Number(product.vat_rate || 21);
   const appliesVat = target.saleAppliesVat ?? option.applies_vat;
   const saleVatRate = appliesVat ? productVatRate : 0;
+  const rawCostVatRate = Number(target.costVatRate ?? 0);
+  const costVatRate = Math.max(0, Math.min(productVatRate, rawCostVatRate));
+  const costVatAmount = costWithoutVat * rateToDecimal(costVatRate);
+  const costForProfit = costWithoutVat + costVatAmount;
   const marketplaceFeeRate = option.applies_marketplace_fee
     ? Number(categoryFee?.marketplace_fee_rate || 0)
     : 0;
@@ -286,7 +291,7 @@ export function calculatePriceSummary(
       );
     const requiredGrossProfit = Number(desiredNetProfit) / (1 - iiggDecimal);
     netSalePrice =
-      (costWithoutVat + fixedCosts + requiredGrossProfit) / denominator;
+      (costForProfit + fixedCosts + requiredGrossProfit) / denominator;
     effectiveMarginRate =
       netSalePrice > 0 ? (Number(desiredNetProfit) / netSalePrice) * 100 : 0;
     price = netSalePrice * (1 + saleVatRate / 100);
@@ -313,7 +318,7 @@ export function calculatePriceSummary(
           variableRate: saleCostRate + marginRate,
         },
       );
-    netSalePrice = (costWithoutVat + fixedCosts) / denominator;
+    netSalePrice = (costForProfit + fixedCosts) / denominator;
     price = netSalePrice * (1 + saleVatRate / 100);
     roundedPrice = roundPrice(price, roundTo, roundingMode);
   }
@@ -329,7 +334,7 @@ export function calculatePriceSummary(
   const idcAmount = roundedNetSalePrice * rateToDecimal(idcRate);
   const grossProfit =
     roundedNetSalePrice -
-    costWithoutVat -
+    costForProfit -
     fixedCosts -
     marketplaceFeeAmount -
     salesCommissionAmount -
@@ -338,7 +343,7 @@ export function calculatePriceSummary(
   const incomeTaxAmount = Math.max(grossProfit, 0) * rateToDecimal(iiggRate);
   const netProfit = grossProfit - incomeTaxAmount;
   const marginOnCost =
-    costWithoutVat > 0 ? (netProfit / costWithoutVat) * 100 : 0;
+    costForProfit > 0 ? (netProfit / costForProfit) * 100 : 0;
   const marginOnNetSale =
     roundedNetSalePrice > 0 ? (netProfit / roundedNetSalePrice) * 100 : 0;
   if (
@@ -375,6 +380,9 @@ export function calculatePriceSummary(
     iiggRate,
     structureRate: 0,
     structureAmount,
+    costVatRate,
+    costVatAmount,
+    costForProfit,
     salesCommissionRate,
     salesCommissionAmount,
     fixedFeeAmount,
@@ -403,6 +411,9 @@ function invalidResult(message: string, values: Record<string, number>) {
     iibbAmount: null,
     idcAmount: null,
     structureAmount: null,
+    costVatRate: null,
+    costVatAmount: null,
+    costForProfit: null,
     grossProfit: null,
     incomeTaxAmount: null,
     netProfit: null,

@@ -39,6 +39,7 @@ type ModalState = {
   manualShippingAmounts: Record<string, number>;
   salesCommissionRates: Record<string, number>;
   saleAppliesVat: Record<string, boolean>;
+  costVatRates: Record<string, number>;
   promoDiscountRates: Record<string, number>;
   summaryChannelCode: string;
   taxOverrides: TaxSettings;
@@ -277,6 +278,7 @@ export default function PricesPage() {
     const manualShippingAmounts: Record<string, number> = {};
     const salesCommissionRates: Record<string, number> = {};
     const saleAppliesVat: Record<string, boolean> = {};
+    const costVatRates: Record<string, number> = {};
     const promoDiscountRates: Record<string, number> = {};
     pricingOptions.forEach((option) => {
       const setting = getChannelSetting(product.id, option.code);
@@ -293,6 +295,7 @@ export default function PricesPage() {
       saleAppliesVat[option.code] =
         setting?.sale_applies_vat ??
         Boolean(normalizeOption(option).applies_vat);
+      costVatRates[option.code] = Number(setting?.cost_vat_rate || 0);
       promoDiscountRates[option.code] = Number(
         setting?.promo_discount_rate || 0,
       );
@@ -308,6 +311,7 @@ export default function PricesPage() {
       manualShippingAmounts,
       salesCommissionRates,
       saleAppliesVat,
+      costVatRates,
       promoDiscountRates,
       summaryChannelCode: "MC",
       taxOverrides: { ...taxes },
@@ -351,6 +355,7 @@ export default function PricesPage() {
         ? Number(modal.salesCommissionRates[option.code] || 0)
         : 0,
       sale_applies_vat: Boolean(modal.saleAppliesVat[option.code]),
+      cost_vat_rate: Math.max(0, Math.min(Number(modal.product.vat_rate || 21), Number(modal.costVatRates[option.code] || 0))),
       promo_discount_rate: isMercadoLibreChannel(option)
         ? Number(modal.promoDiscountRates[option.code] || 0)
         : 0,
@@ -427,6 +432,7 @@ export default function PricesPage() {
         salesCommissionRate: modal.salesCommissionRates[channelCode] || 0,
         saleAppliesVat:
           modal.saleAppliesVat[channelCode] ?? normalizedOption.applies_vat,
+        costVatRate: modal.costVatRates[channelCode] || 0,
         roundTo: 100,
         roundingMode: "nearest",
       },
@@ -499,6 +505,20 @@ export default function PricesPage() {
     });
   }
 
+  function updateCostVatRate(channelCode: string, value: string) {
+    if (!modal) return;
+    const productVatRate = Number(modal.product.vat_rate || 21);
+    const rate = Math.max(0, Math.min(productVatRate, Number(toNumber(value) ?? 0)));
+    setModal({
+      ...modal,
+      costVatRates: {
+        ...modal.costVatRates,
+        [channelCode]: rate,
+      },
+      priceOverrides: { ...modal.priceOverrides, [channelCode]: null },
+    });
+  }
+
   function updatePromoDiscount(channelCode: string, value: string) {
     if (!modal) return;
     const discount = Math.max(0, Math.min(99.99, Number(toNumber(value) ?? 0)));
@@ -552,6 +572,7 @@ export default function PricesPage() {
           salesCommissionRate: modal.salesCommissionRates[option.code] || 0,
           saleAppliesVat:
             modal.saleAppliesVat[option.code] ?? normalizedOption.applies_vat,
+          costVatRate: modal.costVatRates[option.code] || 0,
           roundTo: 100,
           roundingMode: "nearest",
         },
@@ -610,6 +631,7 @@ export default function PricesPage() {
             : 0,
           saleAppliesVat:
             setting?.sale_applies_vat ?? Boolean(normalizedOption.applies_vat),
+          costVatRate: Number(setting?.cost_vat_rate || 0),
           roundTo: 100,
           roundingMode: "nearest",
         },
@@ -803,7 +825,7 @@ export default function PricesPage() {
                                     <th>Desc. promo</th>
                                     <th>Precio promo</th>
                                     <th>Ganancia</th>
-                                    <th>IVA venta</th>
+                                    <th>IVA costo %</th>
                                     <th>Comisión</th>
                                     <th>Envío usado</th>
                                   </tr>
@@ -856,7 +878,9 @@ export default function PricesPage() {
                                         </td>
                                         <td>
                                           {result.valid
-                                            ? percent(result.saleVatRate)
+                                            ? isMercadoLibreChannel(option)
+                                              ? "No aplica"
+                                              : percent(result.costVatRate || 0)
                                             : "-"}
                                         </td>
                                         <td>
@@ -1048,10 +1072,10 @@ export default function PricesPage() {
                         : "-"}
                     </div>
                     <div>
-                      IVA venta:{" "}
+                      IVA atribuido al costo:{" "}
                       {selectedSummaryRow?.result?.valid
-                        ? percent(selectedSummaryRow.result.saleVatRate)
-                        : percent(modal.product.vat_rate)}
+                        ? percent(selectedSummaryRow.result.costVatRate || 0)
+                        : "-"}
                     </div>
                   </div>
                 </div>
@@ -1112,26 +1136,34 @@ export default function PricesPage() {
                         Estos valores aplican solo al canal seleccionado en el
                         resumen.
                       </p>
-                      <label
-                        className="checkbox-row"
-                        style={{ marginBottom: 10 }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(
-                            modal.saleAppliesVat[
-                              selectedSummaryRow.option.code
-                            ],
-                          )}
-                          onChange={(e) =>
-                            updateSaleAppliesVat(
-                              selectedSummaryRow.option.code,
-                              e.target.checked,
-                            )
-                          }
-                        />
-                        <span>Aplicar IVA al precio</span>
-                      </label>
+                      {!isMercadoLibreChannel(selectedSummaryRow.option) && (
+                        <div
+                          className="grid two compact-input-grid summary-extra-grid"
+                          style={{ marginBottom: 10 }}
+                        >
+                          <div className="field">
+                            <label>IVA atribuido al costo %</label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatInputNumber(
+                                modal.costVatRates[
+                                  selectedSummaryRow.option.code
+                                ] || 0,
+                              )}
+                              onChange={(e) =>
+                                updateCostVatRate(
+                                  selectedSummaryRow.option.code,
+                                  e.target.value,
+                                )
+                              }
+                            />
+                            <span className="small">
+                              Máximo: {percent(modal.product.vat_rate)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                       {isMercadoLibreChannel(selectedSummaryRow.option) && (
                         <div
                           className="grid two compact-input-grid summary-extra-grid"
@@ -1331,7 +1363,12 @@ export default function PricesPage() {
                         )}
                       </div>
                       <div>
-                        Costo: -{moneyWithCents(modal.product.cost_without_vat)}
+                        IVA atribuido al costo: -
+                        {moneyWithCents(selectedSummaryRow.result.costVatAmount || 0)}
+                      </div>
+                      <div>
+                        Costo usado: -
+                        {moneyWithCents(selectedSummaryRow.result.costForProfit)}
                       </div>
                       <br />
                       <div>
@@ -1374,7 +1411,7 @@ export default function PricesPage() {
                     <th>Precio de venta</th>
                     <th>Desc. promo %</th>
                     <th>Precio promo</th>
-                    <th>IVA venta</th>
+                    <th>IVA costo %</th>
                     <th>Comisión venta %</th>
                     <th>Envío manual $</th>
                     <th>Estructura $</th>
@@ -1474,19 +1511,21 @@ export default function PricesPage() {
                                 )
                               : "-"}
                           </td>
-                          <td style={{ minWidth: 90 }}>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(
-                                modal.saleAppliesVat[option.code],
-                              )}
-                              onChange={(e) =>
-                                updateSaleAppliesVat(
-                                  option.code,
-                                  e.target.checked,
-                                )
-                              }
-                            />
+                          <td style={{ minWidth: 110 }}>
+                            {!isMercadoLibreChannel(option) ? (
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={formatInputNumber(
+                                  modal.costVatRates[option.code] || 0,
+                                )}
+                                onChange={(e) =>
+                                  updateCostVatRate(option.code, e.target.value)
+                                }
+                              />
+                            ) : (
+                              <span className="small">No aplica</span>
+                            )}
                           </td>
                           <td style={{ minWidth: 120 }}>
                             {allowsExtraSalesCommission(option) ? (

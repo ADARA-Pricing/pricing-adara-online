@@ -114,6 +114,7 @@ export type ProductChannelMargin = {
   manual_shipping_amount?: number | null;
   sales_commission_rate?: number | null;
   sale_applies_vat?: boolean | null;
+  cost_vat_rate?: number | null;
   promo_discount_rate?: number | null;
   updated_at?: string;
 };
