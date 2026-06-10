@@ -398,9 +398,58 @@ export default function PricesPage() {
   function updateNetProfit(channelCode: string, value: string) {
     if (!modal) return;
     const net = toNumber(value);
+
+    if (net === null) {
+      setModal({
+        ...modal,
+        mode: "margin",
+        netProfits: { ...modal.netProfits, [channelCode]: null },
+        priceOverrides: { ...modal.priceOverrides, [channelCode]: null },
+      });
+      return;
+    }
+
+    const product = modal.product;
+    const option = pricingOptions.find((item) => item.code === channelCode);
+    if (!option) return;
+    const normalizedOption = normalizeOption(option);
+    const categoryFee = categoryFees.find(
+      (item) =>
+        item.category?.toLowerCase() === (product.category || "").toLowerCase(),
+    );
+    const shippingCost = shippingCosts.find(
+      (item) => item.product_id === product.id || item.sku === product.sku,
+    );
+    const result = calculatePriceSummary(
+      product,
+      normalizedOption,
+      normalizedOption.applies_marketplace_fee ? categoryFee : null,
+      modal.taxOverrides,
+      normalizedOption.applies_shipping ? shippingCost : null,
+      {
+        desiredMarginRate: effectiveMargin(channelCode),
+        desiredNetProfit: net,
+        salePrice: null,
+        structureAmount: modal.structureAmounts[channelCode] || 0,
+        manualShippingAmount: modal.manualShippingAmounts[channelCode] || 0,
+        salesCommissionRate: modal.salesCommissionRates[channelCode] || 0,
+        saleAppliesVat:
+          modal.saleAppliesVat[channelCode] ?? normalizedOption.applies_vat,
+        costVatRate: modal.costVatRates[channelCode] || 0,
+        roundTo: 100,
+        roundingMode: "nearest",
+      },
+    ) as any;
+
     setModal({
       ...modal,
       mode: "net",
+      margins: {
+        ...modal.margins,
+        [channelCode]: result.valid
+          ? Number((result.marginOnNetSale || 0).toFixed(2))
+          : Number(modal.margins[channelCode] || 0),
+      },
       netProfits: { ...modal.netProfits, [channelCode]: net },
       priceOverrides: { ...modal.priceOverrides, [channelCode]: null },
     });
@@ -595,6 +644,16 @@ export default function PricesPage() {
         result: result as any,
         desiredMargin,
         desiredNetProfit,
+        displayDesiredMargin:
+          desiredNetProfit !== null && (result as any).valid
+            ? Number(((result as any).marginOnNetSale || 0).toFixed(2))
+            : desiredMargin,
+        displayDesiredNetProfit:
+          desiredNetProfit !== null
+            ? desiredNetProfit
+            : (result as any).valid
+              ? Number(((result as any).netProfit || 0).toFixed(2))
+              : null,
         salePriceOverride,
       };
     });
@@ -733,7 +792,7 @@ export default function PricesPage() {
       {error && <div className="message error">{error}</div>}
       {message && <div className="message success">{message}</div>}
 
-      <section className="card" style={{ marginBottom: 20 }}>
+      <section className="card filters-card" style={{ marginBottom: 20 }}>
         <div className="grid two">
           <div className="field">
             <label>Buscar producto</label>
@@ -760,12 +819,12 @@ export default function PricesPage() {
         </div>
       </section>
 
-      <section className="card">
+      <section className="card products-table-card">
         {loading ? (
           <p>Cargando productos...</p>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="products-list-table">
               <thead>
                 <tr>
                   <th>SKU</th>
@@ -790,11 +849,12 @@ export default function PricesPage() {
                       <tr>
                         <td>{product.sku}</td>
                         <td>
-                          <strong>{product.name}</strong>
-                          <br />
-                          <span className="small">
-                            {product.brand || ""} {product.model || ""}
-                          </span>
+                          <div className="product-name-cell">
+                            <strong>{product.name}</strong>
+                            <span className="small">
+                              {product.brand || ""} {product.model || ""}
+                            </span>
+                          </div>
                         </td>
                         <td>{product.category || "-"}</td>
                         <td>{money(product.cost_without_vat)}</td>
@@ -824,8 +884,11 @@ export default function PricesPage() {
                         <tr key={`${key}-channels`} className="expanded-row">
                           <td colSpan={8}>
                             <div className="channel-breakdown">
-                              <div className="channel-breakdown-title">
-                                Condiciones de venta
+                              <div className="channel-breakdown-header">
+                                <div>
+                                  <div className="channel-breakdown-title">Condiciones de venta</div>
+                                  <p className="small">Precios y rentabilidad por canal para este producto.</p>
+                                </div>
                               </div>
                               <table className="nested-table">
                                 <thead>
@@ -987,7 +1050,7 @@ export default function PricesPage() {
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={formatInputNumber(effectiveMargin(selectedChannelCode))}
+                      value={formatInputNumber(selectedSummaryRow?.displayDesiredMargin ?? effectiveMargin(selectedChannelCode))}
                       onChange={(e) => updateMargin(selectedChannelCode, e.target.value)}
                       disabled={modal.syncMode === "net" || selectedMarginLocked}
                       className={modal.syncMode === "net" || selectedMarginLocked ? "input-disabled" : ""}
@@ -999,7 +1062,7 @@ export default function PricesPage() {
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={formatInputNumber(effectiveNetProfit(selectedChannelCode))}
+                      value={formatInputNumber(selectedSummaryRow?.displayDesiredNetProfit ?? effectiveNetProfit(selectedChannelCode))}
                       placeholder="Opcional"
                       onChange={(e) => updateNetProfit(selectedChannelCode, e.target.value)}
                       disabled={modal.syncMode === "margin" || selectedNetLocked}
@@ -1008,7 +1071,7 @@ export default function PricesPage() {
                   </div>
                 </div>
 
-                <div className="sync-hint">Vinculados: si cambiás margen o precio, el otro se recalcula.</div>
+                <div className="sync-hint">Vinculados: margen, ganancia objetivo y precio se recalculan entre sí.</div>
 
                 <div className="sync-options polished-sync-options">
                   <label className="checkbox-row">
@@ -1245,7 +1308,7 @@ export default function PricesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {currentRows.map(({ option, result, desiredMargin, desiredNetProfit }) => {
+                    {currentRows.map(({ option, result, displayDesiredMargin, displayDesiredNetProfit }) => {
                       const lockMargin = modal.syncMode === "margin" && option.code !== "MC";
                       const lockNet = modal.syncMode === "net" && option.code !== "MC";
                       const rowSelected = option.code === selectedChannelCode;
@@ -1264,7 +1327,7 @@ export default function PricesPage() {
                             <input
                               type="text"
                               inputMode="decimal"
-                              value={formatInputNumber(desiredMargin)}
+                              value={formatInputNumber(displayDesiredMargin)}
                               onChange={(e) => updateMargin(option.code, e.target.value)}
                               disabled={lockMargin || lockNet}
                               className={lockMargin || lockNet ? "input-disabled" : ""}
@@ -1274,7 +1337,7 @@ export default function PricesPage() {
                             <input
                               type="text"
                               inputMode="decimal"
-                              value={formatInputNumber(desiredNetProfit)}
+                              value={formatInputNumber(displayDesiredNetProfit)}
                               placeholder="Opcional"
                               onChange={(e) => updateNetProfit(option.code, e.target.value)}
                               disabled={lockMargin || lockNet}
