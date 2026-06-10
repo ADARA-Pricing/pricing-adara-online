@@ -168,6 +168,7 @@ export default function ProductsPage() {
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
+  const [activeProductTab, setActiveProductTab] = useState<"manual" | "excel">("manual");
 
   const costWithVatPreview = useMemo(() => {
     const cost = Number(form.cost_without_vat || 0);
@@ -211,6 +212,7 @@ export default function ProductsPage() {
   }
 
   function editProduct(product: Product) {
+    setActiveProductTab("manual");
     setForm({ ...emptyProduct, ...product });
     setMessage(`Editando SKU ${product.sku}. Al guardar se actualiza el producto.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -422,189 +424,211 @@ export default function ProductsPage() {
       {error && <div className="message error">{error}</div>}
 
       <section className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Nuevo / actualizar producto</h2>
-        <p className="small">Si el SKU ya existe, la app actualiza el producto. Si no existe, lo crea.</p>
-
-        <form onSubmit={saveProduct}>
-          <div className="grid">
-            <div className="field">
-              <label>SKU *</label>
-              <input value={form.sku} onChange={(e) => update("sku", e.target.value)} placeholder="TVEN043GTV01" required />
-            </div>
-            <div className="field">
-              <label>EAN</label>
-              <input value={form.ean || ""} onChange={(e) => update("ean", e.target.value)} placeholder="779..." />
-            </div>
-            <div className="field">
-              <label>Nombre *</label>
-              <input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="Smart TV Enova 43 Google TV" required />
-            </div>
-            <div className="field">
-              <label>Estado</label>
-              <select value={form.status} onChange={(e) => update("status", e.target.value as Product["status"])}>
-                <option value="active">Activo</option>
-                <option value="paused">Pausado</option>
-                <option value="discontinued">Discontinuado</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid" style={{ marginTop: 12 }}>
-            <div className="field">
-              <label>Marca</label>
-              <input value={form.brand || ""} onChange={(e) => update("brand", e.target.value)} placeholder="Enova" />
-            </div>
-            <div className="field">
-              <label>Modelo</label>
-              <input value={form.model || ""} onChange={(e) => update("model", e.target.value)} placeholder="43GTV" />
-            </div>
-            <div className="field">
-              <label>Categoría</label>
-              <input value={form.category || ""} onChange={(e) => update("category", e.target.value)} placeholder="TV" />
-            </div>
-            <div className="field">
-              <label>Proveedor</label>
-              <input value={form.supplier || ""} onChange={(e) => update("supplier", e.target.value)} placeholder="Radio Victoria" />
-            </div>
-          </div>
-
-          <div className="grid" style={{ marginTop: 12 }}>
-            <div className="field">
-              <label>Costo sin IVA *</label>
-              <input type="number" step="0.01" min="0" value={form.cost_without_vat} onChange={(e) => update("cost_without_vat", Number(e.target.value))} required />
-            </div>
-            <div className="field">
-              <label>IVA % *</label>
-              <select value={form.vat_rate} onChange={(e) => update("vat_rate", Number(e.target.value) as 21 | 10.5)}>
-                <option value={21}>21%</option>
-                <option value={10.5}>10,5%</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>Costo con IVA automático</label>
-              <input value={money(costWithVatPreview)} disabled />
-            </div>
-          </div>
-
-          <div className="grid" style={{ marginTop: 12 }}>
-            <div className="field">
-              <label>Peso kg</label>
-              <input type="number" step="0.001" value={form.weight_kg ?? ""} onChange={(e) => update("weight_kg", toNumber(e.target.value))} />
-            </div>
-            <div className="field">
-              <label>Alto cm</label>
-              <input type="number" step="0.01" value={form.height_cm ?? ""} onChange={(e) => update("height_cm", toNumber(e.target.value))} />
-            </div>
-            <div className="field">
-              <label>Ancho cm</label>
-              <input type="number" step="0.01" value={form.width_cm ?? ""} onChange={(e) => update("width_cm", toNumber(e.target.value))} />
-            </div>
-            <div className="field">
-              <label>Profundidad cm</label>
-              <input type="number" step="0.01" value={form.depth_cm ?? ""} onChange={(e) => update("depth_cm", toNumber(e.target.value))} />
-            </div>
-          </div>
-
-          <div className="grid-2" style={{ marginTop: 12 }}>
-            <div className="field">
-              <label>Garantía meses</label>
-              <input type="number" min="0" value={form.warranty_months ?? ""} onChange={(e) => update("warranty_months", toNumber(e.target.value))} />
-            </div>
-            <div className="field">
-              <label>Descripción</label>
-              <textarea value={form.description || ""} onChange={(e) => update("description", e.target.value)} placeholder="Descripción interna o comercial" />
-            </div>
-          </div>
-
-          <div className="actions" style={{ marginTop: 16 }}>
-            <button className="button" disabled={saving} type="submit">
-              {saving ? "Guardando..." : "Guardar producto"}
-            </button>
-            <button className="button ghost" type="button" onClick={() => setForm(emptyProduct)}>
-              Limpiar
-            </button>
-          </div>
-        </form>
-      </section>
-
-
-      <section className="card" style={{ marginBottom: 20 }}>
-        <div className="header" style={{ alignItems: "flex-start", gap: 16 }}>
+        <div className="header" style={{ alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
           <div>
-            <h2 style={{ marginTop: 0 }}>Carga masiva con Excel</h2>
-            <p className="small" style={{ marginBottom: 0 }}>
-              Descargá la plantilla, completala en Excel y subila. Si el SKU ya existe, se actualiza; si no existe, se crea.
+            <h2 style={{ marginTop: 0, marginBottom: 8 }}>
+              {activeProductTab === "manual" ? "Nuevo / actualizar producto" : "Carga masiva con Excel"}
+            </h2>
+            <p className="small" style={{ margin: 0 }}>
+              {activeProductTab === "manual"
+                ? "Si el SKU ya existe, la app actualiza el producto. Si no existe, lo crea."
+                : "Descargá la plantilla, completala en Excel y subila. Si el SKU ya existe, se actualiza; si no existe, se crea."}
             </p>
           </div>
-          <div className="actions">
-            <button className="button ghost" type="button" onClick={downloadTemplate}>Descargar plantilla</button>
-            <label className="button ghost" style={{ cursor: "pointer" }}>
-              Subir Excel
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                onChange={handleImportFile}
-                style={{ display: "none" }}
-              />
-            </label>
+          <div className="actions" style={{ alignItems: "center", flexWrap: "nowrap" }}>
+            <button
+              className={activeProductTab === "manual" ? "button" : "button ghost"}
+              type="button"
+              onClick={() => setActiveProductTab("manual")}
+            >
+              Carga manual
+            </button>
+            <button
+              className={activeProductTab === "excel" ? "button" : "button ghost"}
+              type="button"
+              onClick={() => setActiveProductTab("excel")}
+            >
+              Carga masiva Excel
+            </button>
           </div>
         </div>
 
-        <div className="small" style={{ marginTop: 12 }}>
-          Columnas obligatorias: <strong>SKU</strong>, <strong>Nombre</strong>, <strong>Costo sin IVA</strong> e <strong>IVA %</strong>. El IVA acepta 21 o 10,5. El Estado puede ser active, paused o discontinued.
-        </div>
+        {activeProductTab === "manual" ? (
+          <form onSubmit={saveProduct}>
+            <div className="grid">
+              <div className="field">
+                <label>SKU *</label>
+                <input value={form.sku} onChange={(e) => update("sku", e.target.value)} placeholder="TVEN043GTV01" required />
+              </div>
+              <div className="field">
+                <label>EAN</label>
+                <input value={form.ean || ""} onChange={(e) => update("ean", e.target.value)} placeholder="779..." />
+              </div>
+              <div className="field">
+                <label>Nombre *</label>
+                <input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="Smart TV Enova 43 Google TV" required />
+              </div>
+              <div className="field">
+                <label>Estado</label>
+                <select value={form.status} onChange={(e) => update("status", e.target.value as Product["status"])}>
+                  <option value="active">Activo</option>
+                  <option value="paused">Pausado</option>
+                  <option value="discontinued">Discontinuado</option>
+                </select>
+              </div>
+            </div>
 
-        {importErrors.length > 0 && (
-          <div className="message error" style={{ marginTop: 12 }}>
-            {importErrors.slice(0, 8).map((item) => <div key={item}>{item}</div>)}
-            {importErrors.length > 8 && <div>Y {importErrors.length - 8} errores más.</div>}
-          </div>
-        )}
+            <div className="grid" style={{ marginTop: 12 }}>
+              <div className="field">
+                <label>Marca</label>
+                <input value={form.brand || ""} onChange={(e) => update("brand", e.target.value)} placeholder="Enova" />
+              </div>
+              <div className="field">
+                <label>Modelo</label>
+                <input value={form.model || ""} onChange={(e) => update("model", e.target.value)} placeholder="43GTV" />
+              </div>
+              <div className="field">
+                <label>Categoría</label>
+                <input value={form.category || ""} onChange={(e) => update("category", e.target.value)} placeholder="TV" />
+              </div>
+              <div className="field">
+                <label>Proveedor</label>
+                <input value={form.supplier || ""} onChange={(e) => update("supplier", e.target.value)} placeholder="Radio Victoria" />
+              </div>
+            </div>
 
-        {importRows.length > 0 && (
-          <div style={{ marginTop: 14 }}>
-            <div className="header" style={{ marginBottom: 10 }}>
+            <div className="grid" style={{ marginTop: 12 }}>
+              <div className="field">
+                <label>Costo sin IVA *</label>
+                <input type="number" step="0.01" min="0" value={form.cost_without_vat} onChange={(e) => update("cost_without_vat", Number(e.target.value))} required />
+              </div>
+              <div className="field">
+                <label>IVA % *</label>
+                <select value={form.vat_rate} onChange={(e) => update("vat_rate", Number(e.target.value) as 21 | 10.5)}>
+                  <option value={21}>21%</option>
+                  <option value={10.5}>10,5%</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Costo con IVA automático</label>
+                <input value={money(costWithVatPreview)} disabled />
+              </div>
+            </div>
+
+            <div className="grid" style={{ marginTop: 12 }}>
+              <div className="field">
+                <label>Peso kg</label>
+                <input type="number" step="0.001" value={form.weight_kg ?? ""} onChange={(e) => update("weight_kg", toNumber(e.target.value))} />
+              </div>
+              <div className="field">
+                <label>Alto cm</label>
+                <input type="number" step="0.01" value={form.height_cm ?? ""} onChange={(e) => update("height_cm", toNumber(e.target.value))} />
+              </div>
+              <div className="field">
+                <label>Ancho cm</label>
+                <input type="number" step="0.01" value={form.width_cm ?? ""} onChange={(e) => update("width_cm", toNumber(e.target.value))} />
+              </div>
+              <div className="field">
+                <label>Profundidad cm</label>
+                <input type="number" step="0.01" value={form.depth_cm ?? ""} onChange={(e) => update("depth_cm", toNumber(e.target.value))} />
+              </div>
+            </div>
+
+            <div className="grid-2" style={{ marginTop: 12 }}>
+              <div className="field">
+                <label>Garantía meses</label>
+                <input type="number" min="0" value={form.warranty_months ?? ""} onChange={(e) => update("warranty_months", toNumber(e.target.value))} />
+              </div>
+              <div className="field">
+                <label>Descripción</label>
+                <textarea value={form.description || ""} onChange={(e) => update("description", e.target.value)} placeholder="Descripción interna o comercial" />
+              </div>
+            </div>
+
+            <div className="actions" style={{ marginTop: 16 }}>
+              <button className="button" disabled={saving} type="submit">
+                {saving ? "Guardando..." : "Guardar producto"}
+              </button>
+              <button className="button ghost" type="button" onClick={() => setForm(emptyProduct)}>
+                Limpiar
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div>
+            <div className="header" style={{ alignItems: "flex-start", gap: 16 }}>
               <div>
-                <strong>{importRows.length} productos listos para importar</strong>
-                <p className="small" style={{ margin: "4px 0 0" }}>Vista previa de los primeros productos del archivo.</p>
+                <p className="small" style={{ marginTop: 0 }}>
+                  Columnas obligatorias: <strong>SKU</strong>, <strong>Nombre</strong>, <strong>Costo sin IVA</strong> e <strong>IVA %</strong>. El IVA acepta 21 o 10,5. El Estado puede ser active, paused o discontinued.
+                </p>
               </div>
               <div className="actions">
-                <button className="button" type="button" disabled={importing || saving} onClick={importProducts}>
-                  {importing ? "Importando..." : "Importar productos"}
-                </button>
-                <button className="button ghost" type="button" disabled={importing} onClick={() => setImportRows([])}>Cancelar</button>
+                <button className="button ghost" type="button" onClick={downloadTemplate}>Descargar plantilla</button>
+                <label className="button ghost" style={{ cursor: "pointer" }}>
+                  Subir Excel
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleImportFile}
+                    style={{ display: "none" }}
+                  />
+                </label>
               </div>
             </div>
 
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>SKU</th>
-                    <th>Producto</th>
-                    <th>Categoría</th>
-                    <th>Costo s/IVA</th>
-                    <th>IVA</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {importRows.slice(0, 8).map((row) => (
-                    <tr key={`${row.rowNumber}-${row.payload.sku}`}>
-                      <td>{row.payload.sku}</td>
-                      <td>
-                        <strong>{row.payload.name}</strong><br />
-                        <span className="small">{row.payload.brand || ""} {row.payload.model || ""}</span>
-                      </td>
-                      <td>{row.payload.category || "-"}</td>
-                      <td>{money(row.payload.cost_without_vat)}</td>
-                      <td>{row.payload.vat_rate}%</td>
-                      <td><span className="badge">{row.payload.status}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {importErrors.length > 0 && (
+              <div className="message error" style={{ marginTop: 12 }}>
+                {importErrors.slice(0, 8).map((item) => <div key={item}>{item}</div>)}
+                {importErrors.length > 8 && <div>Y {importErrors.length - 8} errores más.</div>}
+              </div>
+            )}
+
+            {importRows.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <div className="header" style={{ marginBottom: 10 }}>
+                  <div>
+                    <strong>{importRows.length} productos listos para importar</strong>
+                    <p className="small" style={{ margin: "4px 0 0" }}>Vista previa de los primeros productos del archivo.</p>
+                  </div>
+                  <div className="actions">
+                    <button className="button" type="button" disabled={importing || saving} onClick={importProducts}>
+                      {importing ? "Importando..." : "Importar productos"}
+                    </button>
+                    <button className="button ghost" type="button" disabled={importing} onClick={() => setImportRows([])}>Cancelar</button>
+                  </div>
+                </div>
+
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>SKU</th>
+                        <th>Producto</th>
+                        <th>Categoría</th>
+                        <th>Costo s/IVA</th>
+                        <th>IVA</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importRows.slice(0, 8).map((row) => (
+                        <tr key={`${row.rowNumber}-${row.payload.sku}`}>
+                          <td>{row.payload.sku}</td>
+                          <td>
+                            <strong>{row.payload.name}</strong><br />
+                            <span className="small">{row.payload.brand || ""} {row.payload.model || ""}</span>
+                          </td>
+                          <td>{row.payload.category || "-"}</td>
+                          <td>{money(row.payload.cost_without_vat)}</td>
+                          <td>{row.payload.vat_rate}%</td>
+                          <td><span className="badge">{row.payload.status}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>

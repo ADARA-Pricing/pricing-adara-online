@@ -943,526 +943,331 @@ export default function PricesPage() {
       </section>
 
       {modal && (
-        <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="header" style={{ marginBottom: 12 }}>
-              <div className="brand">
+        <div className="modal-backdrop pricing-backdrop">
+          <div className="modal-card pricing-modal-v2">
+            <div className="pricing-modal-header">
+              <div>
                 <h2>{modal.product.name}</h2>
-                <p>
-                  SKU {modal.product.sku} · Categoría{" "}
-                  {modal.product.category || "sin categoría"} · Costo{" "}
-                  {money(modal.product.cost_without_vat)} + IVA{" "}
-                  {modal.product.vat_rate}%
+                <p className="pricing-modal-meta">
+                  SKU {modal.product.sku} <span>•</span> Categoría {modal.product.category || "sin categoría"} <span>•</span> Costo {money(modal.product.cost_without_vat)} + IVA {modal.product.vat_rate}%
+                </p>
+                <p className="pricing-modal-help">
+                  Podés elegir qué canal ver en el resumen. Ajustá margen, precio de venta, comisiones, envío manual y estructura para analizar rentabilidad.
                 </p>
               </div>
-              <button className="button ghost" onClick={() => setModal(null)}>
-                Cerrar
+              <button className="modal-close-button" onClick={() => setModal(null)} aria-label="Cerrar">
+                ×
               </button>
             </div>
 
-            <p className="small">
-              Podés elegir qué canal ver en el resumen. Ajustá margen, precio de
-              venta, comisiones, envío manual y estructura para analizar
-              rentabilidad.
-            </p>
-
-            <div
-              className="card soft pricing-modal-card"
-              style={{ marginBottom: 16 }}
-            >
-              <div className="pricing-modal-grid">
-                <div className="pricing-panel">
-                  <h3>Condición seleccionada: {selectedChannelCode}</h3>
-                  <p className="small">{selectedChannelName}</p>
-
-                  <div className="grid two compact-input-grid">
-                    <div className="field">
-                      <label>Margen deseado %</label>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={formatInputNumber(
-                          effectiveMargin(selectedChannelCode),
-                        )}
-                        onChange={(e) =>
-                          updateMargin(selectedChannelCode, e.target.value)
-                        }
-                        disabled={
-                          modal.syncMode === "net" || selectedMarginLocked
-                        }
-                        className={
-                          modal.syncMode === "net" || selectedMarginLocked
-                            ? "input-disabled"
-                            : ""
-                        }
-                      />
-                    </div>
-                    <div className="field">
-                      <label>Ganancia neta objetivo</label>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={formatInputNumber(
-                          effectiveNetProfit(selectedChannelCode),
-                        )}
-                        placeholder="Opcional"
-                        onChange={(e) =>
-                          updateNetProfit(selectedChannelCode, e.target.value)
-                        }
-                        disabled={
-                          modal.syncMode === "margin" || selectedNetLocked
-                        }
-                        className={
-                          modal.syncMode === "margin" || selectedNetLocked
-                            ? "input-disabled"
-                            : ""
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="sync-options">
-                    <label className="checkbox-row">
-                      <input
-                        type="checkbox"
-                        checked={modal.syncMode === "margin"}
-                        onChange={(e) =>
-                          setSyncMode(e.target.checked ? "margin" : "none")
-                        }
-                      />
-                      <span>Aplicar % a todos</span>
-                    </label>
-                    <label className="checkbox-row">
-                      <input
-                        type="checkbox"
-                        checked={modal.syncMode === "net"}
-                        onChange={(e) =>
-                          setSyncMode(e.target.checked ? "net" : "none")
-                        }
-                      />
-                      <span>Aplicar margen a todos</span>
-                    </label>
-                  </div>
-                  <p className="small">
-                    Si elegís otro canal en el resumen, estos campos modifican
-                    ese canal. Si activás aplicar a todos, las demás condiciones
-                    toman el valor de MC y quedan bloqueadas.
-                  </p>
-
-                  <h4>Datos de cálculo</h4>
-                  <div className="calc-summary compact">
-                    <div>Categoría: {modal.product.category || "-"}</div>
-                    <div>
-                      Canal resumen: {selectedSummaryRow?.option.code || "-"}
-                    </div>
-                    <div>
-                      Comisión canal/categoría:{" "}
-                      {selectedSummaryRow?.result?.valid
-                        ? percent(
-                            (selectedSummaryRow.result.marketplaceFeeRate ||
-                              0) +
-                              (selectedSummaryRow.result.financingFeeRate || 0),
-                          )
-                        : "-"}
-                    </div>
-                    {selectedSummaryRow?.result?.valid &&
-                      allowsExtraSalesCommission(selectedSummaryRow.option) && (
-                        <div>
-                          Comisión venta extra:{" "}
-                          {percent(
-                            selectedSummaryRow.result.salesCommissionRate,
-                          )}
-                        </div>
-                      )}
-                    <div>
-                      Envío c/IVA ML:{" "}
-                      {selectedSummaryRow?.result?.valid
-                        ? moneyWithCents(
-                            selectedSummaryRow.result.shippingCostAmountGross,
-                          )
-                        : "-"}
-                    </div>
-                    <div>
-                      Envío usado:{" "}
-                      {selectedSummaryRow?.result?.valid
-                        ? moneyWithCents(
-                            selectedSummaryRow.result.shippingCostAmount,
-                          )
-                        : "-"}
-                    </div>
-                    <div>
-                      IVA atribuido al costo:{" "}
-                      {selectedSummaryRow?.result?.valid
-                        ? percent(selectedSummaryRow.result.costVatRate || 0)
-                        : "-"}
-                    </div>
-                  </div>
+            <div className="pricing-top-grid">
+              <section className="pricing-card pricing-card-blue">
+                <div className="pricing-card-title">
+                  <span className="section-badge blue">1</span>
+                  <h3>Condición seleccionada</h3>
                 </div>
 
-                <div className="pricing-panel">
-                  <h4>Impuestos para esta prueba</h4>
-                  <p className="small">
-                    Estos valores modifican solo este cálculo. No cambian la
-                    solapa Impuestos.
-                  </p>
-                  <div className="grid two compact-input-grid">
-                    <div className="field">
-                      <label>IIBB %</label>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={formatInputNumber(modal.taxOverrides.iibb_rate)}
-                        onChange={(e) =>
-                          updateTaxOverride("iibb_rate", e.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="field">
-                      <label>IDC %</label>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={formatInputNumber(modal.taxOverrides.idc_rate)}
-                        onChange={(e) =>
-                          updateTaxOverride("idc_rate", e.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="field">
-                      <label>IIGG %</label>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={formatInputNumber(modal.taxOverrides.iigg_rate)}
-                        onChange={(e) =>
-                          updateTaxOverride("iigg_rate", e.target.value)
-                        }
-                      />
-                    </div>
-                  </div>
-                  <button
-                    className="button ghost tax-reset-button"
-                    type="button"
-                    onClick={resetTaxOverrides}
+                <div className="field">
+                  <label>Canal</label>
+                  <select
+                    value={modal.summaryChannelCode}
+                    onChange={(e) => setSummaryChannel(e.target.value)}
                   >
-                    Restablecer impuestos globales
-                  </button>
-
-                  {selectedSummaryRow?.result?.valid && (
-                    <div className="summary-extra-box">
-                      <h4>Costos extra del canal elegido</h4>
-                      <p className="small">
-                        Estos valores aplican solo al canal seleccionado en el
-                        resumen.
-                      </p>
-                      {!isMercadoLibreChannel(selectedSummaryRow.option) && (
-                        <div
-                          className="grid two compact-input-grid summary-extra-grid"
-                          style={{ marginBottom: 10 }}
-                        >
-                          <div className="field">
-                            <label>IVA atribuido al costo %</label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={formatInputNumber(
-                                modal.costVatRates[
-                                  selectedSummaryRow.option.code
-                                ] || 0,
-                              )}
-                              onChange={(e) =>
-                                updateCostVatRate(
-                                  selectedSummaryRow.option.code,
-                                  e.target.value,
-                                )
-                              }
-                            />
-                            <span className="small">
-                              Máximo: {percent(modal.product.vat_rate)}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                      {isMercadoLibreChannel(selectedSummaryRow.option) && (
-                        <div
-                          className="grid two compact-input-grid summary-extra-grid"
-                          style={{ marginBottom: 10 }}
-                        >
-                          <div className="field">
-                            <label>Descuento promo %</label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={formatInputNumber(
-                                modal.promoDiscountRates[
-                                  selectedSummaryRow.option.code
-                                ] || 0,
-                              )}
-                              onChange={(e) =>
-                                updatePromoDiscount(
-                                  selectedSummaryRow.option.code,
-                                  e.target.value,
-                                )
-                              }
-                            />
-                          </div>
-                          <div className="field">
-                            <label>Precio promo publicado</label>
-                            <input
-                              type="text"
-                              value={
-                                selectedPromoPrice
-                                  ? formatInputNumber(selectedPromoPrice, 0)
-                                  : ""
-                              }
-                              readOnly
-                              className="input-disabled"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      <div className="grid two compact-input-grid summary-extra-grid">
-                        {allowsExtraSalesCommission(
-                          selectedSummaryRow.option,
-                        ) && (
-                          <div className="field">
-                            <label>Comisión venta %</label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={formatInputNumber(
-                                modal.salesCommissionRates[
-                                  selectedSummaryRow.option.code
-                                ] || 0,
-                              )}
-                              onChange={(e) =>
-                                updateChannelExtra(
-                                  selectedSummaryRow.option.code,
-                                  "salesCommissionRates",
-                                  e.target.value,
-                                )
-                              }
-                            />
-                          </div>
-                        )}
-                        {!selectedSummaryRow.option.applies_shipping && (
-                          <div className="field">
-                            <label>Envío manual $</label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={formatInputNumber(
-                                modal.manualShippingAmounts[
-                                  selectedSummaryRow.option.code
-                                ] || 0,
-                                0,
-                              )}
-                              onChange={(e) =>
-                                updateChannelExtra(
-                                  selectedSummaryRow.option.code,
-                                  "manualShippingAmounts",
-                                  e.target.value,
-                                )
-                              }
-                            />
-                          </div>
-                        )}
-                        <div className="field">
-                          <label>Estructura $</label>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={formatInputNumber(
-                              modal.structureAmounts[
-                                selectedSummaryRow.option.code
-                              ] || 0,
-                              0,
-                            )}
-                            onChange={(e) =>
-                              updateChannelExtra(
-                                selectedSummaryRow.option.code,
-                                "structureAmounts",
-                                e.target.value,
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                    {currentRows.map((row) => (
+                      <option key={row.option.code} value={row.option.code}>
+                        {row.option.code} - {row.option.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <div className="pricing-panel summary-panel">
-                  <div className="field" style={{ marginBottom: 10 }}>
-                    <label>Resumen</label>
-                    <select
-                      value={modal.summaryChannelCode}
-                      onChange={(e) => setSummaryChannel(e.target.value)}
-                    >
-                      {currentRows.map((row) => (
-                        <option key={row.option.code} value={row.option.code}>
-                          {row.option.code} - {row.option.name}
-                        </option>
-                      ))}
-                    </select>
+                <div className="linked-fields">
+                  <div className="field">
+                    <label>Margen deseado %</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formatInputNumber(effectiveMargin(selectedChannelCode))}
+                      onChange={(e) => updateMargin(selectedChannelCode, e.target.value)}
+                      disabled={modal.syncMode === "net" || selectedMarginLocked}
+                      className={modal.syncMode === "net" || selectedMarginLocked ? "input-disabled" : ""}
+                    />
                   </div>
-                  {selectedSummaryRow?.result?.valid ? (
-                    <div className="calc-summary">
-                      <div className="field inline-price-field">
-                        <label>Precio de venta</label>
+                  <span className="link-pill" title="Precio y margen vinculados">↔</span>
+                  <div className="field">
+                    <label>Ganancia neta objetivo</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formatInputNumber(effectiveNetProfit(selectedChannelCode))}
+                      placeholder="Opcional"
+                      onChange={(e) => updateNetProfit(selectedChannelCode, e.target.value)}
+                      disabled={modal.syncMode === "margin" || selectedNetLocked}
+                      className={modal.syncMode === "margin" || selectedNetLocked ? "input-disabled" : ""}
+                    />
+                  </div>
+                </div>
+
+                <div className="sync-hint">Vinculados: si cambiás margen o precio, el otro se recalcula.</div>
+
+                <div className="sync-options polished-sync-options">
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={modal.syncMode === "margin"}
+                      onChange={(e) => setSyncMode(e.target.checked ? "margin" : "none")}
+                    />
+                    <span>Aplicar % a todos</span>
+                  </label>
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={modal.syncMode === "net"}
+                      onChange={(e) => setSyncMode(e.target.checked ? "net" : "none")}
+                    />
+                    <span>Aplicar margen a todos</span>
+                  </label>
+                </div>
+                <p className="small">
+                  Si elegís otro canal en el resumen, estos campos modifican ese canal. Si activás aplicar a todos, las demás condiciones toman el valor de MC y quedan bloqueadas.
+                </p>
+              </section>
+
+              <section className="pricing-card pricing-card-green">
+                <div className="pricing-card-title">
+                  <span className="section-icon green">▦</span>
+                  <h3>Impuestos para esta prueba</h3>
+                </div>
+                <p className="small">Estos valores modifican solo este cálculo. No cambian la solapa Impuestos.</p>
+                <div className="even-input-grid">
+                  <div className="field">
+                    <label>IIBB %</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formatInputNumber(modal.taxOverrides.iibb_rate)}
+                      onChange={(e) => updateTaxOverride("iibb_rate", e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>IDC %</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formatInputNumber(modal.taxOverrides.idc_rate)}
+                      onChange={(e) => updateTaxOverride("idc_rate", e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>IIGG %</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formatInputNumber(modal.taxOverrides.iigg_rate)}
+                      onChange={(e) => updateTaxOverride("iigg_rate", e.target.value)}
+                    />
+                  </div>
+                </div>
+                <button className="button ghost tax-reset-button accent-green" type="button" onClick={resetTaxOverrides}>
+                  Restablecer impuestos globales
+                </button>
+              </section>
+
+              <section className="pricing-card pricing-card-purple">
+                <div className="pricing-card-title">
+                  <span className="section-icon purple">▣</span>
+                  <h3>Costos extra del canal elegido</h3>
+                </div>
+                <p className="small">Estos valores aplican solo al canal seleccionado en el resumen.</p>
+
+                {selectedSummaryRow?.result?.valid ? (
+                  <div className="even-input-grid">
+                    {!isMercadoLibreChannel(selectedSummaryRow.option) && (
+                      <div className="field">
+                        <label>IVA atribuido al costo %</label>
                         <input
                           type="text"
                           inputMode="decimal"
-                          value={formatInputNumber(
-                            modal.priceOverrides[
-                              selectedSummaryRow.option.code
-                            ] ?? selectedSummaryRow.result.roundedPrice,
-                            0,
-                          )}
-                          onChange={(e) =>
-                            updateSalePrice(
-                              selectedSummaryRow.option.code,
-                              e.target.value,
-                            )
-                          }
+                          value={formatInputNumber(modal.costVatRates[selectedSummaryRow.option.code] || 0)}
+                          onChange={(e) => updateCostVatRate(selectedSummaryRow.option.code, e.target.value)}
+                        />
+                        <span className="small">Máximo: {percent(modal.product.vat_rate)}</span>
+                      </div>
+                    )}
+                    {isMercadoLibreChannel(selectedSummaryRow.option) && (
+                      <>
+                        <div className="field">
+                          <label>Descuento promo %</label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={formatInputNumber(modal.promoDiscountRates[selectedSummaryRow.option.code] || 0)}
+                            onChange={(e) => updatePromoDiscount(selectedSummaryRow.option.code, e.target.value)}
+                          />
+                        </div>
+                        <div className="field">
+                          <label>Precio promo publicado</label>
+                          <input
+                            type="text"
+                            value={selectedPromoPrice ? formatInputNumber(selectedPromoPrice, 0) : ""}
+                            readOnly
+                            className="input-disabled"
+                          />
+                        </div>
+                      </>
+                    )}
+                    {allowsExtraSalesCommission(selectedSummaryRow.option) && (
+                      <div className="field">
+                        <label>Comisión venta %</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={formatInputNumber(modal.salesCommissionRates[selectedSummaryRow.option.code] || 0)}
+                          onChange={(e) => updateChannelExtra(selectedSummaryRow.option.code, "salesCommissionRates", e.target.value)}
                         />
                       </div>
-                      {isMercadoLibreChannel(selectedSummaryRow.option) && (
-                        <>
-                          <div>
-                            Descuento promo: {percent(selectedPromoDiscount)}
-                          </div>
-                          <div>
-                            Precio promo publicado:{" "}
-                            {selectedPromoPrice
-                              ? moneyWithCents(selectedPromoPrice)
-                              : "-"}
-                          </div>
-                        </>
-                      )}
-                      <div>
-                        IVA venta: -
-                        {moneyWithCents(selectedSummaryRow.result.vatAmount)}
+                    )}
+                    {!selectedSummaryRow.option.applies_shipping && (
+                      <div className="field">
+                        <label>Envío manual $</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={formatInputNumber(modal.manualShippingAmounts[selectedSummaryRow.option.code] || 0, 0)}
+                          onChange={(e) => updateChannelExtra(selectedSummaryRow.option.code, "manualShippingAmounts", e.target.value)}
+                        />
                       </div>
-                      <div>
-                        Precio sin IVA:{" "}
-                        {moneyWithCents(selectedSummaryRow.result.netSalePrice)}
-                      </div>
-                      <div>
-                        Comisión canal: -
-                        {moneyWithCents(
-                          selectedSummaryRow.result.marketplaceFeeAmount,
-                        )}
-                      </div>
-                      {allowsExtraSalesCommission(
-                        selectedSummaryRow.option,
-                      ) && (
-                        <div>
-                          Comisión venta extra: -
-                          {moneyWithCents(
-                            selectedSummaryRow.result.salesCommissionAmount,
-                          )}
-                        </div>
-                      )}
-                      <div>
-                        Ingresos brutos: -
-                        {moneyWithCents(selectedSummaryRow.result.iibbAmount)}
-                      </div>
-                      <br />
-                      <div>
-                        Envío s/IVA: -
-                        {moneyWithCents(
-                          selectedSummaryRow.result.shippingCostAmount,
-                        )}
-                      </div>
-                      <div>
-                        Gasto de estructura: -
-                        {moneyWithCents(
-                          selectedSummaryRow.result.structureAmount,
-                        )}
-                      </div>
-                      <div>
-                        IVA atribuido al costo: -
-                        {moneyWithCents(selectedSummaryRow.result.costVatAmount || 0)}
-                      </div>
-                      <div>
-                        Costo usado: -
-                        {moneyWithCents(selectedSummaryRow.result.costForProfit)}
-                      </div>
-                      <br />
-                      <div>
-                        Margen bruto:{" "}
-                        {moneyWithCents(selectedSummaryRow.result.grossProfit)}
-                      </div>
-                      <div>
-                        Imp. Ganancias: -
-                        {moneyWithCents(
-                          selectedSummaryRow.result.incomeTaxAmount,
-                        )}
-                      </div>
-                      <br />
-                      <div>
-                        <strong>Ganancia:</strong>{" "}
-                        {moneyWithCents(selectedSummaryRow.result.netProfit)}
-                      </div>
-                      <div>
-                        <strong>Margen real:</strong>{" "}
-                        {percent(selectedSummaryRow.result.marginOnNetSale)}
-                      </div>
+                    )}
+                    <div className="field">
+                      <label>Estructura $</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={formatInputNumber(modal.structureAmounts[selectedSummaryRow.option.code] || 0, 0)}
+                        onChange={(e) => updateChannelExtra(selectedSummaryRow.option.code, "structureAmounts", e.target.value)}
+                      />
                     </div>
-                  ) : (
-                    <span className="message error">
-                      {selectedSummaryRow?.result?.error ||
-                        "No se pudo calcular el resumen."}
-                    </span>
-                  )}
+                  </div>
+                ) : (
+                  <span className="message error">No se pudo calcular el canal seleccionado.</span>
+                )}
+              </section>
+
+              <aside className="pricing-card summary-panel-v2">
+                <div className="pricing-card-title summary-title-row">
+                  <span className="section-icon neutral">▤</span>
+                  <h3>Resumen</h3>
                 </div>
-              </div>
+                <div className="field">
+                  <select
+                    value={modal.summaryChannelCode}
+                    onChange={(e) => setSummaryChannel(e.target.value)}
+                  >
+                    {currentRows.map((row) => (
+                      <option key={row.option.code} value={row.option.code}>
+                        {row.option.code} - {row.option.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {selectedSummaryRow?.result?.valid ? (
+                  <div className="summary-content-v2">
+                    <div className="field summary-price-field">
+                      <label>Precio de venta</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={formatInputNumber(
+                          modal.priceOverrides[selectedSummaryRow.option.code] ?? selectedSummaryRow.result.roundedPrice,
+                          0,
+                        )}
+                        onChange={(e) => updateSalePrice(selectedSummaryRow.option.code, e.target.value)}
+                      />
+                      <span className="sync-hint compact-hint">Vinculado con el margen deseado %</span>
+                    </div>
+                    {isMercadoLibreChannel(selectedSummaryRow.option) && (
+                      <>
+                        <div className="summary-line"><span>Descuento promo</span><strong>{percent(selectedPromoDiscount)}</strong></div>
+                        <div className="summary-line"><span>Precio promo publicado</span><strong>{selectedPromoPrice ? moneyWithCents(selectedPromoPrice) : "-"}</strong></div>
+                      </>
+                    )}
+                    <div className="summary-line"><span>IVA venta</span><strong>-{moneyWithCents(selectedSummaryRow.result.vatAmount)}</strong></div>
+                    <div className="summary-line"><span>Precio sin IVA</span><strong>{moneyWithCents(selectedSummaryRow.result.netSalePrice)}</strong></div>
+                    <div className="summary-line"><span>Comisión canal</span><strong>-{moneyWithCents(selectedSummaryRow.result.marketplaceFeeAmount)}</strong></div>
+                    {allowsExtraSalesCommission(selectedSummaryRow.option) && (
+                      <div className="summary-line"><span>Comisión venta extra</span><strong>-{moneyWithCents(selectedSummaryRow.result.salesCommissionAmount)}</strong></div>
+                    )}
+                    <div className="summary-line"><span>Ingresos brutos</span><strong>-{moneyWithCents(selectedSummaryRow.result.iibbAmount)}</strong></div>
+                    <div className="summary-divider" />
+                    <div className="summary-line"><span>Envío s/IVA</span><strong>-{moneyWithCents(selectedSummaryRow.result.shippingCostAmount)}</strong></div>
+                    <div className="summary-line"><span>Gasto de estructura</span><strong>-{moneyWithCents(selectedSummaryRow.result.structureAmount)}</strong></div>
+                    <div className="summary-line"><span>IVA atribuido al costo</span><strong>-{moneyWithCents(selectedSummaryRow.result.costVatAmount || 0)}</strong></div>
+                    <div className="summary-line"><span>Costo usado</span><strong>-{moneyWithCents(selectedSummaryRow.result.costForProfit)}</strong></div>
+                    <div className="summary-divider" />
+                    <div className="summary-line"><span>Margen bruto</span><strong>{moneyWithCents(selectedSummaryRow.result.grossProfit)}</strong></div>
+                    <div className="summary-line"><span>Imp. Ganancias</span><strong>-{moneyWithCents(selectedSummaryRow.result.incomeTaxAmount)}</strong></div>
+                    <div className="summary-result-box">
+                      <div><span>Ganancia</span><strong>{moneyWithCents(selectedSummaryRow.result.netProfit)}</strong></div>
+                      <div><span>Margen real</span><strong>{percent(selectedSummaryRow.result.marginOnNetSale)}</strong></div>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="message error">
+                    {selectedSummaryRow?.result?.error || "No se pudo calcular el resumen."}
+                  </span>
+                )}
+              </aside>
             </div>
 
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Condición / canal</th>
-                    <th>Margen deseado %</th>
-                    <th>Ganancia neta objetivo</th>
-                    <th>Precio de venta</th>
-                    <th>Desc. promo %</th>
-                    <th>Precio promo</th>
-                    <th>IVA costo %</th>
-                    <th>Comisión venta %</th>
-                    <th>Envío manual $</th>
-                    <th>Estructura $</th>
-                    <th>Ganancia</th>
-                    <th>Margen real</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {otherRows.map(
-                    ({ option, result, desiredMargin, desiredNetProfit }) => {
-                      const lockMargin = modal.syncMode === "margin";
-                      const lockNet = modal.syncMode === "net";
+            <section className="pricing-conditions-card">
+              <div className="pricing-conditions-header">
+                <div>
+                  <h3>Condiciones de venta</h3>
+                  <p className="small">Editá margen, precio, promo, IVA costo y extras por canal.</p>
+                </div>
+              </div>
+              <div className="table-wrap polished-table-wrap">
+                <table className="pricing-conditions-table">
+                  <thead>
+                    <tr>
+                      <th>Condición / canal</th>
+                      <th>Margen deseado %</th>
+                      <th>Ganancia neta objetivo</th>
+                      <th>Precio de venta</th>
+                      <th>Desc. promo %</th>
+                      <th>Precio promo</th>
+                      <th>IVA costo %</th>
+                      <th>Comisión venta %</th>
+                      <th>Envío manual $</th>
+                      <th>Estructura $</th>
+                      <th>Ganancia</th>
+                      <th>Margen real</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentRows.map(({ option, result, desiredMargin, desiredNetProfit }) => {
+                      const lockMargin = modal.syncMode === "margin" && option.code !== "MC";
+                      const lockNet = modal.syncMode === "net" && option.code !== "MC";
+                      const rowSelected = option.code === selectedChannelCode;
 
                       return (
-                        <tr key={option.code}>
+                        <tr key={option.code} className={rowSelected ? "selected-channel-row" : ""}>
                           <td>
-                            <strong>{option.code}</strong>
-                            <br />
-                            <span className="small">{option.name}</span>
+                            <div className="channel-name-cell">
+                              <span className={`channel-badge channel-badge-${option.code.toLowerCase()}`}>{option.code}</span>
+                              <div>
+                                <strong>{option.name}</strong>
+                              </div>
+                            </div>
                           </td>
                           <td style={{ minWidth: 130 }}>
                             <input
                               type="text"
                               inputMode="decimal"
                               value={formatInputNumber(desiredMargin)}
-                              onChange={(e) =>
-                                updateMargin(option.code, e.target.value)
-                              }
+                              onChange={(e) => updateMargin(option.code, e.target.value)}
                               disabled={lockMargin || lockNet}
-                              className={
-                                lockMargin || lockNet ? "input-disabled" : ""
-                              }
+                              className={lockMargin || lockNet ? "input-disabled" : ""}
                             />
                           </td>
                           <td style={{ minWidth: 150 }}>
@@ -1471,34 +1276,22 @@ export default function PricesPage() {
                               inputMode="decimal"
                               value={formatInputNumber(desiredNetProfit)}
                               placeholder="Opcional"
-                              onChange={(e) =>
-                                updateNetProfit(option.code, e.target.value)
-                              }
+                              onChange={(e) => updateNetProfit(option.code, e.target.value)}
                               disabled={lockMargin || lockNet}
-                              className={
-                                lockMargin || lockNet ? "input-disabled" : ""
-                              }
+                              className={lockMargin || lockNet ? "input-disabled" : ""}
                             />
                           </td>
-                          <td
-                            className="price-input-cell"
-                            style={{ minWidth: 150 }}
-                          >
+                          <td className="price-input-cell" style={{ minWidth: 150 }}>
                             <input
                               type="text"
                               inputMode="decimal"
                               value={formatInputNumber(
-                                modal.priceOverrides[option.code] ??
-                                  (result.valid ? result.roundedPrice : null),
+                                modal.priceOverrides[option.code] ?? (result.valid ? result.roundedPrice : null),
                                 0,
                               )}
-                              onChange={(e) =>
-                                updateSalePrice(option.code, e.target.value)
-                              }
+                              onChange={(e) => updateSalePrice(option.code, e.target.value)}
                               disabled={lockMargin || lockNet}
-                              className={
-                                lockMargin || lockNet ? "input-disabled" : ""
-                              }
+                              className={lockMargin || lockNet ? "input-disabled" : ""}
                             />
                           </td>
                           <td style={{ minWidth: 120 }}>
@@ -1506,28 +1299,16 @@ export default function PricesPage() {
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                value={formatInputNumber(
-                                  modal.promoDiscountRates[option.code] || 0,
-                                )}
-                                onChange={(e) =>
-                                  updatePromoDiscount(
-                                    option.code,
-                                    e.target.value,
-                                  )
-                                }
+                                value={formatInputNumber(modal.promoDiscountRates[option.code] || 0)}
+                                onChange={(e) => updatePromoDiscount(option.code, e.target.value)}
                               />
                             ) : (
-                              <span className="small">No aplica</span>
+                              <span className="not-applicable">No aplica</span>
                             )}
                           </td>
-                          <td style={{ minWidth: 120 }}>
+                          <td style={{ minWidth: 130 }}>
                             {isMercadoLibreChannel(option) && result.valid
-                              ? moneyWithCents(
-                                  promoListPrice(
-                                    result.roundedPrice,
-                                    modal.promoDiscountRates[option.code] || 0,
-                                  ),
-                                )
+                              ? moneyWithCents(promoListPrice(result.roundedPrice, modal.promoDiscountRates[option.code] || 0))
                               : "-"}
                           </td>
                           <td style={{ minWidth: 110 }}>
@@ -1535,15 +1316,11 @@ export default function PricesPage() {
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                value={formatInputNumber(
-                                  modal.costVatRates[option.code] || 0,
-                                )}
-                                onChange={(e) =>
-                                  updateCostVatRate(option.code, e.target.value)
-                                }
+                                value={formatInputNumber(modal.costVatRates[option.code] || 0)}
+                                onChange={(e) => updateCostVatRate(option.code, e.target.value)}
                               />
                             ) : (
-                              <span className="small">No aplica</span>
+                              <span className="not-applicable">No aplica</span>
                             )}
                           </td>
                           <td style={{ minWidth: 120 }}>
@@ -1551,91 +1328,60 @@ export default function PricesPage() {
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                value={formatInputNumber(
-                                  modal.salesCommissionRates[option.code] || 0,
-                                )}
-                                onChange={(e) =>
-                                  updateChannelExtra(
-                                    option.code,
-                                    "salesCommissionRates",
-                                    e.target.value,
-                                  )
-                                }
+                                value={formatInputNumber(modal.salesCommissionRates[option.code] || 0)}
+                                onChange={(e) => updateChannelExtra(option.code, "salesCommissionRates", e.target.value)}
                               />
                             ) : (
-                              <span className="small">No aplica</span>
+                              <span className="not-applicable">No aplica</span>
                             )}
                           </td>
                           <td style={{ minWidth: 120 }}>
                             <input
                               type="text"
                               inputMode="decimal"
-                              value={formatInputNumber(
-                                modal.manualShippingAmounts[option.code] || 0,
-                                0,
-                              )}
-                              onChange={(e) =>
-                                updateChannelExtra(
-                                  option.code,
-                                  "manualShippingAmounts",
-                                  e.target.value,
-                                )
-                              }
+                              value={formatInputNumber(modal.manualShippingAmounts[option.code] || 0, 0)}
+                              onChange={(e) => updateChannelExtra(option.code, "manualShippingAmounts", e.target.value)}
                               disabled={Boolean(option.applies_shipping)}
-                              className={
-                                option.applies_shipping ? "input-disabled" : ""
-                              }
+                              className={option.applies_shipping ? "input-disabled" : ""}
                             />
                           </td>
                           <td style={{ minWidth: 120 }}>
                             <input
                               type="text"
                               inputMode="decimal"
-                              value={formatInputNumber(
-                                modal.structureAmounts[option.code] || 0,
-                                0,
-                              )}
-                              onChange={(e) =>
-                                updateChannelExtra(
-                                  option.code,
-                                  "structureAmounts",
-                                  e.target.value,
-                                )
-                              }
+                              value={formatInputNumber(modal.structureAmounts[option.code] || 0, 0)}
+                              onChange={(e) => updateChannelExtra(option.code, "structureAmounts", e.target.value)}
                             />
                           </td>
-                          <td>
-                            {result.valid
-                              ? moneyWithCents(result.netProfit)
-                              : "-"}
-                          </td>
-                          <td>
-                            {result.valid
-                              ? percent(result.marginOnNetSale)
-                              : result.error}
-                          </td>
+                          <td>{result.valid ? moneyWithCents(result.netProfit) : "-"}</td>
+                          <td>{result.valid ? percent(result.marginOnNetSale) : result.error}</td>
                         </tr>
                       );
-                    },
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
-            <div
-              className="actions"
-              style={{ justifyContent: "flex-end", marginTop: 16 }}
-            >
+            <div className="pricing-modal-footer">
               <button className="button ghost" onClick={() => setModal(null)}>
                 Cancelar
               </button>
-              <button
-                className="button"
-                disabled={saving}
-                onClick={saveMargins}
-              >
-                {saving ? "Guardando..." : "Guardar márgenes"}
-              </button>
+              <div className="actions">
+                <button className="button ghost" disabled={saving} onClick={saveMargins}>
+                  {saving ? "Guardando..." : "Guardar como borrador"}
+                </button>
+                <button
+                  className="button"
+                  disabled={saving}
+                  onClick={async () => {
+                    await saveMargins();
+                    setModal(null);
+                  }}
+                >
+                  {saving ? "Guardando..." : "Guardar y cerrar"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
