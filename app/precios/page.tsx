@@ -341,6 +341,10 @@ export default function PricesPage() {
   const currentRows = modalRows();
   const mcRow = currentRows.find((row) => row.option.code === "MC");
   const selectedSummaryRow = currentRows.find((row) => row.option.code === (modal?.summaryChannelCode || "MC")) || mcRow;
+  const selectedChannelCode = selectedSummaryRow?.option.code || "MC";
+  const selectedChannelName = selectedSummaryRow?.option.name || "MercadoLibre Clásica";
+  const selectedMarginLocked = Boolean(modal && modal.syncMode === "margin" && selectedChannelCode !== "MC");
+  const selectedNetLocked = Boolean(modal && modal.syncMode === "net" && selectedChannelCode !== "MC");
   const otherRows = currentRows.filter((row) => row.option.code !== "MC");
 
   return (
@@ -427,17 +431,17 @@ export default function PricesPage() {
             <div className="card soft pricing-modal-card" style={{ marginBottom: 16 }}>
               <div className="pricing-modal-grid">
                 <div className="pricing-panel">
-                  <h3>Condición base: MC</h3>
-                  <p className="small">MercadoLibre Clásica</p>
+                  <h3>Condición seleccionada: {selectedChannelCode}</h3>
+                  <p className="small">{selectedChannelName}</p>
 
                   <div className="grid two compact-input-grid">
                     <div className="field">
                       <label>Margen deseado %</label>
-                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.margins.MC ?? 5)} onChange={(e) => updateMargin("MC", e.target.value)} disabled={modal.syncMode === "net"} className={modal.syncMode === "net" ? "input-disabled" : ""} />
+                      <input type="text" inputMode="decimal" value={formatInputNumber(effectiveMargin(selectedChannelCode))} onChange={(e) => updateMargin(selectedChannelCode, e.target.value)} disabled={modal.syncMode === "net" || selectedMarginLocked} className={(modal.syncMode === "net" || selectedMarginLocked) ? "input-disabled" : ""} />
                     </div>
                     <div className="field">
                       <label>Ganancia neta objetivo</label>
-                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.netProfits.MC)} placeholder="Opcional" onChange={(e) => updateNetProfit("MC", e.target.value)} disabled={modal.syncMode === "margin"} className={modal.syncMode === "margin" ? "input-disabled" : ""} />
+                      <input type="text" inputMode="decimal" value={formatInputNumber(effectiveNetProfit(selectedChannelCode))} placeholder="Opcional" onChange={(e) => updateNetProfit(selectedChannelCode, e.target.value)} disabled={modal.syncMode === "margin" || selectedNetLocked} className={(modal.syncMode === "margin" || selectedNetLocked) ? "input-disabled" : ""} />
                     </div>
                   </div>
 
@@ -451,7 +455,7 @@ export default function PricesPage() {
                       <span>Aplicar margen a todos</span>
                     </label>
                   </div>
-                  <p className="small">Solo puede estar activa una opción. Cuando está activa, las demás condiciones toman el valor de MC y quedan bloqueadas.</p>
+                  <p className="small">Si elegís otro canal en el resumen, estos campos modifican ese canal. Si activás aplicar a todos, las demás condiciones toman el valor de MC y quedan bloqueadas.</p>
 
                   <h4>Datos de cálculo</h4>
                   <div className="calc-summary compact">
