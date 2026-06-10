@@ -1,11 +1,139 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import type { Product } from "@/lib/types";
 import { money, toNumber } from "@/lib/pricing";
 import { AppNav } from "@/components/AppNav";
+
+
+const importHeaders = [
+  "SKU",
+  "EAN",
+  "Nombre",
+  "Marca",
+  "Modelo",
+  "Categoria",
+  "Proveedor",
+  "Costo sin IVA",
+  "IVA %",
+  "Peso kg",
+  "Alto cm",
+  "Ancho cm",
+  "Profundidad cm",
+  "Garantia meses",
+  "Descripcion",
+  "Estado"
+];
+
+type ImportRow = {
+  rowNumber: number;
+  payload: {
+    sku: string;
+    ean: string | null;
+    name: string;
+    description: string | null;
+    brand: string | null;
+    model: string | null;
+    category: string | null;
+    cost_without_vat: number;
+    vat_rate: number;
+    weight_kg: number | null;
+    height_cm: number | null;
+    width_cm: number | null;
+    depth_cm: number | null;
+    supplier: string | null;
+    warranty_months: number | null;
+    status: Product["status"];
+  };
+};
+
+function normalizeHeader(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function readCell(row: Record<string, unknown>, labels: string[]) {
+  for (const label of labels) {
+    const target = normalizeHeader(label);
+    const foundKey = Object.keys(row).find((key) => normalizeHeader(key) === target);
+    if (foundKey) return row[foundKey];
+  }
+  return "";
+}
+
+function parseMoneyValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+
+  let text = String(value).trim();
+  if (!text) return 0;
+
+  text = text.replace(/\$/g, "").replace(/%/g, "").replace(/\s/g, "");
+
+  const hasComma = text.includes(",");
+  const hasDot = text.includes(".");
+
+  if (hasComma && hasDot) {
+    text = text.replace(/\./g, "").replace(",", ".");
+  } else if (hasComma) {
+    text = text.replace(",", ".");
+  }
+
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseOptionalNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = parseMoneyValue(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseStatus(value: unknown): Product["status"] {
+  const text = String(value || "active").trim().toLowerCase();
+  if (["pausado", "paused"].includes(text)) return "paused";
+  if (["discontinuado", "discontinued"].includes(text)) return "discontinued";
+  return "active";
+}
+
+function buildProductPayload(row: Record<string, unknown>, rowNumber: number): ImportRow {
+  const sku = String(readCell(row, ["SKU"]) || "").trim().toUpperCase();
+  const name = String(readCell(row, ["Nombre", "Producto"]) || "").trim();
+  const vatRaw = parseMoneyValue(readCell(row, ["IVA %", "IVA"]));
+  const vat = vatRaw === 10.5 || vatRaw === 10.5 ? 10.5 : 21;
+
+  if (!sku) throw new Error(`Fila ${rowNumber}: falta SKU.`);
+  if (!name) throw new Error(`Fila ${rowNumber}: falta Nombre.`);
+
+  return {
+    rowNumber,
+    payload: {
+      sku,
+      ean: String(readCell(row, ["EAN"]) || "").trim() || null,
+      name,
+      description: String(readCell(row, ["Descripcion", "Descripción"]) || "").trim() || null,
+      brand: String(readCell(row, ["Marca"]) || "").trim() || null,
+      model: String(readCell(row, ["Modelo"]) || "").trim() || null,
+      category: String(readCell(row, ["Categoria", "Categoría"]) || "").trim() || null,
+      cost_without_vat: parseMoneyValue(readCell(row, ["Costo sin IVA", "Costo s/IVA"])),
+      vat_rate: vat,
+      weight_kg: parseOptionalNumber(readCell(row, ["Peso kg"])),
+      height_cm: parseOptionalNumber(readCell(row, ["Alto cm"])),
+      width_cm: parseOptionalNumber(readCell(row, ["Ancho cm"])),
+      depth_cm: parseOptionalNumber(readCell(row, ["Profundidad cm"])),
+      supplier: String(readCell(row, ["Proveedor"]) || "").trim() || null,
+      warranty_months: parseOptionalNumber(readCell(row, ["Garantia meses", "Garantía meses"])),
+      status: parseStatus(readCell(row, ["Estado"]))
+    }
+  };
+}
 
 const emptyProduct: Product = {
   sku: "",
@@ -37,6 +165,9 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
 
   const costWithVatPreview = useMemo(() => {
     const cost = Number(form.cost_without_vat || 0);
@@ -168,6 +299,107 @@ export default function ProductsPage() {
     await loadProducts();
   }
 
+  function downloadTemplate() {
+    const sample = [
+      {
+        "SKU": "TVEN043GTV01",
+        "EAN": "7790000000000",
+        "Nombre": "Smart TV Enova 43 Google TV",
+        "Marca": "Enova",
+        "Modelo": "43GTV",
+        "Categoria": "TV",
+        "Proveedor": "Radio Victoria",
+        "Costo sin IVA": 241332,
+        "IVA %": 21,
+        "Peso kg": "",
+        "Alto cm": "",
+        "Ancho cm": "",
+        "Profundidad cm": "",
+        "Garantia meses": 12,
+        "Descripcion": "",
+        "Estado": "active"
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(sample, { header: importHeaders });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Productos");
+    XLSX.writeFile(workbook, "plantilla_productos_adara.xlsx");
+  }
+
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setMessage(null);
+    setError(null);
+    setImportRows([]);
+    setImportErrors([]);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "" });
+
+      if (rows.length === 0) {
+        setImportErrors(["El archivo no tiene productos para importar."]);
+        return;
+      }
+
+      const parsedRows: ImportRow[] = [];
+      const errors: string[] = [];
+
+      rows.forEach((row, index) => {
+        const hasAnyValue = Object.values(row).some((value) => String(value || "").trim() !== "");
+        if (!hasAnyValue) return;
+        try {
+          parsedRows.push(buildProductPayload(row, index + 2));
+        } catch (err) {
+          errors.push(err instanceof Error ? err.message : `Fila ${index + 2}: error de lectura.`);
+        }
+      });
+
+      setImportRows(parsedRows);
+      setImportErrors(errors);
+
+      if (parsedRows.length > 0) {
+        setMessage(`Archivo leído: ${parsedRows.length} productos listos para importar.`);
+      }
+    } catch (err) {
+      setImportErrors([err instanceof Error ? err.message : "No se pudo leer el archivo."]);
+    }
+  }
+
+  async function importProducts() {
+    if (importRows.length === 0) return;
+
+    setImporting(true);
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+
+    const payload = importRows.map((row) => row.payload);
+    const { error } = await supabase
+      .from("products")
+      .upsert(payload, { onConflict: "sku" });
+
+    setImporting(false);
+    setSaving(false);
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setMessage(`Carga masiva finalizada: ${payload.length} productos creados o actualizados.`);
+    setImportRows([]);
+    setImportErrors([]);
+    await loadProducts();
+  }
+
   const filtered = products.filter((product) => {
     const text = `${product.sku} ${product.name} ${product.brand || ""} ${product.model || ""} ${product.category || ""}`.toLowerCase();
     return text.includes(query.toLowerCase());
@@ -295,6 +527,87 @@ export default function ProductsPage() {
         </form>
       </section>
 
+
+      <section className="card" style={{ marginBottom: 20 }}>
+        <div className="header" style={{ alignItems: "flex-start", gap: 16 }}>
+          <div>
+            <h2 style={{ marginTop: 0 }}>Carga masiva con Excel</h2>
+            <p className="small" style={{ marginBottom: 0 }}>
+              Descargá la plantilla, completala en Excel y subila. Si el SKU ya existe, se actualiza; si no existe, se crea.
+            </p>
+          </div>
+          <div className="actions">
+            <button className="button ghost" type="button" onClick={downloadTemplate}>Descargar plantilla</button>
+            <label className="button ghost" style={{ cursor: "pointer" }}>
+              Subir Excel
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleImportFile}
+                style={{ display: "none" }}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="small" style={{ marginTop: 12 }}>
+          Columnas obligatorias: <strong>SKU</strong>, <strong>Nombre</strong>, <strong>Costo sin IVA</strong> e <strong>IVA %</strong>. El IVA acepta 21 o 10,5. El Estado puede ser active, paused o discontinued.
+        </div>
+
+        {importErrors.length > 0 && (
+          <div className="message error" style={{ marginTop: 12 }}>
+            {importErrors.slice(0, 8).map((item) => <div key={item}>{item}</div>)}
+            {importErrors.length > 8 && <div>Y {importErrors.length - 8} errores más.</div>}
+          </div>
+        )}
+
+        {importRows.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div className="header" style={{ marginBottom: 10 }}>
+              <div>
+                <strong>{importRows.length} productos listos para importar</strong>
+                <p className="small" style={{ margin: "4px 0 0" }}>Vista previa de los primeros productos del archivo.</p>
+              </div>
+              <div className="actions">
+                <button className="button" type="button" disabled={importing || saving} onClick={importProducts}>
+                  {importing ? "Importando..." : "Importar productos"}
+                </button>
+                <button className="button ghost" type="button" disabled={importing} onClick={() => setImportRows([])}>Cancelar</button>
+              </div>
+            </div>
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Producto</th>
+                    <th>Categoría</th>
+                    <th>Costo s/IVA</th>
+                    <th>IVA</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.slice(0, 8).map((row) => (
+                    <tr key={`${row.rowNumber}-${row.payload.sku}`}>
+                      <td>{row.payload.sku}</td>
+                      <td>
+                        <strong>{row.payload.name}</strong><br />
+                        <span className="small">{row.payload.brand || ""} {row.payload.model || ""}</span>
+                      </td>
+                      <td>{row.payload.category || "-"}</td>
+                      <td>{money(row.payload.cost_without_vat)}</td>
+                      <td>{row.payload.vat_rate}%</td>
+                      <td><span className="badge">{row.payload.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
       <section className="card">
         <div className="header" style={{ marginBottom: 12 }}>
           <div>
