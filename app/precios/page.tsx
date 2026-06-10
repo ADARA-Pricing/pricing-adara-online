@@ -361,12 +361,23 @@ export default function PricesPage() {
         : 0,
     }));
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("product_channel_margins")
-      .upsert(rows, { onConflict: "product_id,channel_code" });
+      .upsert(rows, { onConflict: "product_id,channel_code" })
+      .select("*");
     setSaving(false);
     if (error) setError(error.message);
     else {
+      const savedRows = (data || []) as ProductChannelMargin[];
+      setMarginSettings((current) => {
+        const savedKeys = new Set(
+          savedRows.map((item) => `${item.product_id || item.sku}-${item.channel_code}`),
+        );
+        const remaining = current.filter(
+          (item) => !savedKeys.has(`${item.product_id || item.sku}-${item.channel_code}`),
+        );
+        return [...remaining, ...savedRows];
+      });
       setMessage("Márgenes guardados correctamente.");
       await loadData();
     }
@@ -826,7 +837,8 @@ export default function PricesPage() {
                                     <th>Precio promo</th>
                                     <th>Ganancia</th>
                                     <th>IVA costo %</th>
-                                    <th>Comisión</th>
+                                    <th>Comisión venta %</th>
+                                    <th>Comisión $</th>
                                     <th>Envío usado</th>
                                   </tr>
                                 </thead>
@@ -881,6 +893,13 @@ export default function PricesPage() {
                                             ? isMercadoLibreChannel(option)
                                               ? "No aplica"
                                               : percent(result.costVatRate || 0)
+                                            : "-"}
+                                        </td>
+                                        <td>
+                                          {result.valid
+                                            ? allowsExtraSalesCommission(option)
+                                              ? percent(result.salesCommissionRate || 0)
+                                              : "No aplica"
                                             : "-"}
                                         </td>
                                         <td>
