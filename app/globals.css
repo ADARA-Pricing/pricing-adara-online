@@ -1948,3 +1948,31 @@ td strong {
     flex: 1 1 calc(50% - 8px);
   }
 }
+
+
+/* v7.27 - Precios: simplificar desplegable de canales */
+.prices-page .nested-table th,
+.prices-page .nested-table td {
+  white-space: nowrap;
+}
+
+.prices-page .nested-table td:first-child,
+.prices-page .nested-table th:first-child {
+  white-space: normal;
+}
+
+.prices-page .nested-table .promo-price-cell strong {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.prices-page .nested-table td:nth-child(7) {
+  font-weight: 800;
+}
+
+
+/* v7.28 - Precios: quitar Envío usado del desplegable */
+.prices-page .nested-table td:nth-child(6),
+.prices-page .nested-table td:nth-child(7) {
+  font-weight: 800;
+}

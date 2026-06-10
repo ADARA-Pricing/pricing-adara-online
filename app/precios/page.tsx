@@ -888,12 +888,8 @@ export default function PricesPage() {
                                     <th>Precio de venta</th>
                                     <th>Rentabilidad %</th>
                                     <th>Desc. promo</th>
-                                    <th>Precio promo</th>
                                     <th>Ganancia</th>
-                                    <th>IVA costo %</th>
-                                    <th>Comisión venta %</th>
-                                    <th>Comisión $</th>
-                                    <th>Envío usado</th>
+                                    <th>Precio promo</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -932,46 +928,17 @@ export default function PricesPage() {
                                             : "-"}
                                         </td>
                                         <td>
-                                          {isMercadoLibreChannel(option) &&
-                                          promoPrice
-                                            ? moneyWithCents(promoPrice)
-                                            : "-"}
-                                        </td>
-                                        <td>
                                           {result.valid
                                             ? moneyWithCents(result.netProfit)
                                             : "-"}
                                         </td>
-                                        <td>
-                                          {result.valid
-                                            ? isMercadoLibreChannel(option)
-                                              ? "No aplica"
-                                              : percent(result.costVatRate || 0)
-                                            : "-"}
-                                        </td>
-                                        <td>
-                                          {result.valid
-                                            ? allowsExtraSalesCommission(option)
-                                              ? percent(result.salesCommissionRate || 0)
-                                              : "No aplica"
-                                            : "-"}
-                                        </td>
-                                        <td>
-                                          {result.valid
-                                            ? moneyWithCents(
-                                                (result.marketplaceFeeAmount ||
-                                                  0) +
-                                                  (result.salesCommissionAmount ||
-                                                    0),
-                                              )
-                                            : "-"}
-                                        </td>
-                                        <td>
-                                          {result.valid
-                                            ? moneyWithCents(
-                                                result.shippingCostAmount || 0,
-                                              )
-                                            : "-"}
+                                        <td className="promo-price-cell">
+                                          <strong>
+                                            {isMercadoLibreChannel(option) &&
+                                            promoPrice
+                                              ? moneyWithCents(promoPrice)
+                                              : "-"}
+                                          </strong>
                                         </td>
                                       </tr>
                                     ),
