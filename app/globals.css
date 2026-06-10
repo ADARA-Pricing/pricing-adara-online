@@ -1309,3 +1309,190 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
     justify-content: flex-start;
   }
 }
+
+/* v7.23 - estética global para todas las pantallas */
+body {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(37, 99, 235, 0.06), transparent 28%),
+    linear-gradient(180deg, #f8fafc 0%, #f3f4f6 100%);
+  color: #0f172a;
+}
+
+.container {
+  padding-top: 28px;
+}
+
+.container > .header:not(.prices-hero) {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 22px 24px;
+  margin-bottom: 22px;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
+}
+
+.container > .header:not(.prices-hero) .brand {
+  position: relative;
+  padding-left: 62px;
+  min-height: 48px;
+  justify-content: center;
+}
+
+.container > .header:not(.prices-hero) .brand::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  transform: translateY(-50%);
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.22);
+}
+
+.container > .header:not(.prices-hero) .brand::after {
+  content: "◆";
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  color: #ffffff;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.container > .header:not(.prices-hero) .brand h1 {
+  font-size: 28px;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+}
+
+.container > .header:not(.prices-hero) .brand p {
+  color: #475569;
+  max-width: 560px;
+}
+
+.app-nav {
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.nav-link,
+.header .nav > .button.ghost:not(.nav-link) {
+  min-height: 40px;
+  border-radius: 12px;
+  border-color: #e2e8f0 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  padding: 9px 14px;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.nav-link:hover,
+.header .nav > .button.ghost:not(.nav-link):hover {
+  background: #f8fafc !important;
+  transform: translateY(-1px);
+}
+
+.nav-link.active {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.24) !important;
+}
+
+.nav-logout,
+.app-nav .button.secondary {
+  min-height: 40px;
+  border-radius: 12px;
+  background: #111827 !important;
+  color: #ffffff !important;
+  border: 1px solid #111827 !important;
+  padding: 9px 14px;
+  font-weight: 800;
+}
+
+.card {
+  border-color: #e2e8f0;
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.05);
+}
+
+.card h2,
+.card h3 {
+  letter-spacing: -0.02em;
+}
+
+input,
+select,
+textarea {
+  border-color: #dce3ed;
+  border-radius: 12px;
+  min-height: 40px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid #bfdbfe;
+  border-color: #60a5fa;
+}
+
+.button:not(.secondary):not(.ghost):not(.danger) {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  box-shadow: 0 10px 18px rgba(249, 115, 22, 0.18);
+}
+
+.button:not(.secondary):not(.ghost):not(.danger):hover {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+}
+
+.message.success {
+  border: 1px solid #bbf7d0;
+  background: #dcfce7;
+  color: #047857;
+  border-radius: 14px;
+}
+
+.message.error {
+  border: 1px solid #fecaca;
+  background: #fee2e2;
+  color: #b91c1c;
+  border-radius: 14px;
+}
+
+/* Ajuste del botón Actualizar dentro del header de Precios */
+.prices-hero-nav > .button.ghost {
+  min-width: 116px;
+  justify-content: center;
+  text-align: center;
+}
+
+.prices-hero-nav > .button.ghost::before {
+  content: "↻";
+  margin-right: 6px;
+  font-weight: 800;
+}
+
+.prices-hero-nav > .button.ghost {
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .container > .header:not(.prices-hero) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .container > .header:not(.prices-hero) .brand {
+    padding-left: 58px;
+  }
+
+  .app-nav {
+    justify-content: flex-start;
+  }
+}

@@ -1,16 +1,38 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const items = [
+  { href: "/productos", label: "Productos" },
+  { href: "/mercadolibre", label: "Costo x canal" },
+  { href: "/envios-meli", label: "Envíos" },
+  { href: "/impuestos", label: "Impuestos" },
+  { href: "/precios", label: "Precios" },
+];
 
 export function AppNav({ onLogout }: { onLogout?: () => void }) {
+  const pathname = usePathname();
+
   return (
-    <nav className="nav">
-      <Link className="button ghost" href="/productos">Productos</Link>
-      <Link className="button ghost" href="/mercadolibre">Costo x canal</Link>
-      <Link className="button ghost" href="/envios-meli">Envíos</Link>
-      <Link className="button ghost" href="/impuestos">Impuestos</Link>
-      <Link className="button ghost" href="/precios">Precios</Link>
-      {onLogout && <button className="button secondary" onClick={onLogout}>Salir</button>}
+    <nav className="nav app-nav">
+      {items.map((item) => {
+        const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+        return (
+          <Link
+            key={item.href}
+            className={`button ghost nav-link${active ? " active" : ""}`}
+            href={item.href}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
+      {onLogout && (
+        <button className="button secondary nav-logout" onClick={onLogout}>
+          Salir
+        </button>
+      )}
     </nav>
   );
 }

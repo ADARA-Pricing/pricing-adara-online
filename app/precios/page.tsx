@@ -786,7 +786,7 @@ export default function PricesPage() {
         </div>
         <div className="nav prices-hero-nav">
           <button className="button ghost" onClick={loadData}>
-            ↻ Actualizar
+            Actualizar
           </button>
           <AppNav onLogout={logout} />
         </div>
