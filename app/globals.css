@@ -302,3 +302,46 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 .summary-extra-box h4 {
   margin: 0 0 6px;
 }
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.expanded-row td {
+  background: #fbfbfc;
+  padding: 0 10px 14px;
+  border-top: 0;
+}
+
+.channel-breakdown {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px;
+  margin-top: 6px;
+}
+
+.channel-breakdown-title {
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.nested-table {
+  font-size: 13px;
+}
+
+.nested-table th,
+.nested-table td {
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.nested-table td:first-child,
+.nested-table th:first-child {
+  white-space: normal;
+  min-width: 220px;
+}

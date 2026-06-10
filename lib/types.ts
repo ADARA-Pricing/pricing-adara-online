@@ -108,5 +108,6 @@ export type ProductChannelMargin = {
   structure_amount?: number | null;
   manual_shipping_amount?: number | null;
   sales_commission_rate?: number | null;
+  sale_applies_vat?: boolean | null;
   updated_at?: string;
 };

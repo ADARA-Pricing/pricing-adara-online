@@ -62,6 +62,7 @@ type PricingTarget = {
   structureAmount?: number | null;
   manualShippingAmount?: number | null;
   salesCommissionRate?: number | null;
+  saleAppliesVat?: boolean | null;
   roundTo?: number;
   roundingMode?: RoundingMode;
 };
@@ -121,7 +122,8 @@ export function calculatePriceSummary(
   const option = normalizeOption(rawOption);
   const costWithoutVat = Number(product.cost_without_vat || 0);
   const productVatRate = Number(product.vat_rate || 21);
-  const saleVatRate = option.applies_vat ? productVatRate : 0;
+  const appliesVat = target.saleAppliesVat ?? option.applies_vat;
+  const saleVatRate = appliesVat ? productVatRate : 0;
   const marketplaceFeeRate = option.applies_marketplace_fee ? Number(categoryFee?.marketplace_fee_rate || 0) : 0;
   const financingFeeRate = Number(option.financing_fee_rate || 0);
   const marginRate = Number(target.desiredMarginRate ?? 5);
@@ -233,7 +235,7 @@ export function calculatePriceSummary(
     manualShippingAmount,
     fixedCosts,
     saleVatRate,
-    appliesVat: Boolean(option.applies_vat),
+    appliesVat: Boolean(appliesVat),
     appliesMarketplaceFee: Boolean(option.applies_marketplace_fee),
     appliesShipping: Boolean(option.applies_shipping),
     variableRate,

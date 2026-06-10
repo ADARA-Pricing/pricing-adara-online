@@ -1,11 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppNav } from "@/components/AppNav";
 import { createClient } from "@/lib/supabase";
-import { calculatePriceSummary, defaultTaxSettings, mercadoLibreClassicOption, money, moneyWithCents, normalizeOption, percent, toNumber } from "@/lib/pricing";
-import type { MercadoLibreCategoryFee, MercadoLibreInstallmentFee, MercadoLibrePriceOption, MercadoLibreShippingCost, Product, ProductChannelMargin, TaxSettings } from "@/lib/types";
+import {
+  calculatePriceSummary,
+  defaultTaxSettings,
+  mercadoLibreClassicOption,
+  money,
+  moneyWithCents,
+  normalizeOption,
+  percent,
+  toNumber,
+} from "@/lib/pricing";
+import type {
+  MercadoLibreCategoryFee,
+  MercadoLibreInstallmentFee,
+  MercadoLibrePriceOption,
+  MercadoLibreShippingCost,
+  Product,
+  ProductChannelMargin,
+  TaxSettings,
+} from "@/lib/types";
 
 type MarginMode = "margin" | "net";
 type SyncMode = "none" | "margin" | "net";
@@ -20,6 +37,7 @@ type ModalState = {
   structureAmounts: Record<string, number>;
   manualShippingAmounts: Record<string, number>;
   salesCommissionRates: Record<string, number>;
+  saleAppliesVat: Record<string, boolean>;
   summaryChannelCode: string;
   taxOverrides: TaxSettings;
 };
@@ -28,11 +46,19 @@ export default function PricesPage() {
   const router = useRouter();
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>([]);
-  const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
-  const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
+  const [installments, setInstallments] = useState<
+    MercadoLibreInstallmentFee[]
+  >([]);
+  const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>(
+    [],
+  );
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
-  const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
-  const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
+  const [shippingCosts, setShippingCosts] = useState<
+    MercadoLibreShippingCost[]
+  >([]);
+  const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>(
+    [],
+  );
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -40,6 +66,9 @@ export default function PricesPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [expandedProducts, setExpandedProducts] = useState<
+    Record<string, boolean>
+  >({});
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -54,22 +83,63 @@ export default function PricesPage() {
   async function loadData() {
     setLoading(true);
     setError(null);
-    const [productsResponse, installmentsResponse, categoryFeesResponse, taxesResponse, shippingResponse, marginsResponse] = await Promise.all([
-      supabase.from("products").select("*").eq("status", "active").order("name", { ascending: true }),
-      supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
-      supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
+    const [
+      productsResponse,
+      installmentsResponse,
+      categoryFeesResponse,
+      taxesResponse,
+      shippingResponse,
+      marginsResponse,
+    ] = await Promise.all([
+      supabase
+        .from("products")
+        .select("*")
+        .eq("status", "active")
+        .order("name", { ascending: true }),
+      supabase
+        .from("mercadolibre_installment_fees")
+        .select("*")
+        .eq("active", true)
+        .order("code", { ascending: true }),
+      supabase
+        .from("mercadolibre_category_fees")
+        .select("*")
+        .eq("active", true),
       supabase.from("tax_settings").select("*").eq("key", "default").single(),
-      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
-      supabase.from("product_channel_margins").select("*")
+      supabase
+        .from("mercadolibre_shipping_costs")
+        .select("*")
+        .eq("active", true),
+      supabase.from("product_channel_margins").select("*"),
     ]);
     setLoading(false);
 
-    if (productsResponse.error) setError(productsResponse.error.message); else setProducts((productsResponse.data || []) as Product[]);
-    if (installmentsResponse.error) setError(installmentsResponse.error.message); else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
-    if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message); else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
-    if (taxesResponse.error) setError(taxesResponse.error.message); else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
-    if (shippingResponse.error) setError(shippingResponse.error.message); else setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
-    if (marginsResponse.error) setError(marginsResponse.error.message); else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
+    if (productsResponse.error) setError(productsResponse.error.message);
+    else setProducts((productsResponse.data || []) as Product[]);
+    if (installmentsResponse.error)
+      setError(installmentsResponse.error.message);
+    else
+      setInstallments(
+        (
+          (installmentsResponse.data || []) as MercadoLibreInstallmentFee[]
+        ).filter((item) => item.code !== "MC"),
+      );
+    if (categoryFeesResponse.error)
+      setError(categoryFeesResponse.error.message);
+    else
+      setCategoryFees(
+        (categoryFeesResponse.data || []) as MercadoLibreCategoryFee[],
+      );
+    if (taxesResponse.error) setError(taxesResponse.error.message);
+    else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
+    if (shippingResponse.error) setError(shippingResponse.error.message);
+    else
+      setShippingCosts(
+        (shippingResponse.data || []) as MercadoLibreShippingCost[],
+      );
+    if (marginsResponse.error) setError(marginsResponse.error.message);
+    else
+      setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
   }
 
   useEffect(() => {
@@ -79,21 +149,26 @@ export default function PricesPage() {
   }, []);
 
   const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
-    return [mercadoLibreClassicOption(), ...installments.map((item) => normalizeOption({
-      code: item.code,
-      name: item.name,
-      channel_type: item.channel_type,
-      installment_count: item.installment_count,
-      financing_fee_rate: item.financing_fee_rate,
-      applies_marketplace_fee: item.applies_marketplace_fee,
-      applies_shipping: item.applies_shipping,
-      applies_iibb: item.applies_iibb,
-      applies_idc: item.applies_idc,
-      applies_iigg: item.applies_iigg,
-      applies_structure: item.applies_structure,
-      applies_vat: item.applies_vat,
-      active: item.active
-    }))];
+    return [
+      mercadoLibreClassicOption(),
+      ...installments.map((item) =>
+        normalizeOption({
+          code: item.code,
+          name: item.name,
+          channel_type: item.channel_type,
+          installment_count: item.installment_count,
+          financing_fee_rate: item.financing_fee_rate,
+          applies_marketplace_fee: item.applies_marketplace_fee,
+          applies_shipping: item.applies_shipping,
+          applies_iibb: item.applies_iibb,
+          applies_idc: item.applies_idc,
+          applies_iigg: item.applies_iigg,
+          applies_structure: item.applies_structure,
+          applies_vat: item.applies_vat,
+          active: item.active,
+        }),
+      ),
+    ];
   }, [installments]);
 
   const categories = useMemo(() => {
@@ -106,29 +181,44 @@ export default function PricesPage() {
   const filteredProducts = useMemo(() => {
     const q = query.toLowerCase();
     return products.filter((product) => {
-      const text = `${product.sku} ${product.name} ${product.brand || ""} ${product.model || ""} ${product.category || ""}`.toLowerCase();
+      const text =
+        `${product.sku} ${product.name} ${product.brand || ""} ${product.model || ""} ${product.category || ""}`.toLowerCase();
       const matchesQuery = !q || text.includes(q);
-      const matchesCategory = !categoryFilter || (product.category || "") === categoryFilter;
+      const matchesCategory =
+        !categoryFilter || (product.category || "") === categoryFilter;
       return matchesQuery && matchesCategory;
     });
   }, [products, query, categoryFilter]);
 
   function getMargin(productId: string | undefined, channelCode: string) {
-    const setting = marginSettings.find((item) => item.product_id === productId && item.channel_code === channelCode);
+    const setting = marginSettings.find(
+      (item) =>
+        item.product_id === productId && item.channel_code === channelCode,
+    );
     return Number(setting?.desired_margin_rate ?? 5);
   }
 
   function getNetProfit(productId: string | undefined, channelCode: string) {
-    const setting = marginSettings.find((item) => item.product_id === productId && item.channel_code === channelCode);
+    const setting = marginSettings.find(
+      (item) =>
+        item.product_id === productId && item.channel_code === channelCode,
+    );
     return setting?.desired_net_profit ?? null;
   }
 
-  function getChannelSetting(productId: string | undefined, channelCode: string) {
-    return marginSettings.find((item) => item.product_id === productId && item.channel_code === channelCode);
+  function getChannelSetting(
+    productId: string | undefined,
+    channelCode: string,
+  ) {
+    return marginSettings.find(
+      (item) =>
+        item.product_id === productId && item.channel_code === channelCode,
+    );
   }
 
   function formatInputNumber(value: number | null | undefined, decimals = 2) {
-    if (value === null || value === undefined || Number.isNaN(Number(value))) return "";
+    if (value === null || value === undefined || Number.isNaN(Number(value)))
+      return "";
     const fixed = Number(value).toFixed(decimals);
     return fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
   }
@@ -145,27 +235,50 @@ export default function PricesPage() {
     const structureAmounts: Record<string, number> = {};
     const manualShippingAmounts: Record<string, number> = {};
     const salesCommissionRates: Record<string, number> = {};
+    const saleAppliesVat: Record<string, boolean> = {};
     pricingOptions.forEach((option) => {
       const setting = getChannelSetting(product.id, option.code);
       margins[option.code] = getMargin(product.id, option.code);
       netProfits[option.code] = getNetProfit(product.id, option.code);
       priceOverrides[option.code] = null;
       structureAmounts[option.code] = Number(setting?.structure_amount || 0);
-      manualShippingAmounts[option.code] = Number(setting?.manual_shipping_amount || 0);
-      salesCommissionRates[option.code] = Number(setting?.sales_commission_rate || 0);
+      manualShippingAmounts[option.code] = Number(
+        setting?.manual_shipping_amount || 0,
+      );
+      salesCommissionRates[option.code] = Number(
+        setting?.sales_commission_rate || 0,
+      );
+      saleAppliesVat[option.code] =
+        setting?.sale_applies_vat ??
+        Boolean(normalizeOption(option).applies_vat);
     });
-    setModal({ product, mode: "margin", syncMode: "none", margins, netProfits, priceOverrides, structureAmounts, manualShippingAmounts, salesCommissionRates, summaryChannelCode: "MC", taxOverrides: { ...taxes } });
+    setModal({
+      product,
+      mode: "margin",
+      syncMode: "none",
+      margins,
+      netProfits,
+      priceOverrides,
+      structureAmounts,
+      manualShippingAmounts,
+      salesCommissionRates,
+      saleAppliesVat,
+      summaryChannelCode: "MC",
+      taxOverrides: { ...taxes },
+    });
   }
 
   function effectiveMargin(channelCode: string) {
     if (!modal) return 5;
-    if (modal.syncMode === "margin" && channelCode !== "MC") return Number(modal.margins.MC ?? 5);
+    if (modal.syncMode === "margin" && channelCode !== "MC")
+      return Number(modal.margins.MC ?? 5);
     return Number(modal.margins[channelCode] ?? 5);
   }
 
   function effectiveNetProfit(channelCode: string) {
     if (!modal) return null;
-    if (modal.syncMode === "net" && channelCode !== "MC") return modal.netProfits.MC ?? null;
+    if (modal.syncMode === "net" && channelCode !== "MC")
+      return modal.netProfits.MC ?? null;
     if (modal.syncMode === "margin") return null;
     return modal.netProfits[channelCode] ?? null;
   }
@@ -180,14 +293,23 @@ export default function PricesPage() {
       product_id: modal.product.id,
       sku: modal.product.sku,
       channel_code: option.code,
-      desired_margin_rate: result.valid ? Number(result.marginOnNetSale || 0) : effectiveMargin(option.code),
+      desired_margin_rate: result.valid
+        ? Number(result.marginOnNetSale || 0)
+        : effectiveMargin(option.code),
       desired_net_profit: effectiveNetProfit(option.code),
       structure_amount: Number(modal.structureAmounts[option.code] || 0),
-      manual_shipping_amount: Number(modal.manualShippingAmounts[option.code] || 0),
-      sales_commission_rate: allowsExtraSalesCommission(option) ? Number(modal.salesCommissionRates[option.code] || 0) : 0
+      manual_shipping_amount: Number(
+        modal.manualShippingAmounts[option.code] || 0,
+      ),
+      sales_commission_rate: allowsExtraSalesCommission(option)
+        ? Number(modal.salesCommissionRates[option.code] || 0)
+        : 0,
+      sale_applies_vat: Boolean(modal.saleAppliesVat[option.code]),
     }));
 
-    const { error } = await supabase.from("product_channel_margins").upsert(rows, { onConflict: "product_id,channel_code" });
+    const { error } = await supabase
+      .from("product_channel_margins")
+      .upsert(rows, { onConflict: "product_id,channel_code" });
     setSaving(false);
     if (error) setError(error.message);
     else {
@@ -204,7 +326,7 @@ export default function PricesPage() {
       mode: "margin",
       margins: { ...modal.margins, [channelCode]: margin },
       netProfits: { ...modal.netProfits, [channelCode]: null },
-      priceOverrides: { ...modal.priceOverrides, [channelCode]: null }
+      priceOverrides: { ...modal.priceOverrides, [channelCode]: null },
     });
   }
 
@@ -215,7 +337,7 @@ export default function PricesPage() {
       ...modal,
       mode: "net",
       netProfits: { ...modal.netProfits, [channelCode]: net },
-      priceOverrides: { ...modal.priceOverrides, [channelCode]: null }
+      priceOverrides: { ...modal.priceOverrides, [channelCode]: null },
     });
   }
 
@@ -225,7 +347,7 @@ export default function PricesPage() {
     if (salePrice === null) {
       setModal({
         ...modal,
-        priceOverrides: { ...modal.priceOverrides, [channelCode]: null }
+        priceOverrides: { ...modal.priceOverrides, [channelCode]: null },
       });
       return;
     }
@@ -234,8 +356,13 @@ export default function PricesPage() {
     const option = pricingOptions.find((item) => item.code === channelCode);
     if (!option) return;
     const normalizedOption = normalizeOption(option);
-    const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase());
-    const shippingCost = shippingCosts.find((item) => item.product_id === product.id || item.sku === product.sku);
+    const categoryFee = categoryFees.find(
+      (item) =>
+        item.category?.toLowerCase() === (product.category || "").toLowerCase(),
+    );
+    const shippingCost = shippingCosts.find(
+      (item) => item.product_id === product.id || item.sku === product.sku,
+    );
     const result = calculatePriceSummary(
       product,
       normalizedOption,
@@ -249,17 +376,24 @@ export default function PricesPage() {
         structureAmount: modal.structureAmounts[channelCode] || 0,
         manualShippingAmount: modal.manualShippingAmounts[channelCode] || 0,
         salesCommissionRate: modal.salesCommissionRates[channelCode] || 0,
+        saleAppliesVat:
+          modal.saleAppliesVat[channelCode] ?? normalizedOption.applies_vat,
         roundTo: 100,
-        roundingMode: "nearest"
-      }
+        roundingMode: "nearest",
+      },
     ) as any;
 
     setModal({
       ...modal,
       mode: "margin",
-      margins: { ...modal.margins, [channelCode]: result.valid ? Number((result.marginOnNetSale || 0).toFixed(2)) : Number(modal.margins[channelCode] || 0) },
+      margins: {
+        ...modal.margins,
+        [channelCode]: result.valid
+          ? Number((result.marginOnNetSale || 0).toFixed(2))
+          : Number(modal.margins[channelCode] || 0),
+      },
       netProfits: { ...modal.netProfits, [channelCode]: null },
-      priceOverrides: { ...modal.priceOverrides, [channelCode]: salePrice }
+      priceOverrides: { ...modal.priceOverrides, [channelCode]: salePrice },
     });
   }
 
@@ -268,14 +402,17 @@ export default function PricesPage() {
     setModal({ ...modal, syncMode });
   }
 
-  function updateTaxOverride(field: keyof Pick<TaxSettings, "iibb_rate" | "idc_rate" | "iigg_rate">, value: string) {
+  function updateTaxOverride(
+    field: keyof Pick<TaxSettings, "iibb_rate" | "idc_rate" | "iigg_rate">,
+    value: string,
+  ) {
     if (!modal) return;
     setModal({
       ...modal,
       taxOverrides: {
         ...modal.taxOverrides,
-        [field]: Number(toNumber(value) ?? 0)
-      }
+        [field]: Number(toNumber(value) ?? 0),
+      },
     });
   }
 
@@ -284,14 +421,32 @@ export default function PricesPage() {
     setModal({ ...modal, taxOverrides: { ...taxes } });
   }
 
-  function updateChannelExtra(channelCode: string, field: "structureAmounts" | "manualShippingAmounts" | "salesCommissionRates", value: string) {
+  function updateChannelExtra(
+    channelCode: string,
+    field:
+      | "structureAmounts"
+      | "manualShippingAmounts"
+      | "salesCommissionRates",
+    value: string,
+  ) {
     if (!modal) return;
     setModal({
       ...modal,
       [field]: {
         ...modal[field],
-        [channelCode]: Number(toNumber(value) ?? 0)
-      }
+        [channelCode]: Number(toNumber(value) ?? 0),
+      },
+    });
+  }
+
+  function updateSaleAppliesVat(channelCode: string, checked: boolean) {
+    if (!modal) return;
+    setModal({
+      ...modal,
+      saleAppliesVat: {
+        ...modal.saleAppliesVat,
+        [channelCode]: checked,
+      },
     });
   }
 
@@ -303,48 +458,144 @@ export default function PricesPage() {
   function modalRows() {
     if (!modal) return [];
     const product = modal.product;
-    const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase());
-    const shippingCost = shippingCosts.find((item) => item.product_id === product.id || item.sku === product.sku);
+    const categoryFee = categoryFees.find(
+      (item) =>
+        item.category?.toLowerCase() === (product.category || "").toLowerCase(),
+    );
+    const shippingCost = shippingCosts.find(
+      (item) => item.product_id === product.id || item.sku === product.sku,
+    );
     return pricingOptions.map((option) => {
       const desiredNetProfit = effectiveNetProfit(option.code);
       const desiredMargin = effectiveMargin(option.code);
       const normalizedOption = normalizeOption(option);
-      const feeForOption = normalizedOption.applies_marketplace_fee ? categoryFee : null;
-      const shippingForOption = normalizedOption.applies_shipping ? shippingCost : null;
+      const feeForOption = normalizedOption.applies_marketplace_fee
+        ? categoryFee
+        : null;
+      const shippingForOption = normalizedOption.applies_shipping
+        ? shippingCost
+        : null;
       const salePriceOverride = modal.priceOverrides[option.code] ?? null;
-      const result = calculatePriceSummary(product, normalizedOption, feeForOption, modal.taxOverrides, shippingForOption, {
-        desiredMarginRate: desiredMargin,
+      const result = calculatePriceSummary(
+        product,
+        normalizedOption,
+        feeForOption,
+        modal.taxOverrides,
+        shippingForOption,
+        {
+          desiredMarginRate: desiredMargin,
+          desiredNetProfit,
+          salePrice: salePriceOverride,
+          structureAmount: modal.structureAmounts[option.code] || 0,
+          manualShippingAmount: modal.manualShippingAmounts[option.code] || 0,
+          salesCommissionRate: modal.salesCommissionRates[option.code] || 0,
+          saleAppliesVat:
+            modal.saleAppliesVat[option.code] ?? normalizedOption.applies_vat,
+          roundTo: 100,
+          roundingMode: "nearest",
+        },
+      );
+      return {
+        option: normalizedOption,
+        categoryFee: feeForOption,
+        shippingCost: shippingForOption,
+        result: result as any,
+        desiredMargin,
         desiredNetProfit,
-        salePrice: salePriceOverride,
-        structureAmount: modal.structureAmounts[option.code] || 0,
-        manualShippingAmount: modal.manualShippingAmounts[option.code] || 0,
-        salesCommissionRate: modal.salesCommissionRates[option.code] || 0,
-        roundTo: 100,
-        roundingMode: "nearest"
-      });
-      return { option: normalizedOption, categoryFee: feeForOption, shippingCost: shippingForOption, result: result as any, desiredMargin, desiredNetProfit, salePriceOverride };
+        salePriceOverride,
+      };
+    });
+  }
+
+  function productKey(product: Product) {
+    return product.id || product.sku;
+  }
+
+  function toggleProductExpanded(product: Product) {
+    const key = productKey(product);
+    setExpandedProducts((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  function calculateRowsForProduct(product: Product) {
+    const categoryFee = categoryFees.find(
+      (item) =>
+        item.category?.toLowerCase() === (product.category || "").toLowerCase(),
+    );
+    const shippingCost = shippingCosts.find(
+      (item) => item.product_id === product.id || item.sku === product.sku,
+    );
+    return pricingOptions.map((option) => {
+      const normalizedOption = normalizeOption(option);
+      const setting = getChannelSetting(product.id, normalizedOption.code);
+      const feeForOption = normalizedOption.applies_marketplace_fee
+        ? categoryFee
+        : null;
+      const shippingForOption = normalizedOption.applies_shipping
+        ? shippingCost
+        : null;
+      const result = calculatePriceSummary(
+        product,
+        normalizedOption,
+        feeForOption,
+        taxes,
+        shippingForOption,
+        {
+          desiredMarginRate: getMargin(product.id, normalizedOption.code),
+          desiredNetProfit: getNetProfit(product.id, normalizedOption.code),
+          structureAmount: Number(setting?.structure_amount || 0),
+          manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
+          salesCommissionRate: allowsExtraSalesCommission(normalizedOption)
+            ? Number(setting?.sales_commission_rate || 0)
+            : 0,
+          saleAppliesVat:
+            setting?.sale_applies_vat ?? Boolean(normalizedOption.applies_vat),
+          roundTo: 100,
+          roundingMode: "nearest",
+        },
+      ) as any;
+      return { option: normalizedOption, result };
     });
   }
 
   function calculateMcPriceForProduct(product: Product) {
-    const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase());
-    const shippingCost = shippingCosts.find((item) => item.product_id === product.id || item.sku === product.sku);
-    const result = calculatePriceSummary(product, mercadoLibreClassicOption(), categoryFee, taxes, shippingCost, {
-      desiredMarginRate: getMargin(product.id, "MC"),
-      desiredNetProfit: getNetProfit(product.id, "MC"),
-      roundTo: 100,
-      roundingMode: "nearest"
-    }) as any;
+    const categoryFee = categoryFees.find(
+      (item) =>
+        item.category?.toLowerCase() === (product.category || "").toLowerCase(),
+    );
+    const shippingCost = shippingCosts.find(
+      (item) => item.product_id === product.id || item.sku === product.sku,
+    );
+    const result = calculatePriceSummary(
+      product,
+      mercadoLibreClassicOption(),
+      categoryFee,
+      taxes,
+      shippingCost,
+      {
+        desiredMarginRate: getMargin(product.id, "MC"),
+        desiredNetProfit: getNetProfit(product.id, "MC"),
+        roundTo: 100,
+        roundingMode: "nearest",
+      },
+    ) as any;
     return result.valid ? moneyWithCents(result.roundedPrice) : "-";
   }
 
   const currentRows = modalRows();
   const mcRow = currentRows.find((row) => row.option.code === "MC");
-  const selectedSummaryRow = currentRows.find((row) => row.option.code === (modal?.summaryChannelCode || "MC")) || mcRow;
+  const selectedSummaryRow =
+    currentRows.find(
+      (row) => row.option.code === (modal?.summaryChannelCode || "MC"),
+    ) || mcRow;
   const selectedChannelCode = selectedSummaryRow?.option.code || "MC";
-  const selectedChannelName = selectedSummaryRow?.option.name || "MercadoLibre Clásica";
-  const selectedMarginLocked = Boolean(modal && modal.syncMode === "margin" && selectedChannelCode !== "MC");
-  const selectedNetLocked = Boolean(modal && modal.syncMode === "net" && selectedChannelCode !== "MC");
+  const selectedChannelName =
+    selectedSummaryRow?.option.name || "MercadoLibre Clásica";
+  const selectedMarginLocked = Boolean(
+    modal && modal.syncMode === "margin" && selectedChannelCode !== "MC",
+  );
+  const selectedNetLocked = Boolean(
+    modal && modal.syncMode === "net" && selectedChannelCode !== "MC",
+  );
   const otherRows = currentRows.filter((row) => row.option.code !== "MC");
 
   return (
@@ -352,10 +603,15 @@ export default function PricesPage() {
       <header className="header">
         <div className="brand">
           <h1>Precios</h1>
-          <p>Buscá un producto, abrí el resumen y definí el margen deseado o la ganancia neta por canal.</p>
+          <p>
+            Buscá un producto, abrí el resumen y definí el margen deseado o la
+            ganancia neta por canal.
+          </p>
         </div>
         <div className="nav">
-          <button className="button ghost" onClick={loadData}>Actualizar</button>
+          <button className="button ghost" onClick={loadData}>
+            Actualizar
+          </button>
           <AppNav onLogout={logout} />
         </div>
       </header>
@@ -367,20 +623,33 @@ export default function PricesPage() {
         <div className="grid two">
           <div className="field">
             <label>Buscar producto</label>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por SKU, nombre, marca o modelo" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar por SKU, nombre, marca o modelo"
+            />
           </div>
           <div className="field">
             <label>Categoría</label>
-            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
               <option value="">Todas las categorías</option>
-              {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
             </select>
           </div>
         </div>
       </section>
 
       <section className="card">
-        {loading ? <p>Cargando productos...</p> : (
+        {loading ? (
+          <p>Cargando productos...</p>
+        ) : (
           <div className="table-wrap">
             <table>
               <thead>
@@ -396,19 +665,133 @@ export default function PricesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map((product) => (
-                  <tr key={product.id || product.sku}>
-                    <td>{product.sku}</td>
-                    <td><strong>{product.name}</strong><br /><span className="small">{product.brand || ""} {product.model || ""}</span></td>
-                    <td>{product.category || "-"}</td>
-                    <td>{money(product.cost_without_vat)}</td>
-                    <td>{product.vat_rate}%</td>
-                    <td>{percent(getMargin(product.id, "MC"))}</td>
-                    <td><strong>{calculateMcPriceForProduct(product)}</strong></td>
-                    <td><button className="button ghost" onClick={() => openProductModal(product)}>Calcular / editar</button></td>
+                {filteredProducts.map((product) => {
+                  const key = productKey(product);
+                  const isExpanded = Boolean(expandedProducts[key]);
+                  const productRows = isExpanded
+                    ? calculateRowsForProduct(product)
+                    : [];
+                  return (
+                    <Fragment key={key}>
+                      <tr>
+                        <td>{product.sku}</td>
+                        <td>
+                          <strong>{product.name}</strong>
+                          <br />
+                          <span className="small">
+                            {product.brand || ""} {product.model || ""}
+                          </span>
+                        </td>
+                        <td>{product.category || "-"}</td>
+                        <td>{money(product.cost_without_vat)}</td>
+                        <td>{product.vat_rate}%</td>
+                        <td>{percent(getMargin(product.id, "MC"))}</td>
+                        <td>
+                          <strong>{calculateMcPriceForProduct(product)}</strong>
+                        </td>
+                        <td>
+                          <div className="row-actions">
+                            <button
+                              className="button ghost small-button"
+                              onClick={() => toggleProductExpanded(product)}
+                            >
+                              {isExpanded ? "Contraer" : "Ver canales"}
+                            </button>
+                            <button
+                              className="button ghost small-button"
+                              onClick={() => openProductModal(product)}
+                            >
+                              Calcular / editar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${key}-channels`} className="expanded-row">
+                          <td colSpan={8}>
+                            <div className="channel-breakdown">
+                              <div className="channel-breakdown-title">
+                                Condiciones de venta
+                              </div>
+                              <table className="nested-table">
+                                <thead>
+                                  <tr>
+                                    <th>Condición / canal</th>
+                                    <th>Precio de venta</th>
+                                    <th>Rentabilidad %</th>
+                                    <th>Ganancia</th>
+                                    <th>IVA venta</th>
+                                    <th>Comisión</th>
+                                    <th>Envío usado</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {productRows.map(({ option, result }) => (
+                                    <tr key={`${key}-${option.code}`}>
+                                      <td>
+                                        <strong>{option.code}</strong>
+                                        <br />
+                                        <span className="small">
+                                          {option.name}
+                                        </span>
+                                      </td>
+                                      <td>
+                                        <strong>
+                                          {result.valid
+                                            ? moneyWithCents(
+                                                result.roundedPrice,
+                                              )
+                                            : "-"}
+                                        </strong>
+                                      </td>
+                                      <td>
+                                        {result.valid
+                                          ? percent(result.marginOnNetSale)
+                                          : "-"}
+                                      </td>
+                                      <td>
+                                        {result.valid
+                                          ? moneyWithCents(result.netProfit)
+                                          : "-"}
+                                      </td>
+                                      <td>
+                                        {result.valid
+                                          ? percent(result.saleVatRate)
+                                          : "-"}
+                                      </td>
+                                      <td>
+                                        {result.valid
+                                          ? moneyWithCents(
+                                              (result.marketplaceFeeAmount ||
+                                                0) +
+                                                (result.salesCommissionAmount ||
+                                                  0),
+                                            )
+                                          : "-"}
+                                      </td>
+                                      <td>
+                                        {result.valid
+                                          ? moneyWithCents(
+                                              result.shippingCostAmount || 0,
+                                            )
+                                          : "-"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+                {filteredProducts.length === 0 && (
+                  <tr>
+                    <td colSpan={8}>No se encontraron productos.</td>
                   </tr>
-                ))}
-                {filteredProducts.length === 0 && <tr><td colSpan={8}>No se encontraron productos.</td></tr>}
+                )}
               </tbody>
             </table>
           </div>
@@ -421,14 +804,28 @@ export default function PricesPage() {
             <div className="header" style={{ marginBottom: 12 }}>
               <div className="brand">
                 <h2>{modal.product.name}</h2>
-                <p>SKU {modal.product.sku} · Categoría {modal.product.category || "sin categoría"} · Costo {money(modal.product.cost_without_vat)} + IVA {modal.product.vat_rate}%</p>
+                <p>
+                  SKU {modal.product.sku} · Categoría{" "}
+                  {modal.product.category || "sin categoría"} · Costo{" "}
+                  {money(modal.product.cost_without_vat)} + IVA{" "}
+                  {modal.product.vat_rate}%
+                </p>
               </div>
-              <button className="button ghost" onClick={() => setModal(null)}>Cerrar</button>
+              <button className="button ghost" onClick={() => setModal(null)}>
+                Cerrar
+              </button>
             </div>
 
-            <p className="small">Podés elegir qué canal ver en el resumen. Ajustá margen, precio de venta, comisiones, envío manual y estructura para analizar rentabilidad.</p>
+            <p className="small">
+              Podés elegir qué canal ver en el resumen. Ajustá margen, precio de
+              venta, comisiones, envío manual y estructura para analizar
+              rentabilidad.
+            </p>
 
-            <div className="card soft pricing-modal-card" style={{ marginBottom: 16 }}>
+            <div
+              className="card soft pricing-modal-card"
+              style={{ marginBottom: 16 }}
+            >
               <div className="pricing-modal-grid">
                 <div className="pricing-panel">
                   <h3>Condición seleccionada: {selectedChannelCode}</h3>
@@ -437,77 +834,268 @@ export default function PricesPage() {
                   <div className="grid two compact-input-grid">
                     <div className="field">
                       <label>Margen deseado %</label>
-                      <input type="text" inputMode="decimal" value={formatInputNumber(effectiveMargin(selectedChannelCode))} onChange={(e) => updateMargin(selectedChannelCode, e.target.value)} disabled={modal.syncMode === "net" || selectedMarginLocked} className={(modal.syncMode === "net" || selectedMarginLocked) ? "input-disabled" : ""} />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={formatInputNumber(
+                          effectiveMargin(selectedChannelCode),
+                        )}
+                        onChange={(e) =>
+                          updateMargin(selectedChannelCode, e.target.value)
+                        }
+                        disabled={
+                          modal.syncMode === "net" || selectedMarginLocked
+                        }
+                        className={
+                          modal.syncMode === "net" || selectedMarginLocked
+                            ? "input-disabled"
+                            : ""
+                        }
+                      />
                     </div>
                     <div className="field">
                       <label>Ganancia neta objetivo</label>
-                      <input type="text" inputMode="decimal" value={formatInputNumber(effectiveNetProfit(selectedChannelCode))} placeholder="Opcional" onChange={(e) => updateNetProfit(selectedChannelCode, e.target.value)} disabled={modal.syncMode === "margin" || selectedNetLocked} className={(modal.syncMode === "margin" || selectedNetLocked) ? "input-disabled" : ""} />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={formatInputNumber(
+                          effectiveNetProfit(selectedChannelCode),
+                        )}
+                        placeholder="Opcional"
+                        onChange={(e) =>
+                          updateNetProfit(selectedChannelCode, e.target.value)
+                        }
+                        disabled={
+                          modal.syncMode === "margin" || selectedNetLocked
+                        }
+                        className={
+                          modal.syncMode === "margin" || selectedNetLocked
+                            ? "input-disabled"
+                            : ""
+                        }
+                      />
                     </div>
                   </div>
 
                   <div className="sync-options">
                     <label className="checkbox-row">
-                      <input type="checkbox" checked={modal.syncMode === "margin"} onChange={(e) => setSyncMode(e.target.checked ? "margin" : "none")} />
+                      <input
+                        type="checkbox"
+                        checked={modal.syncMode === "margin"}
+                        onChange={(e) =>
+                          setSyncMode(e.target.checked ? "margin" : "none")
+                        }
+                      />
                       <span>Aplicar % a todos</span>
                     </label>
                     <label className="checkbox-row">
-                      <input type="checkbox" checked={modal.syncMode === "net"} onChange={(e) => setSyncMode(e.target.checked ? "net" : "none")} />
+                      <input
+                        type="checkbox"
+                        checked={modal.syncMode === "net"}
+                        onChange={(e) =>
+                          setSyncMode(e.target.checked ? "net" : "none")
+                        }
+                      />
                       <span>Aplicar margen a todos</span>
                     </label>
                   </div>
-                  <p className="small">Si elegís otro canal en el resumen, estos campos modifican ese canal. Si activás aplicar a todos, las demás condiciones toman el valor de MC y quedan bloqueadas.</p>
+                  <p className="small">
+                    Si elegís otro canal en el resumen, estos campos modifican
+                    ese canal. Si activás aplicar a todos, las demás condiciones
+                    toman el valor de MC y quedan bloqueadas.
+                  </p>
 
                   <h4>Datos de cálculo</h4>
                   <div className="calc-summary compact">
                     <div>Categoría: {modal.product.category || "-"}</div>
-                    <div>Canal resumen: {selectedSummaryRow?.option.code || "-"}</div>
-                    <div>Comisión canal/categoría: {selectedSummaryRow?.result?.valid ? percent((selectedSummaryRow.result.marketplaceFeeRate || 0) + (selectedSummaryRow.result.financingFeeRate || 0)) : "-"}</div>
-                    {selectedSummaryRow?.result?.valid && allowsExtraSalesCommission(selectedSummaryRow.option) && <div>Comisión venta extra: {percent(selectedSummaryRow.result.salesCommissionRate)}</div>}
-                    <div>Envío c/IVA ML: {selectedSummaryRow?.result?.valid ? moneyWithCents(selectedSummaryRow.result.shippingCostAmountGross) : "-"}</div>
-                    <div>Envío usado: {selectedSummaryRow?.result?.valid ? moneyWithCents(selectedSummaryRow.result.shippingCostAmount) : "-"}</div>
-                    <div>IVA venta: {selectedSummaryRow?.result?.valid ? percent(selectedSummaryRow.result.saleVatRate) : percent(modal.product.vat_rate)}</div>
+                    <div>
+                      Canal resumen: {selectedSummaryRow?.option.code || "-"}
+                    </div>
+                    <div>
+                      Comisión canal/categoría:{" "}
+                      {selectedSummaryRow?.result?.valid
+                        ? percent(
+                            (selectedSummaryRow.result.marketplaceFeeRate ||
+                              0) +
+                              (selectedSummaryRow.result.financingFeeRate || 0),
+                          )
+                        : "-"}
+                    </div>
+                    {selectedSummaryRow?.result?.valid &&
+                      allowsExtraSalesCommission(selectedSummaryRow.option) && (
+                        <div>
+                          Comisión venta extra:{" "}
+                          {percent(
+                            selectedSummaryRow.result.salesCommissionRate,
+                          )}
+                        </div>
+                      )}
+                    <div>
+                      Envío c/IVA ML:{" "}
+                      {selectedSummaryRow?.result?.valid
+                        ? moneyWithCents(
+                            selectedSummaryRow.result.shippingCostAmountGross,
+                          )
+                        : "-"}
+                    </div>
+                    <div>
+                      Envío usado:{" "}
+                      {selectedSummaryRow?.result?.valid
+                        ? moneyWithCents(
+                            selectedSummaryRow.result.shippingCostAmount,
+                          )
+                        : "-"}
+                    </div>
+                    <div>
+                      IVA venta:{" "}
+                      {selectedSummaryRow?.result?.valid
+                        ? percent(selectedSummaryRow.result.saleVatRate)
+                        : percent(modal.product.vat_rate)}
+                    </div>
                   </div>
                 </div>
 
                 <div className="pricing-panel">
                   <h4>Impuestos para esta prueba</h4>
-                  <p className="small">Estos valores modifican solo este cálculo. No cambian la solapa Impuestos.</p>
+                  <p className="small">
+                    Estos valores modifican solo este cálculo. No cambian la
+                    solapa Impuestos.
+                  </p>
                   <div className="grid two compact-input-grid">
                     <div className="field">
                       <label>IIBB %</label>
-                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.taxOverrides.iibb_rate)} onChange={(e) => updateTaxOverride("iibb_rate", e.target.value)} />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={formatInputNumber(modal.taxOverrides.iibb_rate)}
+                        onChange={(e) =>
+                          updateTaxOverride("iibb_rate", e.target.value)
+                        }
+                      />
                     </div>
                     <div className="field">
                       <label>IDC %</label>
-                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.taxOverrides.idc_rate)} onChange={(e) => updateTaxOverride("idc_rate", e.target.value)} />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={formatInputNumber(modal.taxOverrides.idc_rate)}
+                        onChange={(e) =>
+                          updateTaxOverride("idc_rate", e.target.value)
+                        }
+                      />
                     </div>
                     <div className="field">
                       <label>IIGG %</label>
-                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.taxOverrides.iigg_rate)} onChange={(e) => updateTaxOverride("iigg_rate", e.target.value)} />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={formatInputNumber(modal.taxOverrides.iigg_rate)}
+                        onChange={(e) =>
+                          updateTaxOverride("iigg_rate", e.target.value)
+                        }
+                      />
                     </div>
                   </div>
-                  <button className="button ghost tax-reset-button" type="button" onClick={resetTaxOverrides}>Restablecer impuestos globales</button>
+                  <button
+                    className="button ghost tax-reset-button"
+                    type="button"
+                    onClick={resetTaxOverrides}
+                  >
+                    Restablecer impuestos globales
+                  </button>
 
                   {selectedSummaryRow?.result?.valid && (
                     <div className="summary-extra-box">
                       <h4>Costos extra del canal elegido</h4>
-                      <p className="small">Estos valores aplican solo al canal seleccionado en el resumen.</p>
+                      <p className="small">
+                        Estos valores aplican solo al canal seleccionado en el
+                        resumen.
+                      </p>
+                      <label
+                        className="checkbox-row"
+                        style={{ marginBottom: 10 }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(
+                            modal.saleAppliesVat[
+                              selectedSummaryRow.option.code
+                            ],
+                          )}
+                          onChange={(e) =>
+                            updateSaleAppliesVat(
+                              selectedSummaryRow.option.code,
+                              e.target.checked,
+                            )
+                          }
+                        />
+                        <span>Aplicar IVA al precio</span>
+                      </label>
                       <div className="grid two compact-input-grid summary-extra-grid">
-                        {allowsExtraSalesCommission(selectedSummaryRow.option) && (
+                        {allowsExtraSalesCommission(
+                          selectedSummaryRow.option,
+                        ) && (
                           <div className="field">
                             <label>Comisión venta %</label>
-                            <input type="text" inputMode="decimal" value={formatInputNumber(modal.salesCommissionRates[selectedSummaryRow.option.code] || 0)} onChange={(e) => updateChannelExtra(selectedSummaryRow.option.code, "salesCommissionRates", e.target.value)} />
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatInputNumber(
+                                modal.salesCommissionRates[
+                                  selectedSummaryRow.option.code
+                                ] || 0,
+                              )}
+                              onChange={(e) =>
+                                updateChannelExtra(
+                                  selectedSummaryRow.option.code,
+                                  "salesCommissionRates",
+                                  e.target.value,
+                                )
+                              }
+                            />
                           </div>
                         )}
                         {!selectedSummaryRow.option.applies_shipping && (
                           <div className="field">
                             <label>Envío manual $</label>
-                            <input type="text" inputMode="decimal" value={formatInputNumber(modal.manualShippingAmounts[selectedSummaryRow.option.code] || 0, 0)} onChange={(e) => updateChannelExtra(selectedSummaryRow.option.code, "manualShippingAmounts", e.target.value)} />
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatInputNumber(
+                                modal.manualShippingAmounts[
+                                  selectedSummaryRow.option.code
+                                ] || 0,
+                                0,
+                              )}
+                              onChange={(e) =>
+                                updateChannelExtra(
+                                  selectedSummaryRow.option.code,
+                                  "manualShippingAmounts",
+                                  e.target.value,
+                                )
+                              }
+                            />
                           </div>
                         )}
                         <div className="field">
                           <label>Estructura $</label>
-                          <input type="text" inputMode="decimal" value={formatInputNumber(modal.structureAmounts[selectedSummaryRow.option.code] || 0, 0)} onChange={(e) => updateChannelExtra(selectedSummaryRow.option.code, "structureAmounts", e.target.value)} />
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={formatInputNumber(
+                              modal.structureAmounts[
+                                selectedSummaryRow.option.code
+                              ] || 0,
+                              0,
+                            )}
+                            onChange={(e) =>
+                              updateChannelExtra(
+                                selectedSummaryRow.option.code,
+                                "structureAmounts",
+                                e.target.value,
+                              )
+                            }
+                          />
                         </div>
                       </div>
                     </div>
@@ -515,27 +1103,111 @@ export default function PricesPage() {
                 </div>
 
                 <div className="pricing-panel summary-panel">
-                  <div className="field" style={{ marginBottom: 10 }}><label>Resumen</label><select value={modal.summaryChannelCode} onChange={(e) => setSummaryChannel(e.target.value)}>{currentRows.map((row) => <option key={row.option.code} value={row.option.code}>{row.option.code} - {row.option.name}</option>)}</select></div>
+                  <div className="field" style={{ marginBottom: 10 }}>
+                    <label>Resumen</label>
+                    <select
+                      value={modal.summaryChannelCode}
+                      onChange={(e) => setSummaryChannel(e.target.value)}
+                    >
+                      {currentRows.map((row) => (
+                        <option key={row.option.code} value={row.option.code}>
+                          {row.option.code} - {row.option.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   {selectedSummaryRow?.result?.valid ? (
                     <div className="calc-summary">
-                      <div className="field inline-price-field"><label>Precio de venta</label><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides[selectedSummaryRow.option.code] ?? selectedSummaryRow.result.roundedPrice, 0)} onChange={(e) => updateSalePrice(selectedSummaryRow.option.code, e.target.value)} /></div>
-                      <div>IVA venta: -{moneyWithCents(selectedSummaryRow.result.vatAmount)}</div>
-                      <div>Precio sin IVA: {moneyWithCents(selectedSummaryRow.result.netSalePrice)}</div>
-                      <div>Comisión canal: -{moneyWithCents(selectedSummaryRow.result.marketplaceFeeAmount)}</div>
-                      {allowsExtraSalesCommission(selectedSummaryRow.option) && <div>Comisión venta extra: -{moneyWithCents(selectedSummaryRow.result.salesCommissionAmount)}</div>}
-                      <div>Ingresos brutos: -{moneyWithCents(selectedSummaryRow.result.iibbAmount)}</div>
+                      <div className="field inline-price-field">
+                        <label>Precio de venta</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={formatInputNumber(
+                            modal.priceOverrides[
+                              selectedSummaryRow.option.code
+                            ] ?? selectedSummaryRow.result.roundedPrice,
+                            0,
+                          )}
+                          onChange={(e) =>
+                            updateSalePrice(
+                              selectedSummaryRow.option.code,
+                              e.target.value,
+                            )
+                          }
+                        />
+                      </div>
+                      <div>
+                        IVA venta: -
+                        {moneyWithCents(selectedSummaryRow.result.vatAmount)}
+                      </div>
+                      <div>
+                        Precio sin IVA:{" "}
+                        {moneyWithCents(selectedSummaryRow.result.netSalePrice)}
+                      </div>
+                      <div>
+                        Comisión canal: -
+                        {moneyWithCents(
+                          selectedSummaryRow.result.marketplaceFeeAmount,
+                        )}
+                      </div>
+                      {allowsExtraSalesCommission(
+                        selectedSummaryRow.option,
+                      ) && (
+                        <div>
+                          Comisión venta extra: -
+                          {moneyWithCents(
+                            selectedSummaryRow.result.salesCommissionAmount,
+                          )}
+                        </div>
+                      )}
+                      <div>
+                        Ingresos brutos: -
+                        {moneyWithCents(selectedSummaryRow.result.iibbAmount)}
+                      </div>
                       <br />
-                      <div>Envío s/IVA: -{moneyWithCents(selectedSummaryRow.result.shippingCostAmount)}</div>
-                      <div>Gasto de estructura: -{moneyWithCents(selectedSummaryRow.result.structureAmount)}</div>
-                      <div>Costo: -{moneyWithCents(modal.product.cost_without_vat)}</div>
+                      <div>
+                        Envío s/IVA: -
+                        {moneyWithCents(
+                          selectedSummaryRow.result.shippingCostAmount,
+                        )}
+                      </div>
+                      <div>
+                        Gasto de estructura: -
+                        {moneyWithCents(
+                          selectedSummaryRow.result.structureAmount,
+                        )}
+                      </div>
+                      <div>
+                        Costo: -{moneyWithCents(modal.product.cost_without_vat)}
+                      </div>
                       <br />
-                      <div>Margen bruto: {moneyWithCents(selectedSummaryRow.result.grossProfit)}</div>
-                      <div>Imp. Ganancias: -{moneyWithCents(selectedSummaryRow.result.incomeTaxAmount)}</div>
+                      <div>
+                        Margen bruto:{" "}
+                        {moneyWithCents(selectedSummaryRow.result.grossProfit)}
+                      </div>
+                      <div>
+                        Imp. Ganancias: -
+                        {moneyWithCents(
+                          selectedSummaryRow.result.incomeTaxAmount,
+                        )}
+                      </div>
                       <br />
-                      <div><strong>Ganancia:</strong> {moneyWithCents(selectedSummaryRow.result.netProfit)}</div>
-                      <div><strong>Margen real:</strong> {percent(selectedSummaryRow.result.marginOnNetSale)}</div>
+                      <div>
+                        <strong>Ganancia:</strong>{" "}
+                        {moneyWithCents(selectedSummaryRow.result.netProfit)}
+                      </div>
+                      <div>
+                        <strong>Margen real:</strong>{" "}
+                        {percent(selectedSummaryRow.result.marginOnNetSale)}
+                      </div>
                     </div>
-                  ) : <span className="message error">{selectedSummaryRow?.result?.error || "No se pudo calcular el resumen."}</span>}
+                  ) : (
+                    <span className="message error">
+                      {selectedSummaryRow?.result?.error ||
+                        "No se pudo calcular el resumen."}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -548,6 +1220,7 @@ export default function PricesPage() {
                     <th>Margen deseado %</th>
                     <th>Ganancia neta objetivo</th>
                     <th>Precio de venta</th>
+                    <th>IVA venta</th>
                     <th>Comisión venta %</th>
                     <th>Envío manual $</th>
                     <th>Estructura $</th>
@@ -556,41 +1229,172 @@ export default function PricesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {otherRows.map(({ option, result, desiredMargin, desiredNetProfit }) => {
-                    const lockMargin = modal.syncMode === "margin";
-                    const lockNet = modal.syncMode === "net";
-                    
-                    return (
-                      <tr key={option.code}>
-                        <td><strong>{option.code}</strong><br /><span className="small">{option.name}</span></td>
-                        <td style={{ minWidth: 130 }}>
-                          <input type="text" inputMode="decimal" value={formatInputNumber(desiredMargin)} onChange={(e) => updateMargin(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
-                        </td>
-                        <td style={{ minWidth: 150 }}>
-                          <input type="text" inputMode="decimal" value={formatInputNumber(desiredNetProfit)} placeholder="Opcional" onChange={(e) => updateNetProfit(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} />
-                        </td>
-                        <td className="price-input-cell" style={{ minWidth: 150 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides[option.code] ?? (result.valid ? result.roundedPrice : null), 0)} onChange={(e) => updateSalePrice(option.code, e.target.value)} disabled={lockMargin || lockNet} className={(lockMargin || lockNet) ? "input-disabled" : ""} /></td>
-                        <td style={{ minWidth: 120 }}>
-                          {allowsExtraSalesCommission(option) ? (
-                            <input type="text" inputMode="decimal" value={formatInputNumber(modal.salesCommissionRates[option.code] || 0)} onChange={(e) => updateChannelExtra(option.code, "salesCommissionRates", e.target.value)} />
-                          ) : (
-                            <span className="small">No aplica</span>
-                          )}
-                        </td>
-                        <td style={{ minWidth: 120 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.manualShippingAmounts[option.code] || 0, 0)} onChange={(e) => updateChannelExtra(option.code, "manualShippingAmounts", e.target.value)} disabled={Boolean(option.applies_shipping)} className={option.applies_shipping ? "input-disabled" : ""} /></td>
-                        <td style={{ minWidth: 120 }}><input type="text" inputMode="decimal" value={formatInputNumber(modal.structureAmounts[option.code] || 0, 0)} onChange={(e) => updateChannelExtra(option.code, "structureAmounts", e.target.value)} /></td>
-                        <td>{result.valid ? moneyWithCents(result.netProfit) : "-"}</td>
-                        <td>{result.valid ? percent(result.marginOnNetSale) : result.error}</td>
-                      </tr>
-                    );
-                  })}
+                  {otherRows.map(
+                    ({ option, result, desiredMargin, desiredNetProfit }) => {
+                      const lockMargin = modal.syncMode === "margin";
+                      const lockNet = modal.syncMode === "net";
+
+                      return (
+                        <tr key={option.code}>
+                          <td>
+                            <strong>{option.code}</strong>
+                            <br />
+                            <span className="small">{option.name}</span>
+                          </td>
+                          <td style={{ minWidth: 130 }}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatInputNumber(desiredMargin)}
+                              onChange={(e) =>
+                                updateMargin(option.code, e.target.value)
+                              }
+                              disabled={lockMargin || lockNet}
+                              className={
+                                lockMargin || lockNet ? "input-disabled" : ""
+                              }
+                            />
+                          </td>
+                          <td style={{ minWidth: 150 }}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatInputNumber(desiredNetProfit)}
+                              placeholder="Opcional"
+                              onChange={(e) =>
+                                updateNetProfit(option.code, e.target.value)
+                              }
+                              disabled={lockMargin || lockNet}
+                              className={
+                                lockMargin || lockNet ? "input-disabled" : ""
+                              }
+                            />
+                          </td>
+                          <td
+                            className="price-input-cell"
+                            style={{ minWidth: 150 }}
+                          >
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatInputNumber(
+                                modal.priceOverrides[option.code] ??
+                                  (result.valid ? result.roundedPrice : null),
+                                0,
+                              )}
+                              onChange={(e) =>
+                                updateSalePrice(option.code, e.target.value)
+                              }
+                              disabled={lockMargin || lockNet}
+                              className={
+                                lockMargin || lockNet ? "input-disabled" : ""
+                              }
+                            />
+                          </td>
+                          <td style={{ minWidth: 90 }}>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(
+                                modal.saleAppliesVat[option.code],
+                              )}
+                              onChange={(e) =>
+                                updateSaleAppliesVat(
+                                  option.code,
+                                  e.target.checked,
+                                )
+                              }
+                            />
+                          </td>
+                          <td style={{ minWidth: 120 }}>
+                            {allowsExtraSalesCommission(option) ? (
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={formatInputNumber(
+                                  modal.salesCommissionRates[option.code] || 0,
+                                )}
+                                onChange={(e) =>
+                                  updateChannelExtra(
+                                    option.code,
+                                    "salesCommissionRates",
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            ) : (
+                              <span className="small">No aplica</span>
+                            )}
+                          </td>
+                          <td style={{ minWidth: 120 }}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatInputNumber(
+                                modal.manualShippingAmounts[option.code] || 0,
+                                0,
+                              )}
+                              onChange={(e) =>
+                                updateChannelExtra(
+                                  option.code,
+                                  "manualShippingAmounts",
+                                  e.target.value,
+                                )
+                              }
+                              disabled={Boolean(option.applies_shipping)}
+                              className={
+                                option.applies_shipping ? "input-disabled" : ""
+                              }
+                            />
+                          </td>
+                          <td style={{ minWidth: 120 }}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatInputNumber(
+                                modal.structureAmounts[option.code] || 0,
+                                0,
+                              )}
+                              onChange={(e) =>
+                                updateChannelExtra(
+                                  option.code,
+                                  "structureAmounts",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </td>
+                          <td>
+                            {result.valid
+                              ? moneyWithCents(result.netProfit)
+                              : "-"}
+                          </td>
+                          <td>
+                            {result.valid
+                              ? percent(result.marginOnNetSale)
+                              : result.error}
+                          </td>
+                        </tr>
+                      );
+                    },
+                  )}
                 </tbody>
               </table>
             </div>
 
-            <div className="actions" style={{ justifyContent: "flex-end", marginTop: 16 }}>
-              <button className="button ghost" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="button" disabled={saving} onClick={saveMargins}>{saving ? "Guardando..." : "Guardar márgenes"}</button>
+            <div
+              className="actions"
+              style={{ justifyContent: "flex-end", marginTop: 16 }}
+            >
+              <button className="button ghost" onClick={() => setModal(null)}>
+                Cancelar
+              </button>
+              <button
+                className="button"
+                disabled={saving}
+                onClick={saveMargins}
+              >
+                {saving ? "Guardando..." : "Guardar márgenes"}
+              </button>
             </div>
           </div>
         </div>
