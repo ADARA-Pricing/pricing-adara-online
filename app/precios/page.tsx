@@ -12,6 +12,7 @@ import {
   moneyWithCents,
   normalizeOption,
   percent,
+  promoListPrice,
   toNumber,
 } from "@/lib/pricing";
 import type {
@@ -38,6 +39,7 @@ type ModalState = {
   manualShippingAmounts: Record<string, number>;
   salesCommissionRates: Record<string, number>;
   saleAppliesVat: Record<string, boolean>;
+  promoDiscountRates: Record<string, number>;
   summaryChannelCode: string;
   taxOverrides: TaxSettings;
 };
@@ -228,6 +230,24 @@ export default function PricesPage() {
     return !normalizeOption(option).applies_marketplace_fee;
   }
 
+  function isMercadoLibreChannel(option?: MercadoLibrePriceOption | null) {
+    if (!option) return false;
+    const normalized = normalizeOption(option);
+    return (
+      normalized.channel_type === "mercadolibre" ||
+      normalized.code === "MC" ||
+      normalized.code?.startsWith("MP")
+    );
+  }
+
+  function getPromoDiscount(
+    productId: string | undefined,
+    channelCode: string,
+  ) {
+    const setting = getChannelSetting(productId, channelCode);
+    return Number(setting?.promo_discount_rate || 0);
+  }
+
   function openProductModal(product: Product) {
     const margins: Record<string, number> = {};
     const netProfits: Record<string, number | null> = {};
@@ -236,6 +256,7 @@ export default function PricesPage() {
     const manualShippingAmounts: Record<string, number> = {};
     const salesCommissionRates: Record<string, number> = {};
     const saleAppliesVat: Record<string, boolean> = {};
+    const promoDiscountRates: Record<string, number> = {};
     pricingOptions.forEach((option) => {
       const setting = getChannelSetting(product.id, option.code);
       margins[option.code] = getMargin(product.id, option.code);
@@ -251,6 +272,9 @@ export default function PricesPage() {
       saleAppliesVat[option.code] =
         setting?.sale_applies_vat ??
         Boolean(normalizeOption(option).applies_vat);
+      promoDiscountRates[option.code] = Number(
+        setting?.promo_discount_rate || 0,
+      );
     });
     setModal({
       product,
@@ -263,6 +287,7 @@ export default function PricesPage() {
       manualShippingAmounts,
       salesCommissionRates,
       saleAppliesVat,
+      promoDiscountRates,
       summaryChannelCode: "MC",
       taxOverrides: { ...taxes },
     });
@@ -305,6 +330,9 @@ export default function PricesPage() {
         ? Number(modal.salesCommissionRates[option.code] || 0)
         : 0,
       sale_applies_vat: Boolean(modal.saleAppliesVat[option.code]),
+      promo_discount_rate: isMercadoLibreChannel(option)
+        ? Number(modal.promoDiscountRates[option.code] || 0)
+        : 0,
     }));
 
     const { error } = await supabase
@@ -450,6 +478,18 @@ export default function PricesPage() {
     });
   }
 
+  function updatePromoDiscount(channelCode: string, value: string) {
+    if (!modal) return;
+    const discount = Math.max(0, Math.min(99.99, Number(toNumber(value) ?? 0)));
+    setModal({
+      ...modal,
+      promoDiscountRates: {
+        ...modal.promoDiscountRates,
+        [channelCode]: discount,
+      },
+    });
+  }
+
   function setSummaryChannel(channelCode: string) {
     if (!modal) return;
     setModal({ ...modal, summaryChannelCode: channelCode });
@@ -553,7 +593,18 @@ export default function PricesPage() {
           roundingMode: "nearest",
         },
       ) as any;
-      return { option: normalizedOption, result };
+      const promoDiscountRate = isMercadoLibreChannel(normalizedOption)
+        ? getPromoDiscount(product.id, normalizedOption.code)
+        : 0;
+      const promoPrice = result.valid
+        ? promoListPrice(result.roundedPrice, promoDiscountRate)
+        : null;
+      return {
+        option: normalizedOption,
+        result,
+        promoDiscountRate,
+        promoPrice,
+      };
     });
   }
 
@@ -596,6 +647,15 @@ export default function PricesPage() {
   const selectedNetLocked = Boolean(
     modal && modal.syncMode === "net" && selectedChannelCode !== "MC",
   );
+  const selectedPromoDiscount = modal
+    ? Number(modal.promoDiscountRates[selectedChannelCode] || 0)
+    : 0;
+  const selectedPromoPrice = selectedSummaryRow?.result?.valid
+    ? promoListPrice(
+        selectedSummaryRow.result.roundedPrice,
+        selectedPromoDiscount,
+      )
+    : null;
   const otherRows = currentRows.filter((row) => row.option.code !== "MC");
 
   return (
@@ -719,6 +779,8 @@ export default function PricesPage() {
                                     <th>Condición / canal</th>
                                     <th>Precio de venta</th>
                                     <th>Rentabilidad %</th>
+                                    <th>Desc. promo</th>
+                                    <th>Precio promo</th>
                                     <th>Ganancia</th>
                                     <th>IVA venta</th>
                                     <th>Comisión</th>
@@ -726,58 +788,76 @@ export default function PricesPage() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {productRows.map(({ option, result }) => (
-                                    <tr key={`${key}-${option.code}`}>
-                                      <td>
-                                        <strong>{option.code}</strong>
-                                        <br />
-                                        <span className="small">
-                                          {option.name}
-                                        </span>
-                                      </td>
-                                      <td>
-                                        <strong>
+                                  {productRows.map(
+                                    ({
+                                      option,
+                                      result,
+                                      promoDiscountRate,
+                                      promoPrice,
+                                    }) => (
+                                      <tr key={`${key}-${option.code}`}>
+                                        <td>
+                                          <strong>{option.code}</strong>
+                                          <br />
+                                          <span className="small">
+                                            {option.name}
+                                          </span>
+                                        </td>
+                                        <td>
+                                          <strong>
+                                            {result.valid
+                                              ? moneyWithCents(
+                                                  result.roundedPrice,
+                                                )
+                                              : "-"}
+                                          </strong>
+                                        </td>
+                                        <td>
+                                          {result.valid
+                                            ? percent(result.marginOnNetSale)
+                                            : "-"}
+                                        </td>
+                                        <td>
+                                          {isMercadoLibreChannel(option)
+                                            ? percent(promoDiscountRate)
+                                            : "-"}
+                                        </td>
+                                        <td>
+                                          {isMercadoLibreChannel(option) &&
+                                          promoPrice
+                                            ? moneyWithCents(promoPrice)
+                                            : "-"}
+                                        </td>
+                                        <td>
+                                          {result.valid
+                                            ? moneyWithCents(result.netProfit)
+                                            : "-"}
+                                        </td>
+                                        <td>
+                                          {result.valid
+                                            ? percent(result.saleVatRate)
+                                            : "-"}
+                                        </td>
+                                        <td>
                                           {result.valid
                                             ? moneyWithCents(
-                                                result.roundedPrice,
+                                                (result.marketplaceFeeAmount ||
+                                                  0) +
+                                                  (result.salesCommissionAmount ||
+                                                    0),
                                               )
                                             : "-"}
-                                        </strong>
-                                      </td>
-                                      <td>
-                                        {result.valid
-                                          ? percent(result.marginOnNetSale)
-                                          : "-"}
-                                      </td>
-                                      <td>
-                                        {result.valid
-                                          ? moneyWithCents(result.netProfit)
-                                          : "-"}
-                                      </td>
-                                      <td>
-                                        {result.valid
-                                          ? percent(result.saleVatRate)
-                                          : "-"}
-                                      </td>
-                                      <td>
-                                        {result.valid
-                                          ? moneyWithCents(
-                                              (result.marketplaceFeeAmount ||
-                                                0) +
-                                                (result.salesCommissionAmount ||
-                                                  0),
-                                            )
-                                          : "-"}
-                                      </td>
-                                      <td>
-                                        {result.valid
-                                          ? moneyWithCents(
-                                              result.shippingCostAmount || 0,
-                                            )
-                                          : "-"}
-                                      </td>
-                                    </tr>
-                                  ))}
+                                        </td>
+                                        <td>
+                                          {result.valid
+                                            ? moneyWithCents(
+                                                result.shippingCostAmount || 0,
+                                              )
+                                            : "-"}
+                                        </td>
+                                      </tr>
+                                    ),
+                                  )}
                                 </tbody>
                               </table>
                             </div>
@@ -1031,6 +1111,44 @@ export default function PricesPage() {
                         />
                         <span>Aplicar IVA al precio</span>
                       </label>
+                      {isMercadoLibreChannel(selectedSummaryRow.option) && (
+                        <div
+                          className="grid two compact-input-grid summary-extra-grid"
+                          style={{ marginBottom: 10 }}
+                        >
+                          <div className="field">
+                            <label>Descuento promo %</label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatInputNumber(
+                                modal.promoDiscountRates[
+                                  selectedSummaryRow.option.code
+                                ] || 0,
+                              )}
+                              onChange={(e) =>
+                                updatePromoDiscount(
+                                  selectedSummaryRow.option.code,
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </div>
+                          <div className="field">
+                            <label>Precio promo publicado</label>
+                            <input
+                              type="text"
+                              value={
+                                selectedPromoPrice
+                                  ? formatInputNumber(selectedPromoPrice, 0)
+                                  : ""
+                              }
+                              readOnly
+                              className="input-disabled"
+                            />
+                          </div>
+                        </div>
+                      )}
                       <div className="grid two compact-input-grid summary-extra-grid">
                         {allowsExtraSalesCommission(
                           selectedSummaryRow.option,
@@ -1137,6 +1255,19 @@ export default function PricesPage() {
                           }
                         />
                       </div>
+                      {isMercadoLibreChannel(selectedSummaryRow.option) && (
+                        <>
+                          <div>
+                            Descuento promo: {percent(selectedPromoDiscount)}
+                          </div>
+                          <div>
+                            Precio promo publicado:{" "}
+                            {selectedPromoPrice
+                              ? moneyWithCents(selectedPromoPrice)
+                              : "-"}
+                          </div>
+                        </>
+                      )}
                       <div>
                         IVA venta: -
                         {moneyWithCents(selectedSummaryRow.result.vatAmount)}
@@ -1220,6 +1351,8 @@ export default function PricesPage() {
                     <th>Margen deseado %</th>
                     <th>Ganancia neta objetivo</th>
                     <th>Precio de venta</th>
+                    <th>Desc. promo %</th>
+                    <th>Precio promo</th>
                     <th>IVA venta</th>
                     <th>Comisión venta %</th>
                     <th>Envío manual $</th>
@@ -1290,6 +1423,35 @@ export default function PricesPage() {
                                 lockMargin || lockNet ? "input-disabled" : ""
                               }
                             />
+                          </td>
+                          <td style={{ minWidth: 120 }}>
+                            {isMercadoLibreChannel(option) ? (
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={formatInputNumber(
+                                  modal.promoDiscountRates[option.code] || 0,
+                                )}
+                                onChange={(e) =>
+                                  updatePromoDiscount(
+                                    option.code,
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            ) : (
+                              <span className="small">No aplica</span>
+                            )}
+                          </td>
+                          <td style={{ minWidth: 120 }}>
+                            {isMercadoLibreChannel(option) && result.valid
+                              ? moneyWithCents(
+                                  promoListPrice(
+                                    result.roundedPrice,
+                                    modal.promoDiscountRates[option.code] || 0,
+                                  ),
+                                )
+                              : "-"}
                           </td>
                           <td style={{ minWidth: 90 }}>
                             <input

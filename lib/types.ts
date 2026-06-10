@@ -26,7 +26,12 @@ export type Product = {
 
 export type RoundingMode = "nearest" | "up" | "down";
 
-export type ChannelType = "mercadolibre" | "directo" | "web" | "posnet" | "otro";
+export type ChannelType =
+  | "mercadolibre"
+  | "directo"
+  | "web"
+  | "posnet"
+  | "otro";
 
 export type MercadoLibreInstallmentFee = {
   id?: string;
@@ -109,5 +114,6 @@ export type ProductChannelMargin = {
   manual_shipping_amount?: number | null;
   sales_commission_rate?: number | null;
   sale_applies_vat?: boolean | null;
+  promo_discount_rate?: number | null;
   updated_at?: string;
 };
