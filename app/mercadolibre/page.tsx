@@ -54,6 +54,8 @@ export default function MercadoLibrePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showChannelForm, setShowChannelForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -169,6 +171,7 @@ export default function MercadoLibrePage() {
 
     setMessage(`Canal guardado: ${payload.code}`);
     setInstallmentForm(emptyInstallment);
+    setShowChannelForm(false);
     await loadData();
   }
 
@@ -201,6 +204,7 @@ export default function MercadoLibrePage() {
 
     setMessage(`Comisión por categoría guardada: ${payload.category}`);
     setCategoryForm(emptyCategory);
+    setShowCategoryForm(false);
     await loadData();
   }
 
@@ -244,14 +248,34 @@ export default function MercadoLibrePage() {
       applies_structure: defaultFlag(item.applies_structure, isMl),
       applies_vat: defaultFlag(item.applies_vat, isMl)
     });
+    setShowCategoryForm(false);
+    setShowChannelForm(true);
     setMessage(`Editando ${item.code}.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function editCategory(item: MercadoLibreCategoryFee) {
     setCategoryForm({ ...emptyCategory, ...item });
+    setShowChannelForm(false);
+    setShowCategoryForm(true);
     setMessage(`Editando categoría ${item.category}.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function startNewChannel() {
+    setInstallmentForm(emptyInstallment);
+    setMessage(null);
+    setError(null);
+    setShowCategoryForm(false);
+    setShowChannelForm((current) => !current);
+  }
+
+  function startNewCategory() {
+    setCategoryForm(emptyCategory);
+    setMessage(null);
+    setError(null);
+    setShowChannelForm(false);
+    setShowCategoryForm((current) => !current);
   }
 
   return (
@@ -266,49 +290,98 @@ export default function MercadoLibrePage() {
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}
 
-      <section className="card channel-card" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Condiciones de venta / canales</h2>
-        <p className="small">Configurá canales como MercadoLibre, efectivo, transferencia, Tienda Nube, Posnet u otros. Los checks definen qué costos/impuestos aplican en el cálculo.</p>
-        <form onSubmit={saveInstallment}>
-          <div className="channel-form-grid">
-            <div className="field"><label>Código *</label><input value={installmentForm.code} onChange={(e) => updateInstallment("code", e.target.value)} placeholder="EF, MP6, TN" required /></div>
-            <div className="field"><label>Nombre *</label><input value={installmentForm.name} onChange={(e) => updateInstallment("name", e.target.value)} placeholder="Efectivo / ML Premium 6 cuotas" required /></div>
-            <div className="field"><label>Tipo de canal</label><select value={installmentForm.channel_type || "mercadolibre"} onChange={(e) => applyChannelPreset(e.target.value)}><option value="mercadolibre">MercadoLibre</option><option value="directo">Directo / efectivo</option><option value="web">Web / Tienda Nube</option><option value="posnet">Posnet</option><option value="otro">Otro</option></select></div>
-            <div className="field"><label>Cuotas</label><input type="number" min="0" value={numberValue(installmentForm.installment_count)} onChange={(e) => updateInstallment("installment_count", toNumber(e.target.value))} /></div>
-            <div className="field"><label>Costo canal / cuotas %</label><input type="number" step="0.01" value={installmentForm.financing_fee_rate} onChange={(e) => updateInstallment("financing_fee_rate", Number(e.target.value))} /></div>
-            <div className="field"><label>Estado</label><select value={installmentForm.active ? "true" : "false"} onChange={(e) => updateInstallment("active", e.target.value === "true")}><option value="true">Activo</option><option value="false">Inactivo</option></select></div>
+      <section className="card channel-actions-card">
+        <div className="channel-actions-header">
+          <div>
+            <h2 style={{ marginTop: 0, marginBottom: 6 }}>Configuración de canales y categorías</h2>
+            <p className="small" style={{ marginBottom: 0 }}>Las tablas quedan siempre visibles. Usá estos botones para agregar o editar información sin recargar la pantalla.</p>
           </div>
-
-          <div className="channel-flags">
-            <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_marketplace_fee)} onChange={(e) => updateInstallment("applies_marketplace_fee", e.target.checked)} /><span>Aplica comisión ML por categoría</span></label>
-            <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_shipping)} onChange={(e) => updateInstallment("applies_shipping", e.target.checked)} /><span>Aplica envío ML</span></label>
-            <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_iibb)} onChange={(e) => updateInstallment("applies_iibb", e.target.checked)} /><span>Aplica IIBB</span></label>
-            <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_idc)} onChange={(e) => updateInstallment("applies_idc", e.target.checked)} /><span>Aplica IDC</span></label>
-            <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_iigg)} onChange={(e) => updateInstallment("applies_iigg", e.target.checked)} /><span>Aplica IIGG</span></label>
-            <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_structure)} onChange={(e) => updateInstallment("applies_structure", e.target.checked)} /><span>Aplica estructura</span></label>
-            <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_vat)} onChange={(e) => updateInstallment("applies_vat", e.target.checked)} /><span>Aplica IVA venta</span></label>
+          <div className="channel-actions-buttons">
+            <button type="button" className={`button ${showChannelForm ? "secondary" : "ghost"}`} onClick={startNewChannel}>
+              {showChannelForm ? "Ocultar canal" : "Agregar canal"}
+            </button>
+            <button type="button" className={`button ${showCategoryForm ? "secondary" : "ghost"}`} onClick={startNewCategory}>
+              {showCategoryForm ? "Ocultar categoría" : "Agregar categoría"}
+            </button>
           </div>
-
-          <div className="channel-footer">
-            <div className="field channel-notes"><label>Notas</label><input value={installmentForm.notes || ""} onChange={(e) => updateInstallment("notes", e.target.value)} /></div>
-            <button className="button" disabled={saving}>{saving ? "Guardando..." : "Guardar canal"}</button>
-          </div>
-        </form>
+        </div>
       </section>
 
-      <section className="card channel-card" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Comisiones por categoría / canal</h2>
-        <p className="small">Esta comisión cambia según la categoría del producto y se usa solo en canales que tengan activo “Aplica comisión ML por categoría”.</p>
-        <form onSubmit={saveCategory}>
-          <div className="category-form-grid">
-            <div className="field"><label>Categoría *</label><input value={categoryForm.category} onChange={(e) => updateCategory("category", e.target.value)} placeholder="TV" required /></div>
-            <div className="field"><label>Comisión MercadoLibre %</label><input type="number" step="0.01" value={categoryForm.marketplace_fee_rate} onChange={(e) => updateCategory("marketplace_fee_rate", Number(e.target.value))} /></div>
-            <div className="field"><label>Estado</label><select value={categoryForm.active ? "true" : "false"} onChange={(e) => updateCategory("active", e.target.value === "true")}><option value="true">Activa</option><option value="false">Inactiva</option></select></div>
-            <div className="field"><label>Notas</label><input value={categoryForm.notes || ""} onChange={(e) => updateCategory("notes", e.target.value)} /></div>
+      {showChannelForm && (
+        <section className="card channel-card channel-editor-card" style={{ marginBottom: 20 }}>
+          <div className="section-title-row">
+            <div>
+              <h2 style={{ marginTop: 0, marginBottom: 6 }}>Condiciones de venta / canales</h2>
+              <p className="small" style={{ marginBottom: 0 }}>Configurá canales como MercadoLibre, efectivo, transferencia, Tienda Nube, Posnet u otros. Los checks definen qué costos/impuestos aplican en el cálculo.</p>
+            </div>
+            <button
+              type="button"
+              className="button ghost"
+              onClick={() => {
+                setShowChannelForm(false);
+                setInstallmentForm(emptyInstallment);
+              }}
+            >
+              Cerrar
+            </button>
           </div>
-          <button className="button" disabled={saving} style={{ marginTop: 14 }}>{saving ? "Guardando..." : "Guardar categoría"}</button>
-        </form>
-      </section>
+          <form onSubmit={saveInstallment}>
+            <div className="channel-form-grid">
+              <div className="field"><label>Código *</label><input value={installmentForm.code} onChange={(e) => updateInstallment("code", e.target.value)} placeholder="EF, MP6, TN" required /></div>
+              <div className="field"><label>Nombre *</label><input value={installmentForm.name} onChange={(e) => updateInstallment("name", e.target.value)} placeholder="Efectivo / ML Premium 6 cuotas" required /></div>
+              <div className="field"><label>Tipo de canal</label><select value={installmentForm.channel_type || "mercadolibre"} onChange={(e) => applyChannelPreset(e.target.value)}><option value="mercadolibre">MercadoLibre</option><option value="directo">Directo / efectivo</option><option value="web">Web / Tienda Nube</option><option value="posnet">Posnet</option><option value="otro">Otro</option></select></div>
+              <div className="field"><label>Cuotas</label><input type="number" min="0" value={numberValue(installmentForm.installment_count)} onChange={(e) => updateInstallment("installment_count", toNumber(e.target.value))} /></div>
+              <div className="field"><label>Costo canal / cuotas %</label><input type="number" step="0.01" value={installmentForm.financing_fee_rate} onChange={(e) => updateInstallment("financing_fee_rate", Number(e.target.value))} /></div>
+              <div className="field"><label>Estado</label><select value={installmentForm.active ? "true" : "false"} onChange={(e) => updateInstallment("active", e.target.value === "true")}><option value="true">Activo</option><option value="false">Inactivo</option></select></div>
+            </div>
+
+            <div className="channel-flags">
+              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_marketplace_fee)} onChange={(e) => updateInstallment("applies_marketplace_fee", e.target.checked)} /><span>Aplica comisión ML por categoría</span></label>
+              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_shipping)} onChange={(e) => updateInstallment("applies_shipping", e.target.checked)} /><span>Aplica envío ML</span></label>
+              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_iibb)} onChange={(e) => updateInstallment("applies_iibb", e.target.checked)} /><span>Aplica IIBB</span></label>
+              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_idc)} onChange={(e) => updateInstallment("applies_idc", e.target.checked)} /><span>Aplica IDC</span></label>
+              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_iigg)} onChange={(e) => updateInstallment("applies_iigg", e.target.checked)} /><span>Aplica IIGG</span></label>
+              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_structure)} onChange={(e) => updateInstallment("applies_structure", e.target.checked)} /><span>Aplica estructura</span></label>
+              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_vat)} onChange={(e) => updateInstallment("applies_vat", e.target.checked)} /><span>Aplica IVA venta</span></label>
+            </div>
+
+            <div className="channel-footer">
+              <div className="field channel-notes"><label>Notas</label><input value={installmentForm.notes || ""} onChange={(e) => updateInstallment("notes", e.target.value)} /></div>
+              <button className="button" disabled={saving}>{saving ? "Guardando..." : "Guardar canal"}</button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {showCategoryForm && (
+        <section className="card channel-card channel-editor-card" style={{ marginBottom: 20 }}>
+          <div className="section-title-row">
+            <div>
+              <h2 style={{ marginTop: 0, marginBottom: 6 }}>Comisiones por categoría / canal</h2>
+              <p className="small" style={{ marginBottom: 0 }}>Esta comisión cambia según la categoría del producto y se usa solo en canales que tengan activo “Aplica comisión ML por categoría”.</p>
+            </div>
+            <button
+              type="button"
+              className="button ghost"
+              onClick={() => {
+                setShowCategoryForm(false);
+                setCategoryForm(emptyCategory);
+              }}
+            >
+              Cerrar
+            </button>
+          </div>
+          <form onSubmit={saveCategory}>
+            <div className="category-form-grid">
+              <div className="field"><label>Categoría *</label><input value={categoryForm.category} onChange={(e) => updateCategory("category", e.target.value)} placeholder="TV" required /></div>
+              <div className="field"><label>Comisión MercadoLibre %</label><input type="number" step="0.01" value={categoryForm.marketplace_fee_rate} onChange={(e) => updateCategory("marketplace_fee_rate", Number(e.target.value))} /></div>
+              <div className="field"><label>Estado</label><select value={categoryForm.active ? "true" : "false"} onChange={(e) => updateCategory("active", e.target.value === "true")}><option value="true">Activa</option><option value="false">Inactiva</option></select></div>
+              <div className="field"><label>Notas</label><input value={categoryForm.notes || ""} onChange={(e) => updateCategory("notes", e.target.value)} /></div>
+            </div>
+            <button className="button" disabled={saving} style={{ marginTop: 14 }}>{saving ? "Guardando..." : "Guardar categoría"}</button>
+          </form>
+        </section>
+      )}
 
       <section className="channel-tables">
         <div className="card channel-table-card">

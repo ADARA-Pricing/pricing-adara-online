@@ -28,7 +28,7 @@ export function PageHero({
       <div className="nav prices-hero-nav page-hero-actions">
         {onRefresh && (
           <button className="button ghost page-refresh-button" onClick={onRefresh} type="button">
-            ↻ Actualizar
+            Actualizar
           </button>
         )}
         <AppNav onLogout={onLogout} />
