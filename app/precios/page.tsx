@@ -772,18 +772,21 @@ export default function PricesPage() {
   const otherRows = currentRows.filter((row) => row.option.code !== "MC");
 
   return (
-    <main className="container wide">
-      <header className="header">
-        <div className="brand">
-          <h1>Precios</h1>
-          <p>
-            Buscá un producto, abrí el resumen y definí el margen deseado o la
-            ganancia neta por canal.
-          </p>
+    <main className="container wide prices-page">
+      <header className="header prices-hero">
+        <div className="prices-hero-left">
+          <div className="prices-hero-icon">⌁</div>
+          <div className="brand">
+            <h1>Precios</h1>
+            <p>
+              Buscá un producto, abrí el resumen y definí el margen deseado o la
+              ganancia neta por canal.
+            </p>
+          </div>
         </div>
-        <div className="nav">
+        <div className="nav prices-hero-nav">
           <button className="button ghost" onClick={loadData}>
-            Actualizar
+            ↻ Actualizar
           </button>
           <AppNav onLogout={logout} />
         </div>
