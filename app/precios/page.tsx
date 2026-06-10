@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppNav } from "@/components/AppNav";
+import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
   calculatePriceSummary,
@@ -773,24 +773,12 @@ export default function PricesPage() {
 
   return (
     <main className="container wide prices-page">
-      <header className="header prices-hero">
-        <div className="prices-hero-left">
-          <div className="prices-hero-icon">⌁</div>
-          <div className="brand">
-            <h1>Precios</h1>
-            <p>
-              Buscá un producto, abrí el resumen y definí el margen deseado o la
-              ganancia neta por canal.
-            </p>
-          </div>
-        </div>
-        <div className="nav prices-hero-nav">
-          <button className="button ghost" onClick={loadData}>
-            Actualizar
-          </button>
-          <AppNav onLogout={logout} />
-        </div>
-      </header>
+      <PageHero
+        title="Precios"
+        description="Buscá un producto, abrí el resumen y definí el margen deseado o la ganancia neta por canal."
+        onRefresh={loadData}
+        onLogout={logout}
+      />
 
       {error && <div className="message error">{error}</div>}
       {message && <div className="message success">{message}</div>}

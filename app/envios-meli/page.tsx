@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppNav } from "@/components/AppNav";
+import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import { money, toNumber } from "@/lib/pricing";
 import type { MercadoLibreShippingCost, Product } from "@/lib/types";
@@ -133,16 +133,12 @@ export default function EnviosMeliPage() {
 
   return (
     <main className="container wide">
-      <header className="header">
-        <div className="brand">
-          <h1>Envíos</h1>
-          <p>Costos de envío por producto. Por ahora usamos estos valores para MercadoLibre, y queda preparado para otros canales.</p>
-        </div>
-        <div className="nav">
-          <button className="button ghost" onClick={loadData}>Actualizar</button>
-          <AppNav onLogout={logout} />
-        </div>
-      </header>
+      <PageHero
+        title="Envíos"
+        description="Costos de envío por producto. Por ahora usamos estos valores para MercadoLibre, y queda preparado para otros canales."
+        onRefresh={loadData}
+        onLogout={logout}
+      />
 
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}

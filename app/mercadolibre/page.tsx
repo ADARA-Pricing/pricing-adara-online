@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppNav } from "@/components/AppNav";
+import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import { percent, toNumber } from "@/lib/pricing";
 import type { MercadoLibreCategoryFee, MercadoLibreInstallmentFee } from "@/lib/types";
@@ -256,16 +256,12 @@ export default function MercadoLibrePage() {
 
   return (
     <main className="container wide">
-      <header className="header">
-        <div className="brand">
-          <h1>Costo x canal</h1>
-          <p>Configuración separada de costos, financiación y comisiones por categoría/canal</p>
-        </div>
-        <div className="nav">
-          <button className="button ghost" onClick={loadData}>Actualizar</button>
-          <AppNav onLogout={logout} />
-        </div>
-      </header>
+      <PageHero
+        title="Costo x canal"
+        description="Configuración separada de costos, financiación y comisiones por categoría/canal"
+        onRefresh={loadData}
+        onLogout={logout}
+      />
 
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}

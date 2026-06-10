@@ -40,3 +40,11 @@ Si ya habías ejecutado `002_channels_pricing.sql`, no pasa nada. La nueva versi
 
 ## v5 - Envíos Meli
 Ejecutar `database/005_meli_shipping_costs.sql` en Supabase. Agrega la pestaña `/envios-meli` y suma costo fijo + envío Meli al cálculo de `/precios`.
+
+
+## v6.4
+- Ajusta los checks del modal de precios: Aplicar % a todos / Aplicar margen a todos.
+- El envío de MercadoLibre se carga con IVA incluido y se descuenta neto en rentabilidad dividiendo por 1.21.
+
+## v6.5
+- Corrige comisión/costo de cuotas de MercadoLibre: se calcula sobre precio de venta con IVA y se divide por 1.21 para llevarlo a neto, porque MercadoLibre factura la comisión con IVA 21%.

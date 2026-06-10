@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { AppNav } from "@/components/AppNav";
+import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 
 export default function ChannelsPage() {
@@ -15,13 +15,11 @@ export default function ChannelsPage() {
 
   return (
     <main className="container">
-      <header className="header">
-        <div className="brand">
-          <h1>Canales</h1>
-          <p>Esta sección fue separada en MercadoLibre e Impuestos.</p>
-        </div>
-        <AppNav onLogout={logout} />
-      </header>
+      <PageHero
+        title="Canales"
+        description="Esta sección fue separada en MercadoLibre e Impuestos."
+        onLogout={logout}
+      />
       <section className="card">
         <p>Para configurar MercadoLibre entrá en la solapa <strong>MercadoLibre</strong>. Para IIBB, IDC, IIGG y estructura entrá en <strong>Impuestos</strong>.</p>
         <div className="nav" style={{ marginTop: 16 }}>

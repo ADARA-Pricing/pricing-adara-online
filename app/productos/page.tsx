@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import type { Product } from "@/lib/types";
 import { money, toNumber } from "@/lib/pricing";
-import { AppNav } from "@/components/AppNav";
+import { PageHero } from "@/components/PageHero";
 
 
 const importHeaders = [
@@ -409,16 +409,12 @@ export default function ProductsPage() {
 
   return (
     <main className="container">
-      <header className="header">
-        <div className="brand">
-          <h1>Productos</h1>
-          <p>Carga y actualización de productos por SKU</p>
-        </div>
-        <div className="nav">
-          <button className="button ghost" onClick={loadProducts}>Actualizar</button>
-          <AppNav onLogout={logout} />
-        </div>
-      </header>
+      <PageHero
+        title="Productos"
+        description="Carga y actualización de productos por SKU"
+        onRefresh={loadProducts}
+        onLogout={logout}
+      />
 
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppNav } from "@/components/AppNav";
+import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import { defaultTaxSettings, percent } from "@/lib/pricing";
 import type { TaxSettings } from "@/lib/types";
@@ -78,13 +78,12 @@ export default function TaxesPage() {
 
   return (
     <main className="container">
-      <header className="header">
-        <div className="brand">
-          <h1>Impuestos</h1>
-          <p>Configuración global separada de canales y comisiones</p>
-        </div>
-        <AppNav onLogout={logout} />
-      </header>
+      <PageHero
+        title="Impuestos"
+        description="Configuración global separada de canales y comisiones"
+        onRefresh={loadData}
+        onLogout={logout}
+      />
 
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}
