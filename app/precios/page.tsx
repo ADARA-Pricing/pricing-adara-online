@@ -441,13 +441,6 @@ export default function PricesPage() {
                     </div>
                   </div>
 
-                  <div className="grid two compact-input-grid" style={{ marginTop: 10 }}>
-                    <div className="field">
-                      <label>Estructura $</label>
-                      <input type="text" inputMode="decimal" value={formatInputNumber(modal.structureAmounts.MC || 0, 0)} onChange={(e) => updateChannelExtra("MC", "structureAmounts", e.target.value)} />
-                    </div>
-                  </div>
-
                   <div className="sync-options">
                     <label className="checkbox-row">
                       <input type="checkbox" checked={modal.syncMode === "margin"} onChange={(e) => setSyncMode(e.target.checked ? "margin" : "none")} />
@@ -490,13 +483,11 @@ export default function PricesPage() {
                     </div>
                   </div>
                   <button className="button ghost tax-reset-button" type="button" onClick={resetTaxOverrides}>Restablecer impuestos globales</button>
-                </div>
 
-                <div className="pricing-panel summary-panel">
-                  <div className="field" style={{ marginBottom: 10 }}><label>Resumen</label><select value={modal.summaryChannelCode} onChange={(e) => setSummaryChannel(e.target.value)}>{currentRows.map((row) => <option key={row.option.code} value={row.option.code}>{row.option.code} - {row.option.name}</option>)}</select></div>
-                  {selectedSummaryRow?.result?.valid ? (
-                    <div className="calc-summary">
-                      <div className="field inline-price-field"><label>Precio de venta</label><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides[selectedSummaryRow.option.code] ?? selectedSummaryRow.result.roundedPrice, 0)} onChange={(e) => updateSalePrice(selectedSummaryRow.option.code, e.target.value)} /></div>
+                  {selectedSummaryRow?.result?.valid && (
+                    <div className="summary-extra-box">
+                      <h4>Costos extra del canal elegido</h4>
+                      <p className="small">Estos valores aplican solo al canal seleccionado en el resumen.</p>
                       <div className="grid two compact-input-grid summary-extra-grid">
                         {allowsExtraSalesCommission(selectedSummaryRow.option) && (
                           <div className="field">
@@ -515,6 +506,15 @@ export default function PricesPage() {
                           <input type="text" inputMode="decimal" value={formatInputNumber(modal.structureAmounts[selectedSummaryRow.option.code] || 0, 0)} onChange={(e) => updateChannelExtra(selectedSummaryRow.option.code, "structureAmounts", e.target.value)} />
                         </div>
                       </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pricing-panel summary-panel">
+                  <div className="field" style={{ marginBottom: 10 }}><label>Resumen</label><select value={modal.summaryChannelCode} onChange={(e) => setSummaryChannel(e.target.value)}>{currentRows.map((row) => <option key={row.option.code} value={row.option.code}>{row.option.code} - {row.option.name}</option>)}</select></div>
+                  {selectedSummaryRow?.result?.valid ? (
+                    <div className="calc-summary">
+                      <div className="field inline-price-field"><label>Precio de venta</label><input type="text" inputMode="decimal" value={formatInputNumber(modal.priceOverrides[selectedSummaryRow.option.code] ?? selectedSummaryRow.result.roundedPrice, 0)} onChange={(e) => updateSalePrice(selectedSummaryRow.option.code, e.target.value)} /></div>
                       <div>IVA venta: -{moneyWithCents(selectedSummaryRow.result.vatAmount)}</div>
                       <div>Precio sin IVA: {moneyWithCents(selectedSummaryRow.result.netSalePrice)}</div>
                       <div>Comisión canal: -{moneyWithCents(selectedSummaryRow.result.marketplaceFeeAmount)}</div>

@@ -292,3 +292,13 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 .summary-extra-grid .field label {
   font-size: 12px;
 }
+
+.summary-extra-box {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.summary-extra-box h4 {
+  margin: 0 0 6px;
+}
