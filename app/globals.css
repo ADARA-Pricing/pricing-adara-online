@@ -1983,3 +1983,204 @@ td strong {
 .prices-page .nested-table td:nth-child(6) {
   font-weight: 800;
 }
+
+
+/* v7.30 - Simulador */
+.simulator-page .prices-hero-icon {
+  font-size: 22px;
+}
+
+.simulator-main-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(340px, 0.9fr);
+  gap: 24px;
+  margin-bottom: 22px;
+}
+
+.simulator-form-card,
+.simulator-summary-card {
+  min-width: 0;
+}
+
+.simulator-section-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.simulator-section-title h2 {
+  margin: 0 0 4px;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.simulator-title-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 900;
+  box-shadow: inset 0 0 0 1px #dbeafe;
+}
+
+.simulator-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #d8e1ee;
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 42px;
+  background: #ffffff;
+}
+
+.segmented-control button {
+  border: 0;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 10px 12px;
+}
+
+.segmented-control button + button {
+  border-left: 1px solid #d8e1ee;
+}
+
+.segmented-control button.active {
+  color: #1d4ed8;
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1px #bfdbfe;
+}
+
+.simulator-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.simulator-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.simulator-summary-list > div {
+  min-height: 42px;
+  border: 1px solid #d8e1ee;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background: #ffffff;
+}
+
+.simulator-summary-list span {
+  color: #475569;
+}
+
+.simulator-summary-list strong {
+  color: #0f172a;
+  text-align: right;
+}
+
+.simulator-summary-list .highlight {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.simulator-summary-list .highlight span,
+.simulator-summary-list .highlight strong,
+.simulator-summary-list > div:nth-child(1) strong,
+.simulator-summary-list > div:nth-child(4) strong,
+.simulator-summary-list > div:nth-child(5) strong {
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.simulator-results-card {
+  padding: 24px;
+}
+
+.simulator-table th,
+.simulator-table td {
+  padding: 13px 14px;
+  vertical-align: middle;
+}
+
+.simulator-table td:first-child {
+  min-width: 240px;
+}
+
+.rentability-pill {
+  display: inline-flex;
+  min-width: 74px;
+  justify-content: center;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-weight: 800;
+}
+
+.rentability-pill.positive {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.rentability-pill.negative {
+  background: #fee2e2;
+  color: #e11d48;
+}
+
+.positive-money {
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.negative-money {
+  color: #e11d48;
+  font-weight: 800;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  display: inline-flex;
+  border-radius: 999px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.status-dot.positive { background: #22c55e; }
+.status-dot.warning { background: #f59e0b; }
+.status-dot.negative { background: #e11d48; }
+
+@media (max-width: 1050px) {
+  .simulator-main-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .simulator-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .simulator-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

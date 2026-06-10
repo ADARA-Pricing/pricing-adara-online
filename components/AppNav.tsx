@@ -9,6 +9,7 @@ const items = [
   { href: "/envios-meli", label: "Envíos" },
   { href: "/impuestos", label: "Impuestos" },
   { href: "/precios", label: "Precios" },
+  { href: "/simulador", label: "Simulador" },
 ];
 
 export function AppNav({ onLogout }: { onLogout?: () => void }) {
