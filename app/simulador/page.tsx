@@ -16,6 +16,7 @@ import type {
   MercadoLibreCategoryFee,
   MercadoLibreInstallmentFee,
   MercadoLibrePriceOption,
+  MercadoLibreShippingCost,
   Product,
   TaxSettings,
 } from "@/lib/types";
@@ -89,6 +90,8 @@ export default function SimulatorPage() {
   const [lastEdited, setLastEdited] = useState<LastEdited>("price");
   const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
   const [categories, setCategories] = useState<MercadoLibreCategoryFee[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +110,7 @@ export default function SimulatorPage() {
     setLoading(true);
     setError(null);
 
-    const [channelsResponse, categoriesResponse, taxesResponse] = await Promise.all([
+    const [channelsResponse, categoriesResponse, taxesResponse, productsResponse, shippingResponse] = await Promise.all([
       supabase
         .from("mercadolibre_installment_fees")
         .select("*")
@@ -122,6 +125,14 @@ export default function SimulatorPage() {
         .select("*")
         .eq("key", "default")
         .maybeSingle(),
+      supabase
+        .from("products")
+        .select("*")
+        .eq("status", "active"),
+      supabase
+        .from("mercadolibre_shipping_costs")
+        .select("*")
+        .eq("active", true),
     ]);
 
     setLoading(false);
@@ -134,6 +145,12 @@ export default function SimulatorPage() {
 
     if (taxesResponse.error) setError(taxesResponse.error.message);
     else if (taxesResponse.data) setTaxes(taxesResponse.data as TaxSettings);
+
+    if (productsResponse.error) setError(productsResponse.error.message);
+    else setProducts((productsResponse.data || []) as Product[]);
+
+    if (shippingResponse.error) setError(shippingResponse.error.message);
+    else setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
   }
 
   useEffect(() => {
@@ -144,6 +161,49 @@ export default function SimulatorPage() {
 
   function update<K extends keyof SimulationForm>(key: K, value: SimulationForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function averageShippingForCategory(category: string) {
+    const normalizedCategory = category.trim().toLowerCase();
+    if (!normalizedCategory) return null;
+
+    const productIds = new Set(
+      products
+        .filter((product) => (product.category || "").trim().toLowerCase() === normalizedCategory)
+        .map((product) => product.id)
+        .filter(Boolean),
+    );
+
+    const productSkus = new Set(
+      products
+        .filter((product) => (product.category || "").trim().toLowerCase() === normalizedCategory)
+        .map((product) => product.sku)
+        .filter(Boolean),
+    );
+
+    const values = shippingCosts
+      .filter((shipping) => {
+        const matchesId = shipping.product_id && productIds.has(shipping.product_id);
+        const matchesSku = shipping.sku && productSkus.has(shipping.sku);
+        return matchesId || matchesSku;
+      })
+      .map((shipping) => Number(shipping.fixed_fee_amount || 0) + Number(shipping.shipping_cost_amount || 0))
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  }
+
+  function updateCategory(category: string) {
+    const averageShipping = averageShippingForCategory(category);
+    setForm((current) => ({
+      ...current,
+      category,
+      shippingGross:
+        averageShipping !== null
+          ? String(Math.round(averageShipping))
+          : current.shippingGross,
+    }));
   }
 
   function updateSalePrice(value: string) {
@@ -320,6 +380,8 @@ export default function SimulatorPage() {
       Number(summary?.idcAmount || 0) +
       Number(summary?.incomeTaxAmount || 0);
 
+    const averageShippingForSelectedCategory = averageShippingForCategory(form.category);
+
     return {
       costWithoutVat,
       grossSalePrice: linkedSalePrice,
@@ -327,6 +389,7 @@ export default function SimulatorPage() {
       productVatRate,
       shippingGross,
       shippingNet,
+      averageShippingForSelectedCategory,
       categoryFee,
       categoryCommissionAmount,
       taxesAppliedRate,
@@ -335,7 +398,7 @@ export default function SimulatorPage() {
       rows,
       summary,
     };
-  }, [form, categories, options, taxes, lastEdited]);
+  }, [form, categories, options, taxes, lastEdited, products, shippingCosts]);
 
   return (
     <main className="container wide simulator-page">
@@ -372,7 +435,7 @@ export default function SimulatorPage() {
               <label>Categoría</label>
               <select
                 value={form.category}
-                onChange={(event) => update("category", event.target.value)}
+                onChange={(event) => updateCategory(event.target.value)}
               >
                 <option value="">Seleccionar categoría</option>
                 {categoryNames.map((category) => (
@@ -447,6 +510,9 @@ export default function SimulatorPage() {
                 onChange={(event) => update("shippingGross", event.target.value)}
                 placeholder="0"
               />
+              <span className="small">
+                Se completa con el promedio de envío de la categoría, pero podés modificarlo.
+              </span>
             </div>
           </div>
 
@@ -528,6 +594,7 @@ export default function SimulatorPage() {
           <div className="simulator-base-list">
             <div><span>Categoría</span><strong>{form.category || "-"}</strong></div>
             <div><span>Comisión categoría</span><strong>{percent(simulation.categoryFee?.marketplace_fee_rate || 0)}</strong></div>
+            <div><span>Envío promedio categoría</span><strong>{simulation.averageShippingForSelectedCategory ? moneyWithCents(simulation.averageShippingForSelectedCategory) : "-"}</strong></div>
             <div><span>IIBB</span><strong>{percent(taxes.iibb_rate || 0)}</strong></div>
             <div><span>IDC</span><strong>{percent(taxes.idc_rate || 0)}</strong></div>
             <div><span>IIGG</span><strong>{percent(taxes.iigg_rate || 0)}</strong></div>

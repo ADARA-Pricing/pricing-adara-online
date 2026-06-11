@@ -2444,3 +2444,52 @@ td strong {
     grid-column: auto;
   }
 }
+
+
+/* v7.32 - Simulador: resumen alineado y envío promedio por categoría */
+.simulator-layout-grid {
+  grid-template-columns: minmax(0, 1.5fr) minmax(380px, 0.85fr) minmax(260px, 0.55fr);
+}
+
+.simulator-summary-list > div {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  column-gap: 14px;
+}
+
+.simulator-summary-list span {
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.simulator-summary-list strong {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+  min-width: max-content;
+  font-variant-numeric: tabular-nums;
+}
+
+.simulator-summary-list strong small {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.simulator-summary-card {
+  overflow: hidden;
+}
+
+.simulator-base-list > div {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+}
+
+@media (max-width: 1250px) {
+  .simulator-layout-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
