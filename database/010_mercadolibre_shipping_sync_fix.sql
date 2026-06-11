@@ -1,0 +1,2 @@
+-- v7.36 no requiere SQL nuevo si ya ejecutaste 009_mercadolibre_connection.sql.
+-- Este archivo queda como marca de versión.
