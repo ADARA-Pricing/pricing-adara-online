@@ -2493,3 +2493,113 @@ td strong {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+
+/* v7.33 - Simulador: resumen rápido más prolijo y alineado */
+.simulator-summary-card {
+  padding: 24px !important;
+}
+
+.simulator-summary-card .simulator-section-title {
+  margin-bottom: 20px;
+}
+
+.simulator-summary-list {
+  gap: 10px !important;
+}
+
+.simulator-summary-list > div,
+.simulator-summary-list > div:first-child,
+.simulator-summary-list > div.highlight,
+.simulator-summary-list > div.stronger {
+  display: grid !important;
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, max-content);
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 14px !important;
+  border: 1px solid #d8e1ee !important;
+  border-radius: 13px !important;
+  background: #ffffff;
+  column-gap: 18px;
+}
+
+.simulator-summary-list > div.highlight,
+.simulator-summary-list > div.stronger {
+  background: #f8fbff;
+  border-color: #bfdbfe !important;
+}
+
+.simulator-summary-list > div.stronger {
+  background: linear-gradient(180deg, #eff6ff 0%, #eaf3ff 100%);
+}
+
+.simulator-summary-list span {
+  display: block;
+  min-width: 0;
+  color: #334155;
+  font-size: 15px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.simulator-summary-list strong {
+  display: inline-flex !important;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  text-align: right;
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.15;
+  font-weight: 800;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.simulator-summary-list strong small {
+  font-size: 11px;
+  line-height: 1;
+  color: #334155;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.simulator-summary-list .highlight span,
+.simulator-summary-list .highlight strong,
+.simulator-summary-list .stronger span,
+.simulator-summary-list .stronger strong {
+  color: #1d4ed8;
+}
+
+.simulator-summary-list > div:nth-child(4) strong,
+.simulator-summary-list > div:nth-child(5) strong {
+  color: #1d4ed8;
+}
+
+@media (max-width: 1250px) {
+  .simulator-summary-list > div,
+  .simulator-summary-list > div:first-child,
+  .simulator-summary-list > div.highlight,
+  .simulator-summary-list > div.stronger {
+    grid-template-columns: minmax(130px, 1fr) minmax(130px, max-content);
+  }
+}
+
+@media (max-width: 700px) {
+  .simulator-summary-list > div,
+  .simulator-summary-list > div:first-child,
+  .simulator-summary-list > div.highlight,
+  .simulator-summary-list > div.stronger {
+    grid-template-columns: 1fr;
+    row-gap: 4px;
+  }
+
+  .simulator-summary-list strong {
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
