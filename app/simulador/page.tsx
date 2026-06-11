@@ -34,6 +34,19 @@ type SimulationForm = {
   shippingGross: string;
 };
 
+type SavedSimulation = {
+  id: string;
+  name: string;
+  category: string | null;
+  cost_without_vat: number;
+  desired_margin_rate: number;
+  sale_price: number;
+  vat_condition: VatCondition;
+  shipping_gross: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 const initialForm: SimulationForm = {
   productName: 'Smart TV Enova 43" Google TV',
   category: "TV",
@@ -92,9 +105,12 @@ export default function SimulatorPage() {
   const [categories, setCategories] = useState<MercadoLibreCategoryFee[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
+  const [savedSimulations, setSavedSimulations] = useState<SavedSimulation[]>([]);
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
   const [loading, setLoading] = useState(true);
+  const [savingSimulation, setSavingSimulation] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -110,7 +126,7 @@ export default function SimulatorPage() {
     setLoading(true);
     setError(null);
 
-    const [channelsResponse, categoriesResponse, taxesResponse, productsResponse, shippingResponse] = await Promise.all([
+    const [channelsResponse, categoriesResponse, taxesResponse, productsResponse, shippingResponse, savedResponse] = await Promise.all([
       supabase
         .from("mercadolibre_installment_fees")
         .select("*")
@@ -133,6 +149,10 @@ export default function SimulatorPage() {
         .from("mercadolibre_shipping_costs")
         .select("*")
         .eq("active", true),
+      supabase
+        .from("simulator_saved_simulations")
+        .select("*")
+        .order("updated_at", { ascending: false }),
     ]);
 
     setLoading(false);
@@ -151,6 +171,9 @@ export default function SimulatorPage() {
 
     if (shippingResponse.error) setError(shippingResponse.error.message);
     else setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
+
+    if (savedResponse.error) setError(savedResponse.error.message);
+    else setSavedSimulations((savedResponse.data || []) as SavedSimulation[]);
   }
 
   useEffect(() => {
@@ -228,6 +251,80 @@ export default function SimulatorPage() {
     });
     setLastEdited("price");
     setError(null);
+    setMessage(null);
+  }
+
+  async function saveSimulation() {
+    const name = form.productName.trim();
+
+    if (!name) {
+      setError("Poné un nombre de producto para guardar la simulación.");
+      return;
+    }
+
+    setSavingSimulation(true);
+    setError(null);
+    setMessage(null);
+
+    const payload = {
+      name,
+      category: form.category || null,
+      cost_without_vat: Number(toNumber(form.costWithoutVat) || 0),
+      desired_margin_rate: Number(simulation.linkedMargin || 0),
+      sale_price: Number(simulation.grossSalePrice || 0),
+      vat_condition: form.vatCondition,
+      shipping_gross: Number(toNumber(form.shippingGross) || 0),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("simulator_saved_simulations").insert(payload);
+
+    setSavingSimulation(false);
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setMessage(`Simulación guardada: ${name}.`);
+    await loadData();
+  }
+
+  function loadSimulation(item: SavedSimulation) {
+    setForm({
+      productName: item.name || "",
+      category: item.category || "",
+      costWithoutVat: String(Math.round(Number(item.cost_without_vat || 0))),
+      desiredMarginRate: formatPercentInput(Number(item.desired_margin_rate || 0)),
+      salePrice: String(Math.round(Number(item.sale_price || 0))),
+      vatCondition: item.vat_condition || "iva_21",
+      shippingGross: String(Math.round(Number(item.shipping_gross || 0))),
+    });
+    setLastEdited("price");
+    setMessage(`Simulación cargada: ${item.name}.`);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function deleteSimulation(item: SavedSimulation) {
+    const confirmed = window.confirm(`¿Eliminar la simulación "${item.name}"?`);
+    if (!confirmed) return;
+
+    setError(null);
+    setMessage(null);
+
+    const { error } = await supabase
+      .from("simulator_saved_simulations")
+      .delete()
+      .eq("id", item.id);
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setMessage(`Simulación eliminada: ${item.name}.`);
+    await loadData();
   }
 
   const categoryNames = useMemo(() => {
@@ -410,6 +507,7 @@ export default function SimulatorPage() {
       />
 
       {error && <div className="message error">{error}</div>}
+      {message && <div className="message success">{message}</div>}
 
       <section className="simulator-layout-grid">
         <div className="card simulator-input-card">
@@ -521,6 +619,9 @@ export default function SimulatorPage() {
           </div>
 
           <div className="simulator-actions simulator-actions-right">
+            <button className="button" type="button" onClick={saveSimulation} disabled={savingSimulation}>
+              {savingSimulation ? "Guardando..." : "Guardar simulación"}
+            </button>
             <button className="button ghost" type="button" onClick={clear}>
               Limpiar
             </button>
@@ -668,6 +769,68 @@ export default function SimulatorPage() {
           </div>
         )}
       </section>
+
+      <section className="card simulator-results-card saved-simulations-card">
+        <div className="simulator-section-title">
+          <span className="simulator-title-icon">▣</span>
+          <div>
+            <h2>Simulaciones guardadas</h2>
+            <p className="small">
+              Guardá escenarios para volver a cargarlos, editarlos o eliminarlos.
+            </p>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table className="simulator-table saved-simulations-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Categoría</th>
+                <th>Costo sin IVA</th>
+                <th>Precio de venta</th>
+                <th>Margen</th>
+                <th>Envío c/IVA</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {savedSimulations.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <strong>{item.name}</strong>
+                  </td>
+                  <td>{item.category || "-"}</td>
+                  <td>{moneyWithCents(item.cost_without_vat || 0)}</td>
+                  <td>{moneyWithCents(item.sale_price || 0)}</td>
+                  <td>
+                    <span className="rentability-pill positive">
+                      {percent(item.desired_margin_rate || 0)}
+                    </span>
+                  </td>
+                  <td>{moneyWithCents(item.shipping_gross || 0)}</td>
+                  <td>
+                    <div className="saved-simulation-actions">
+                      <button className="button ghost" type="button" onClick={() => loadSimulation(item)}>
+                        Cargar
+                      </button>
+                      <button className="button danger ghost" type="button" onClick={() => deleteSimulation(item)}>
+                        Borrar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {savedSimulations.length === 0 && (
+                <tr>
+                  <td colSpan={7}>Todavía no hay simulaciones guardadas.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
     </main>
   );
 }

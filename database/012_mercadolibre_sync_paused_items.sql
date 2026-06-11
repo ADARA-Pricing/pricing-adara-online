@@ -1,0 +1,2 @@
+-- v7.38 no requiere SQL nuevo.
+-- Cambia la sincronización para leer publicaciones activas y pausadas/sin stock.

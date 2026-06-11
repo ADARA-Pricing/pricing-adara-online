@@ -8,6 +8,8 @@ type MeliItem = {
   title?: string;
   seller_custom_field?: string | null;
   price?: number;
+  status?: string;
+  available_quantity?: number;
   shipping?: {
     free_shipping?: boolean;
     mode?: string;
@@ -168,24 +170,30 @@ export async function POST() {
       productsBySku.set(normalizeSku(product.sku), product);
     });
 
-    const itemIds: string[] = [];
-    let offset = 0;
+    const itemIds = new Set<string>();
+    const statusesToSync = ["active", "paused"];
     const limit = 50;
-    let total = 0;
+    const totalsByStatus: Record<string, number> = {};
 
-    do {
-      const data = await meliFetch(
-        `/users/${account.meli_user_id}/items/search?status=active&limit=${limit}&offset=${offset}`,
-        account,
-      );
-      const results = data?.results || [];
-      total = Number(data?.paging?.total || results.length || 0);
-      itemIds.push(...results);
-      offset += limit;
-    } while (offset < total && offset < 1000);
+    for (const status of statusesToSync) {
+      let offset = 0;
+      let total = 0;
+
+      do {
+        const data = await meliFetch(
+          `/users/${account.meli_user_id}/items/search?status=${status}&limit=${limit}&offset=${offset}`,
+          account,
+        );
+        const results = data?.results || [];
+        total = Number(data?.paging?.total || results.length || 0);
+        totalsByStatus[status] = total;
+        results.forEach((id: string) => itemIds.add(id));
+        offset += limit;
+      } while (offset < total && offset < 1000);
+    }
 
     const items: MeliItem[] = [];
-    for (const ids of chunk(itemIds, 20)) {
+    for (const ids of chunk([...itemIds], 20)) {
       const data = await meliFetch(`/items?ids=${ids.join(",")}`, account);
       (Array.isArray(data) ? data : []).forEach((entry: any) => {
         if (entry?.body?.id) items.push(entry.body as MeliItem);
@@ -215,7 +223,7 @@ export async function POST() {
           old_shipping_cost: null,
           new_shipping_cost: null,
           status: "without_sku",
-          message: "La publicación no tiene SKU visible para comparar.",
+          message: `La publicación no tiene SKU visible para comparar. Estado ML: ${item.status || "-"} · Stock ML: ${item.available_quantity ?? "-"}.`,
           created_at: now,
         });
         continue;
@@ -231,7 +239,7 @@ export async function POST() {
             old_shipping_cost: null,
             new_shipping_cost: null,
             status: "sku_not_found",
-            message: "SKU de MercadoLibre no encontrado en productos.",
+            message: `SKU de MercadoLibre no encontrado en productos. Estado ML: ${item.status || "-"} · Stock ML: ${item.available_quantity ?? "-"}.`,
             created_at: now,
           });
           continue;
@@ -257,7 +265,7 @@ export async function POST() {
             old_shipping_cost: oldShippingCost,
             new_shipping_cost: null,
             status: "matched_without_cost",
-            message: "SKU encontrado, pero MercadoLibre no devolvió costo de envío. No se modificó el costo cargado.",
+            message: `SKU encontrado, pero MercadoLibre no devolvió costo de envío. No se modificó el costo cargado. Estado ML: ${item.status || "-"} · Stock ML: ${item.available_quantity ?? "-"}.`,
             created_at: now,
           });
           continue;
@@ -302,6 +310,8 @@ export async function POST() {
     return NextResponse.json({
       ok: true,
       total_items: items.length,
+      statuses_synced: statusesToSync,
+      totals_by_status: totalsByStatus,
       matched,
       updated,
       changed,

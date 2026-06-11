@@ -2844,3 +2844,40 @@ td strong {
   font-size: 12px;
   font-weight: 800;
 }
+
+
+/* v7.39 - Simulaciones guardadas */
+.saved-simulations-card {
+  margin-top: 22px;
+}
+
+.saved-simulations-table td:first-child {
+  min-width: 230px;
+}
+
+.saved-simulation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.button.danger,
+.button.danger.ghost {
+  border-color: #fecdd3;
+  color: #be123c;
+  background: #fff1f2;
+}
+
+.button.danger:hover,
+.button.danger.ghost:hover {
+  border-color: #fb7185;
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
+@media (max-width: 760px) {
+  .saved-simulation-actions {
+    flex-direction: column;
+  }
+}

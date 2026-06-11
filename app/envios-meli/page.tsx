@@ -91,7 +91,7 @@ export default function EnviosMeliPage() {
       }
 
       setLastMeliSync(data);
-      setMessage(`MercadoLibre v7.37 sincronizado. Con costo actualizado: ${data.updated || 0}. Sin costo ML: ${data.no_shipping_cost || 0}.`);
+      setMessage(`MercadoLibre v7.38 sincronizado. Con costo actualizado: ${data.updated || 0}. Sin costo ML: ${data.no_shipping_cost || 0}.`);
       await loadData();
     } catch (error) {
       setError(error instanceof Error ? error.message : "No se pudo sincronizar MercadoLibre.");
@@ -196,10 +196,10 @@ export default function EnviosMeliPage() {
         <div className="meli-integration-header">
           <div>
             <h2 style={{ marginTop: 0, marginBottom: 6 }}>
-              MercadoLibre <span className="version-badge">v7.37</span>
+              MercadoLibre <span className="version-badge">v7.38</span>
             </h2>
             <p className="small" style={{ marginBottom: 0 }}>
-              Conectá tu cuenta para identificar publicaciones por SKU y actualizar automáticamente el costo de envío.
+              Conectá tu cuenta para identificar publicaciones por SKU y actualizar automáticamente el costo de envío, incluyendo publicaciones activas y pausadas/sin stock.
             </p>
           </div>
           <div className="meli-actions">
@@ -239,6 +239,7 @@ export default function EnviosMeliPage() {
         {lastMeliSync && (
           <div className="meli-sync-summary">
             <span>Publicaciones leídas: <strong>{lastMeliSync.total_items || 0}</strong></span>
+            <span>Estados ML: <strong>activas + pausadas</strong></span>
             <span>SKU encontrados: <strong>{lastMeliSync.matched || 0}</strong></span>
             <span>Con costo actualizado: <strong>{lastMeliSync.updated || 0}</strong></span>
             <span>Costo cambiado: <strong>{lastMeliSync.changed || 0}</strong></span>
