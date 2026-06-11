@@ -311,9 +311,9 @@ export default function SimulatorPage() {
         : 0;
 
     const taxesAppliedRate =
-      Number(summary?.iibbRate || 0) +
-      Number(summary?.idcRate || 0) +
-      Number(summary?.iiggRate || 0);
+      Number(taxes.iibb_rate || 0) +
+      Number(taxes.idc_rate || 0) +
+      Number(taxes.iigg_rate || 0);
 
     const taxesAppliedAmount =
       Number(summary?.iibbAmount || 0) +
