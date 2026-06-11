@@ -33,6 +33,9 @@ export default function EnviosMeliPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [meliStatus, setMeliStatus] = useState<{ connected: boolean; account?: { nickname?: string | null; meli_user_id?: number; updated_at?: string | null } | null } | null>(null);
+  const [syncingMeli, setSyncingMeli] = useState(false);
+  const [lastMeliSync, setLastMeliSync] = useState<any | null>(null);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -60,9 +63,47 @@ export default function EnviosMeliPage() {
     else setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
   }
 
+  async function loadMeliStatus() {
+    try {
+      const response = await fetch("/api/mercadolibre/status");
+      const data = await response.json();
+      if (response.ok) setMeliStatus(data);
+    } catch {
+      // Si falla el estado, no bloqueamos la pantalla de envíos.
+    }
+  }
+
+  async function syncMercadoLibreShipping() {
+    setSyncingMeli(true);
+    setMessage(null);
+    setError(null);
+    setLastMeliSync(null);
+
+    try {
+      const response = await fetch("/api/mercadolibre/sync-shipping", {
+        method: "POST",
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data?.error || "No se pudo sincronizar MercadoLibre.");
+        return;
+      }
+
+      setLastMeliSync(data);
+      setMessage(`MercadoLibre sincronizado. SKUs actualizados: ${data.updated || 0}.`);
+      await loadData();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "No se pudo sincronizar MercadoLibre.");
+    } finally {
+      setSyncingMeli(false);
+    }
+  }
+
   useEffect(() => {
     checkSession();
     loadData();
+    loadMeliStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -150,6 +191,58 @@ export default function EnviosMeliPage() {
 
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}
+
+      <section className="card meli-integration-card">
+        <div className="meli-integration-header">
+          <div>
+            <h2 style={{ marginTop: 0, marginBottom: 6 }}>MercadoLibre</h2>
+            <p className="small" style={{ marginBottom: 0 }}>
+              Conectá tu cuenta para identificar publicaciones por SKU y actualizar automáticamente el costo de envío.
+            </p>
+          </div>
+          <div className="meli-actions">
+            <a className="button ghost" href="/api/mercadolibre/connect">
+              {meliStatus?.connected ? "Reconectar cuenta" : "Conectar MercadoLibre"}
+            </a>
+            <button
+              className="button"
+              type="button"
+              disabled={!meliStatus?.connected || syncingMeli}
+              onClick={syncMercadoLibreShipping}
+            >
+              {syncingMeli ? "Sincronizando..." : "Sincronizar envíos ML"}
+            </button>
+          </div>
+        </div>
+
+        <div className="meli-status-grid">
+          <div>
+            <span>Estado</span>
+            <strong>{meliStatus?.connected ? "Conectado" : "Sin conectar"}</strong>
+          </div>
+          <div>
+            <span>Cuenta</span>
+            <strong>{meliStatus?.account?.nickname || "-"}</strong>
+          </div>
+          <div>
+            <span>User ID</span>
+            <strong>{meliStatus?.account?.meli_user_id || "-"}</strong>
+          </div>
+          <div>
+            <span>Última respuesta</span>
+            <strong>{lastMeliSync ? `${lastMeliSync.updated || 0} actualizados` : "-"}</strong>
+          </div>
+        </div>
+
+        {lastMeliSync && (
+          <div className="meli-sync-summary">
+            <span>Publicaciones leídas: <strong>{lastMeliSync.total_items || 0}</strong></span>
+            <span>Actualizados: <strong>{lastMeliSync.updated || 0}</strong></span>
+            <span>SKU no encontrado: <strong>{lastMeliSync.not_found || 0}</strong></span>
+            <span>Sin SKU: <strong>{lastMeliSync.without_sku || 0}</strong></span>
+          </div>
+        )}
+      </section>
 
       <section className="card envios-list-card">
         <div className="envios-list-header">
