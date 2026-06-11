@@ -1,0 +1,2 @@
+-- v7.37 no requiere SQL nuevo.
+-- Cambia la lógica para no pisar costos de envío con $0 cuando MercadoLibre no devuelve costo.

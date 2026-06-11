@@ -2828,3 +2828,19 @@ td strong {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* v7.37 - badge de versión MercadoLibre */
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-size: 12px;
+  font-weight: 800;
+}

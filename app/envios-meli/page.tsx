@@ -91,7 +91,7 @@ export default function EnviosMeliPage() {
       }
 
       setLastMeliSync(data);
-      setMessage(`MercadoLibre sincronizado. SKUs actualizados: ${data.updated || 0}.`);
+      setMessage(`MercadoLibre v7.37 sincronizado. Con costo actualizado: ${data.updated || 0}. Sin costo ML: ${data.no_shipping_cost || 0}.`);
       await loadData();
     } catch (error) {
       setError(error instanceof Error ? error.message : "No se pudo sincronizar MercadoLibre.");
@@ -195,7 +195,9 @@ export default function EnviosMeliPage() {
       <section className="card meli-integration-card">
         <div className="meli-integration-header">
           <div>
-            <h2 style={{ marginTop: 0, marginBottom: 6 }}>MercadoLibre</h2>
+            <h2 style={{ marginTop: 0, marginBottom: 6 }}>
+              MercadoLibre <span className="version-badge">v7.37</span>
+            </h2>
             <p className="small" style={{ marginBottom: 0 }}>
               Conectá tu cuenta para identificar publicaciones por SKU y actualizar automáticamente el costo de envío.
             </p>
@@ -230,14 +232,17 @@ export default function EnviosMeliPage() {
           </div>
           <div>
             <span>Última respuesta</span>
-            <strong>{lastMeliSync ? `${lastMeliSync.updated || 0} actualizados` : "-"}</strong>
+            <strong>{lastMeliSync ? `${lastMeliSync.updated || 0} con costo` : "-"}</strong>
           </div>
         </div>
 
         {lastMeliSync && (
           <div className="meli-sync-summary">
             <span>Publicaciones leídas: <strong>{lastMeliSync.total_items || 0}</strong></span>
-            <span>Actualizados: <strong>{lastMeliSync.updated || 0}</strong></span>
+            <span>SKU encontrados: <strong>{lastMeliSync.matched || 0}</strong></span>
+            <span>Con costo actualizado: <strong>{lastMeliSync.updated || 0}</strong></span>
+            <span>Costo cambiado: <strong>{lastMeliSync.changed || 0}</strong></span>
+            <span>Sin costo ML: <strong>{lastMeliSync.no_shipping_cost || 0}</strong></span>
             <span>SKU no encontrado: <strong>{lastMeliSync.not_found || 0}</strong></span>
             <span>Sin SKU: <strong>{lastMeliSync.without_sku || 0}</strong></span>
           </div>

@@ -63,31 +63,85 @@ function getItemSkus(item: MeliItem) {
   return [...skus];
 }
 
-function parseFreeShippingCost(data: any, itemId: string) {
-  const itemData = data?.[itemId] || data;
-  const coverage = itemData?.coverage || {};
-  const allCountry = coverage?.all_country || {};
-  const listCost = Number(allCountry?.list_cost ?? itemData?.list_cost ?? itemData?.cost ?? 0);
-  return Number.isFinite(listCost) ? listCost : 0;
-}
+function findShippingCost(value: any): number {
+  if (value === null || value === undefined) return 0;
 
-async function getShippingCostsByItemIds(itemIds: string[], account: any) {
-  const costs = new Map<string, number>();
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
 
-  for (const ids of chunk(itemIds, 50)) {
-    try {
-      const data = await meliFetch(`/items/shipping_options/free?ids=${ids.join(",")}`, account);
-      ids.forEach((id) => costs.set(id, parseFreeShippingCost(data, id)));
-    } catch {
-      for (const id of ids) {
-        try {
-          const data = await meliFetch(`/items/${id}/shipping_options/free`, account);
-          costs.set(id, parseFreeShippingCost(data, id));
-        } catch {
-          costs.set(id, 0);
-        }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findShippingCost(item);
+      if (found > 0) return found;
+    }
+    return 0;
+  }
+
+  if (typeof value === "object") {
+    const priorityKeys = [
+      "list_cost",
+      "shipping_cost",
+      "cost",
+      "amount",
+      "price",
+      "base_cost",
+      "gross_amount",
+    ];
+
+    for (const key of priorityKeys) {
+      const raw = value[key];
+      if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) return raw;
+      if (typeof raw === "string") {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
       }
     }
+
+    for (const nested of Object.values(value)) {
+      const found = findShippingCost(nested);
+      if (found > 0) return found;
+    }
+  }
+
+  return 0;
+}
+
+async function getShippingCostForItem(item: MeliItem, account: any) {
+  const endpoints = [
+    `/users/${account.meli_user_id}/shipping_options/free?item_id=${item.id}`,
+    `/items/${item.id}/shipping_options/free`,
+    `/items/shipping_options/free?ids=${item.id}`,
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      const data = await meliFetch(endpoint, account);
+      const itemData = data?.[item.id] || data;
+      const cost = findShippingCost(itemData);
+      if (cost > 0) {
+        return {
+          cost,
+          source: endpoint,
+        };
+      }
+    } catch {
+      // Probamos con el siguiente endpoint compatible.
+    }
+  }
+
+  return {
+    cost: 0,
+    source: null,
+  };
+}
+
+async function getShippingCostsByItemIds(items: MeliItem[], account: any) {
+  const costs = new Map<string, { cost: number; source: string | null }>();
+
+  for (const item of items) {
+    const result = await getShippingCostForItem(item, account);
+    costs.set(item.id, result);
   }
 
   return costs;
@@ -138,10 +192,12 @@ export async function POST() {
       });
     }
 
-    const shippingCosts = await getShippingCostsByItemIds(items.map((item) => item.id), account);
+    const shippingCosts = await getShippingCostsByItemIds(items, account);
 
     const logs: any[] = [];
     let updated = 0;
+    let matched = 0;
+    let changed = 0;
     let notFound = 0;
     let withoutSku = 0;
     let noShippingCost = 0;
@@ -181,9 +237,9 @@ export async function POST() {
           continue;
         }
 
-        const newShippingCost = Number(shippingCosts.get(item.id) || 0);
-        if (!newShippingCost) noShippingCost += 1;
-
+        const shippingResult = shippingCosts.get(item.id);
+        const newShippingCost = Number(shippingResult?.cost || 0);
+        const shippingSource = shippingResult?.source || null;
         const { data: current } = await supabase
           .from("mercadolibre_shipping_costs")
           .select("*")
@@ -191,6 +247,23 @@ export async function POST() {
           .maybeSingle();
 
         const oldShippingCost = Number(current?.shipping_cost_amount || 0);
+        matched += 1;
+
+        if (!newShippingCost) {
+          noShippingCost += 1;
+          logs.push({
+            sku: product.sku,
+            meli_item_id: item.id,
+            old_shipping_cost: oldShippingCost,
+            new_shipping_cost: null,
+            status: "matched_without_cost",
+            message: "SKU encontrado, pero MercadoLibre no devolvió costo de envío. No se modificó el costo cargado.",
+            created_at: now,
+          });
+          continue;
+        }
+
+        if (Math.round(oldShippingCost) !== Math.round(newShippingCost)) changed += 1;
 
         const { error: upsertError } = await supabase.from("mercadolibre_shipping_costs").upsert(
           {
@@ -200,7 +273,7 @@ export async function POST() {
             shipping_cost_amount: newShippingCost,
             free_shipping: true,
             shipping_method: item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
-            notes: `Sincronizado desde MercadoLibre ${item.id}`,
+            notes: `Sincronizado desde MercadoLibre ${item.id} · ${shippingSource || "endpoint compatible"}`,
             active: true,
             updated_at: now,
           },
@@ -215,10 +288,8 @@ export async function POST() {
           meli_item_id: item.id,
           old_shipping_cost: oldShippingCost,
           new_shipping_cost: newShippingCost,
-          status: newShippingCost ? "updated" : "updated_without_cost",
-          message: newShippingCost
-            ? "Costo de envío actualizado desde MercadoLibre."
-            : "SKU encontrado, pero MercadoLibre no devolvió costo de envío.",
+          status: "updated",
+          message: `Costo de envío actualizado desde MercadoLibre. Fuente: ${shippingSource || "endpoint compatible"}`,
           created_at: now,
         });
       }
@@ -231,7 +302,9 @@ export async function POST() {
     return NextResponse.json({
       ok: true,
       total_items: items.length,
+      matched,
       updated,
+      changed,
       not_found: notFound,
       without_sku: withoutSku,
       no_shipping_cost: noShippingCost,
