@@ -21,26 +21,29 @@ import type {
 } from "@/lib/types";
 
 type VatCondition = "sin_factura" | "iva_21" | "iva_105";
+type LastEdited = "margin" | "price";
 
 type SimulationForm = {
   productName: string;
   category: string;
   costWithoutVat: string;
+  desiredMarginRate: string;
   salePrice: string;
   vatCondition: VatCondition;
-  priceIncludesVat: boolean;
+  shippingGross: string;
 };
 
 const initialForm: SimulationForm = {
   productName: 'Smart TV Enova 43" Google TV',
   category: "TV",
   costWithoutVat: "241332",
+  desiredMarginRate: "12",
   salePrice: "317000",
   vatCondition: "iva_21",
-  priceIncludesVat: true,
+  shippingGross: "0",
 };
 
-const channelOrder = ["MC", "MP3", "MP6", "MP9", "MP12"];
+const channelOrder = ["MC", "MP3", "MP6", "MP9", "MP12", "EF"];
 
 function orderChannels<T extends { code: string }>(items: T[]) {
   return [...items].sort((a, b) => {
@@ -63,17 +66,19 @@ function saleAppliesVat(condition: VatCondition) {
   return condition !== "sin_factura";
 }
 
-function costVatRateFromCondition(condition: VatCondition) {
-  if (condition === "sin_factura") return 0;
-  if (condition === "iva_105") return 10.5;
-  return 21;
-}
-
 function statusLabel(margin?: number | null) {
   const value = Number(margin || 0);
   if (value < 0) return { label: "Negativo", className: "negative" };
-  if (value < 3) return { label: "Al límite", className: "warning" };
+  if (value < 3) return { label: "Límite", className: "warning" };
   return { label: "Rentable", className: "positive" };
+}
+
+function formatPercentInput(value?: number | null) {
+  if (value === undefined || value === null || Number.isNaN(value)) return "";
+  return Number(value).toLocaleString("es-AR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 export default function SimulatorPage() {
@@ -81,11 +86,11 @@ export default function SimulatorPage() {
   const supabase = createClient();
 
   const [form, setForm] = useState<SimulationForm>(initialForm);
+  const [lastEdited, setLastEdited] = useState<LastEdited>("price");
   const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
   const [categories, setCategories] = useState<MercadoLibreCategoryFee[]>([]);
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function checkSession() {
@@ -141,8 +146,14 @@ export default function SimulatorPage() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function calculate() {
-    setMessage("Simulación actualizada.");
+  function updateSalePrice(value: string) {
+    setLastEdited("price");
+    update("salePrice", value);
+  }
+
+  function updateDesiredMargin(value: string) {
+    setLastEdited("margin");
+    update("desiredMarginRate", value);
   }
 
   function clear() {
@@ -150,11 +161,12 @@ export default function SimulatorPage() {
       productName: "",
       category: categories[0]?.category || "",
       costWithoutVat: "",
+      desiredMarginRate: "5",
       salePrice: "",
       vatCondition: "iva_21",
-      priceIncludesVat: true,
+      shippingGross: "0",
     });
-    setMessage(null);
+    setLastEdited("price");
     setError(null);
   }
 
@@ -188,12 +200,11 @@ export default function SimulatorPage() {
   const simulation = useMemo(() => {
     const costWithoutVat = Number(toNumber(form.costWithoutVat) || 0);
     const inputSalePrice = Number(toNumber(form.salePrice) || 0);
+    const desiredMarginRate = Number(toNumber(form.desiredMarginRate) || 0);
     const productVatRate = vatRateFromCondition(form.vatCondition);
     const appliesVat = saleAppliesVat(form.vatCondition);
-    const grossSalePrice =
-      appliesVat && !form.priceIncludesVat
-        ? inputSalePrice * (1 + productVatRate / 100)
-        : inputSalePrice;
+    const shippingGross = Number(toNumber(form.shippingGross) || 0);
+    const shippingNet = shippingGross / 1.21;
 
     const product: Product = {
       sku: "SIM",
@@ -213,10 +224,40 @@ export default function SimulatorPage() {
 
     const commonTarget = {
       saleAppliesVat: appliesVat,
-      costVatRate: costVatRateFromCondition(form.vatCondition),
+      costVatRate: 0,
+      manualShippingAmount: shippingNet,
       roundTo: 100,
       roundingMode: "nearest" as const,
     };
+
+    const shippingCost = {
+      product_id: "SIM",
+      sku: "SIM",
+      fixed_fee_amount: 0,
+      shipping_cost_amount: shippingGross,
+      free_shipping: true,
+      shipping_method: "manual",
+      active: true,
+    };
+
+    const baseOption = options[0] || mercadoLibreClassicOption();
+
+    const marginBasedSummary = calculatePriceSummary(
+      product,
+      baseOption,
+      categoryFee,
+      taxes,
+      shippingCost,
+      {
+        ...commonTarget,
+        desiredMarginRate,
+      },
+    );
+
+    const grossSalePrice =
+      lastEdited === "margin" && marginBasedSummary.valid
+        ? Number(marginBasedSummary.roundedPrice || 0)
+        : inputSalePrice;
 
     const rows = options.map((option) => {
       const result = calculatePriceSummary(
@@ -224,7 +265,7 @@ export default function SimulatorPage() {
         option,
         categoryFee,
         taxes,
-        null,
+        shippingCost,
         {
           ...commonTarget,
           salePrice: grossSalePrice,
@@ -236,7 +277,7 @@ export default function SimulatorPage() {
         option,
         categoryFee,
         taxes,
-        null,
+        shippingCost,
         {
           ...commonTarget,
           desiredNetProfit: 0,
@@ -252,18 +293,49 @@ export default function SimulatorPage() {
     });
 
     const summary = rows[0]?.result || null;
+    const linkedMargin =
+      lastEdited === "price"
+        ? summary?.valid
+          ? Number(summary.marginOnNetSale || 0)
+          : desiredMarginRate
+        : desiredMarginRate;
+
+    const linkedSalePrice =
+      lastEdited === "margin" && marginBasedSummary.valid
+        ? Number(marginBasedSummary.roundedPrice || 0)
+        : grossSalePrice;
+
+    const categoryCommissionAmount =
+      summary?.valid && summary.marketplaceFeeAmount !== null
+        ? Number(summary.marketplaceFeeAmount || 0)
+        : 0;
+
+    const taxesAppliedRate =
+      Number(summary?.iibbRate || 0) +
+      Number(summary?.idcRate || 0) +
+      Number(summary?.iiggRate || 0);
+
+    const taxesAppliedAmount =
+      Number(summary?.iibbAmount || 0) +
+      Number(summary?.idcAmount || 0) +
+      Number(summary?.incomeTaxAmount || 0);
 
     return {
       costWithoutVat,
-      inputSalePrice,
-      grossSalePrice,
+      grossSalePrice: linkedSalePrice,
       appliesVat,
       productVatRate,
-      product,
+      shippingGross,
+      shippingNet,
+      categoryFee,
+      categoryCommissionAmount,
+      taxesAppliedRate,
+      taxesAppliedAmount,
+      linkedMargin,
       rows,
       summary,
     };
-  }, [form, categories, options, taxes]);
+  }, [form, categories, options, taxes, lastEdited]);
 
   return (
     <main className="container wide simulator-page">
@@ -275,21 +347,20 @@ export default function SimulatorPage() {
       />
 
       {error && <div className="message error">{error}</div>}
-      {message && <div className="message success">{message}</div>}
 
-      <section className="card simulator-main-card">
-        <div className="simulator-form-card">
+      <section className="simulator-layout-grid">
+        <div className="card simulator-input-card">
           <div className="simulator-section-title">
             <span className="simulator-title-icon">⚡</span>
             <div>
               <h2>Simulación rápida</h2>
-              <p className="small">Cargá los datos mínimos para analizar todos los canales.</p>
+              <p className="small">Cargá los datos mínimos para obtener resultados automáticos.</p>
             </div>
           </div>
 
-          <div className="simulator-form-grid">
-            <div className="field">
-              <label>Producto *</label>
+          <div className="simulator-form-grid simulator-form-grid-three">
+            <div className="field simulator-wide-field">
+              <label>Producto</label>
               <input
                 value={form.productName}
                 onChange={(event) => update("productName", event.target.value)}
@@ -298,7 +369,7 @@ export default function SimulatorPage() {
             </div>
 
             <div className="field">
-              <label>Categoría *</label>
+              <label>Categoría</label>
               <select
                 value={form.category}
                 onChange={(event) => update("category", event.target.value)}
@@ -313,7 +384,7 @@ export default function SimulatorPage() {
             </div>
 
             <div className="field">
-              <label>Costo sin IVA *</label>
+              <label>Costo sin IVA</label>
               <input
                 type="text"
                 inputMode="decimal"
@@ -321,77 +392,87 @@ export default function SimulatorPage() {
                 onChange={(event) => update("costWithoutVat", event.target.value)}
                 placeholder="241332"
               />
-              <span className="small">Costo del producto sin impuestos.</span>
             </div>
 
             <div className="field">
-              <label>Precio de venta *</label>
+              <label>% Margen deseado</label>
+              <div className="input-suffix">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={
+                    lastEdited === "price"
+                      ? formatPercentInput(simulation.linkedMargin)
+                      : form.desiredMarginRate
+                  }
+                  onChange={(event) => updateDesiredMargin(event.target.value)}
+                />
+                <span>%</span>
+              </div>
+            </div>
+
+            <div className="field">
+              <label>Precio de venta</label>
               <input
                 type="text"
                 inputMode="decimal"
-                value={form.salePrice}
-                onChange={(event) => update("salePrice", event.target.value)}
+                value={
+                  lastEdited === "margin"
+                    ? String(Math.round(simulation.grossSalePrice || 0))
+                    : form.salePrice
+                }
+                onChange={(event) => updateSalePrice(event.target.value)}
                 placeholder="317000"
               />
-              <span className="small">Precio que querés analizar para vender.</span>
             </div>
 
             <div className="field">
-              <label>Condición de IVA *</label>
+              <label>Condición de IVA</label>
               <select
                 value={form.vatCondition}
                 onChange={(event) => update("vatCondition", event.target.value as VatCondition)}
               >
-                <option value="sin_factura">Sin factura / sin IVA</option>
+                <option value="sin_factura">Sin IVA</option>
                 <option value="iva_21">Con IVA 21%</option>
                 <option value="iva_105">Con IVA 10,5%</option>
               </select>
-              <span className="small">Define IVA de venta y el IVA atribuido al costo.</span>
             </div>
 
-            <div className="field">
-              <label>¿El precio ingresado incluye IVA?</label>
-              <div className="segmented-control">
-                <button
-                  type="button"
-                  className={form.priceIncludesVat ? "active" : ""}
-                  onClick={() => update("priceIncludesVat", true)}
-                >
-                  Sí, incluye IVA
-                </button>
-                <button
-                  type="button"
-                  className={!form.priceIncludesVat ? "active" : ""}
-                  onClick={() => update("priceIncludesVat", false)}
-                >
-                  No, es sin IVA
-                </button>
-              </div>
+            <div className="field simulator-wide-field">
+              <label>Envío c/IVA</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.shippingGross}
+                onChange={(event) => update("shippingGross", event.target.value)}
+                placeholder="0"
+              />
             </div>
           </div>
 
-          <div className="simulator-actions">
-            <button className="button" type="button" onClick={calculate}>
-              Calcular simulación
-            </button>
+          <div className="simulator-linked-note">
+            Si cambiás el precio de venta o el % margen deseado, el otro valor se recalcula automáticamente.
+          </div>
+
+          <div className="simulator-actions simulator-actions-right">
             <button className="button ghost" type="button" onClick={clear}>
               Limpiar
             </button>
           </div>
         </div>
 
-        <div className="simulator-summary-card">
+        <div className="card simulator-summary-card">
           <div className="simulator-section-title">
             <span className="simulator-title-icon">▮</span>
             <div>
               <h2>Resumen rápido</h2>
-              <p className="small">Referencia calculada sobre el primer canal.</p>
+              <p className="small">Resumen de resultados con los parámetros actuales.</p>
             </div>
           </div>
 
           <div className="simulator-summary-list">
             <div>
-              <span>Precio de venta {simulation.appliesVat ? "(con IVA)" : ""}</span>
+              <span>Precio de venta</span>
               <strong>{moneyWithCents(simulation.grossSalePrice)}</strong>
             </div>
             <div>
@@ -403,17 +484,55 @@ export default function SimulatorPage() {
               <strong>{moneyWithCents(simulation.summary?.valid ? simulation.summary.costForProfit : simulation.costWithoutVat)}</strong>
             </div>
             <div>
+              <span>Comisión categoría</span>
+              <strong>
+                {percent(simulation.categoryFee?.marketplace_fee_rate || 0)}{" "}
+                <small>({moneyWithCents(simulation.categoryCommissionAmount)})</small>
+              </strong>
+            </div>
+            <div>
+              <span>Impuestos aplicados</span>
+              <strong>
+                {percent(simulation.taxesAppliedRate)}{" "}
+                <small>({moneyWithCents(simulation.taxesAppliedAmount)})</small>
+              </strong>
+            </div>
+            <div>
+              <span>Envío c/IVA</span>
+              <strong>{moneyWithCents(simulation.shippingGross)}</strong>
+            </div>
+            <div>
               <span>Margen bruto</span>
               <strong>{moneyWithCents(simulation.summary?.valid ? simulation.summary.grossProfit : 0)}</strong>
             </div>
-            <div>
+            <div className="highlight">
               <span>Ganancia</span>
               <strong>{moneyWithCents(simulation.summary?.valid ? simulation.summary.netProfit : 0)}</strong>
             </div>
-            <div className="highlight">
+            <div className="highlight stronger">
               <span>Rentabilidad real</span>
               <strong>{simulation.summary?.valid ? percent(simulation.summary.marginOnNetSale) : "-"}</strong>
             </div>
+          </div>
+        </div>
+
+        <div className="card simulator-base-card">
+          <div className="simulator-section-title">
+            <span className="simulator-title-icon">⚙</span>
+            <div>
+              <h2>Base de cálculo</h2>
+              <p className="small">Parámetros aplicados en esta simulación.</p>
+            </div>
+          </div>
+
+          <div className="simulator-base-list">
+            <div><span>Categoría</span><strong>{form.category || "-"}</strong></div>
+            <div><span>Comisión categoría</span><strong>{percent(simulation.categoryFee?.marketplace_fee_rate || 0)}</strong></div>
+            <div><span>IIBB</span><strong>{percent(taxes.iibb_rate || 0)}</strong></div>
+            <div><span>IDC</span><strong>{percent(taxes.idc_rate || 0)}</strong></div>
+            <div><span>IIGG</span><strong>{percent(taxes.iigg_rate || 0)}</strong></div>
+            <div><span>Estructura</span><strong>{moneyWithCents(0)}</strong></div>
+            <div><span>Observaciones</span><strong>Simulación automática</strong></div>
           </div>
         </div>
       </section>
@@ -423,9 +542,7 @@ export default function SimulatorPage() {
           <span className="simulator-title-icon">◎</span>
           <div>
             <h2>Rentabilidad por canal</h2>
-            <p className="small">
-              Resultados calculados con la configuración actual de costos, impuestos y comisiones por canal.
-            </p>
+            <p className="small">Compará la rentabilidad estimada según el canal de venta.</p>
           </div>
         </div>
 
@@ -437,10 +554,10 @@ export default function SimulatorPage() {
               <thead>
                 <tr>
                   <th>Canal</th>
-                  <th>Precio de venta ingresado</th>
-                  <th>Rentabilidad %</th>
+                  <th>Precio de venta</th>
+                  <th>% Rentabilidad</th>
                   <th>Ganancia</th>
-                  <th>Rentabilidad 0</th>
+                  <th>Precio para rentabilidad 0</th>
                   <th>Observación</th>
                 </tr>
               </thead>
