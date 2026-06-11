@@ -32,6 +32,7 @@ export default function EnviosMeliPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -91,8 +92,14 @@ export default function EnviosMeliPage() {
       product_id: product.id || "",
       sku: product.sku
     });
-    setMessage(`Editando envío Meli de ${product.sku}.`);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setMessage(null);
+    setError(null);
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    setModalOpen(false);
+    setForm(emptyForm);
   }
 
   async function save(event: FormEvent) {
@@ -127,6 +134,7 @@ export default function EnviosMeliPage() {
     }
 
     setMessage(`Costos de envío guardados para ${selectedProduct.sku}.`);
+    setModalOpen(false);
     setForm(emptyForm);
     await loadData();
   }
@@ -143,37 +151,18 @@ export default function EnviosMeliPage() {
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}
 
-      <section className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Cargar costo por producto</h2>
-        <p className="small">MercadoLibre puede cobrar costo de envío gratis al vendedor y/o cargos fijos por unidad según precio, producto, modalidad, reputación y categoría. Por eso lo dejamos editable por SKU.</p>
-        <form onSubmit={save}>
-          <div className="grid">
-            <div className="field wide-field">
-              <label>Producto *</label>
-              <select value={form.product_id} onChange={(e) => update("product_id", e.target.value)} required>
-                <option value="">Seleccionar producto</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>{product.sku} - {product.name} {product.category ? `(${product.category})` : ""}</option>
-                ))}
-              </select>
-            </div>
-            <div className="field"><label>Costo fijo $</label><input type="text" inputMode="decimal" value={numberValue(form.fixed_fee_amount)} onChange={(e) => update("fixed_fee_amount", Number(toNumber(e.target.value) || 0))} /></div>
-            <div className="field"><label>Costo envío $</label><input type="text" inputMode="decimal" value={numberValue(form.shipping_cost_amount)} onChange={(e) => update("shipping_cost_amount", Number(toNumber(e.target.value) || 0))} /></div>
-            <div className="field"><label>Tipo</label><select value={form.free_shipping ? "true" : "false"} onChange={(e) => update("free_shipping", e.target.value === "true")}><option value="true">Envío gratis / cargo vendedor</option><option value="false">Envío a cargo comprador</option></select></div>
+      <section className="card envios-list-card">
+        <div className="envios-list-header">
+          <div>
+            <h2 style={{ marginTop: 0, marginBottom: 6 }}>Costos de envío por producto</h2>
+            <p className="small" style={{ marginBottom: 0 }}>
+              Hacé click en <strong>Editar</strong> para cargar o modificar el costo de envío de cada producto.
+            </p>
           </div>
-          <div className="grid" style={{ marginTop: 12 }}>
-            <div className="field"><label>Modalidad</label><select value={form.shipping_method || "mercado_envios"} onChange={(e) => update("shipping_method", e.target.value)}><option value="mercado_envios">Mercado Envíos</option><option value="flex">Flex</option><option value="full">Full</option><option value="manual">Manual / otro</option></select></div>
-            <div className="field"><label>Estado</label><select value={form.active ? "true" : "false"} onChange={(e) => update("active", e.target.value === "true")}><option value="true">Activo</option><option value="false">Inactivo</option></select></div>
-            <div className="field wide-field"><label>Notas</label><input value={form.notes || ""} onChange={(e) => update("notes", e.target.value)} placeholder="Ej: tarifa calculada en simulador ML / producto grande / TV" /></div>
-          </div>
-          <button className="button" disabled={saving} style={{ marginTop: 14 }}>{saving ? "Guardando..." : "Guardar envío"}</button>
-        </form>
-      </section>
-
-      <section className="card">
-        <div className="grid" style={{ marginBottom: 14 }}>
+          <div className="envios-count-badge">{rows.length} productos</div>
+        </div>
+        <div className="grid envios-filter-grid" style={{ marginBottom: 14 }}>
           <div className="field wide-field"><label>Buscar</label><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SKU, producto, marca, categoría" /></div>
-          <div className="field"><label>Productos</label><input value={`${rows.length} productos`} disabled /></div>
         </div>
         {loading ? <p>Cargando...</p> : (
           <div className="table-wrap">
@@ -203,6 +192,117 @@ export default function EnviosMeliPage() {
           </div>
         )}
       </section>
+
+      {modalOpen && (
+        <div className="modal-backdrop">
+          <div className="shipping-modal">
+            <div className="modal-header">
+              <div>
+                <h2>Editar costo de envío</h2>
+                <p className="small">
+                  {selectedProduct ? `${selectedProduct.sku} · ${selectedProduct.name}` : "Producto seleccionado"}
+                </p>
+              </div>
+              <button type="button" className="button ghost" onClick={closeModal}>
+                Cerrar
+              </button>
+            </div>
+
+            <form onSubmit={save}>
+              <div className="shipping-modal-summary">
+                <div>
+                  <span>Producto</span>
+                  <strong>{selectedProduct?.name || "-"}</strong>
+                </div>
+                <div>
+                  <span>SKU</span>
+                  <strong>{selectedProduct?.sku || "-"}</strong>
+                </div>
+                <div>
+                  <span>Categoría</span>
+                  <strong>{selectedProduct?.category || "-"}</strong>
+                </div>
+              </div>
+
+              <div className="grid shipping-modal-grid">
+                <div className="field">
+                  <label>Costo fijo $</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={numberValue(form.fixed_fee_amount)}
+                    onChange={(e) => update("fixed_fee_amount", Number(toNumber(e.target.value) || 0))}
+                  />
+                </div>
+                <div className="field">
+                  <label>Costo envío $</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={numberValue(form.shipping_cost_amount)}
+                    onChange={(e) => update("shipping_cost_amount", Number(toNumber(e.target.value) || 0))}
+                  />
+                </div>
+                <div className="field">
+                  <label>Tipo</label>
+                  <select
+                    value={form.free_shipping ? "true" : "false"}
+                    onChange={(e) => update("free_shipping", e.target.value === "true")}
+                  >
+                    <option value="true">Envío gratis / cargo vendedor</option>
+                    <option value="false">Envío a cargo comprador</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Modalidad</label>
+                  <select
+                    value={form.shipping_method || "mercado_envios"}
+                    onChange={(e) => update("shipping_method", e.target.value)}
+                  >
+                    <option value="mercado_envios">Mercado Envíos</option>
+                    <option value="flex">Flex</option>
+                    <option value="full">Full</option>
+                    <option value="manual">Manual / otro</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Estado</label>
+                  <select
+                    value={form.active ? "true" : "false"}
+                    onChange={(e) => update("active", e.target.value === "true")}
+                  >
+                    <option value="true">Activo</option>
+                    <option value="false">Inactivo</option>
+                  </select>
+                </div>
+                <div className="field wide-field">
+                  <label>Notas</label>
+                  <input
+                    value={form.notes || ""}
+                    onChange={(e) => update("notes", e.target.value)}
+                    placeholder="Ej: tarifa calculada en simulador ML / producto grande / TV"
+                  />
+                </div>
+              </div>
+
+              <div className="shipping-modal-total">
+                <span>Total fijo cargado</span>
+                <strong>{money(Number(form.fixed_fee_amount || 0) + Number(form.shipping_cost_amount || 0))}</strong>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="button ghost" onClick={closeModal}>
+                  Cancelar
+                </button>
+                <button className="button" disabled={saving}>
+                  {saving ? "Guardando..." : "Guardar envío"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }

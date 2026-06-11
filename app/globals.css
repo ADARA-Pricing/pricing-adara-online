@@ -2603,3 +2603,134 @@ td strong {
     text-align: left;
   }
 }
+
+
+/* v7.34 - Envíos: edición por popup para reducir carga visual */
+.envios-list-card {
+  padding: 22px;
+}
+
+.envios-list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.envios-count-badge {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 13px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.envios-filter-grid {
+  max-width: 520px;
+}
+
+.shipping-modal {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid #dfe6ef;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+  padding: 22px;
+}
+
+.shipping-modal .modal-header {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.shipping-modal .modal-header h2 {
+  margin: 0 0 6px;
+}
+
+.shipping-modal-summary {
+  display: grid;
+  grid-template-columns: 1fr 120px 160px;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #f8fbff;
+  border: 1px solid #dbeafe;
+}
+
+.shipping-modal-summary div {
+  min-width: 0;
+}
+
+.shipping-modal-summary span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.shipping-modal-summary strong {
+  color: #0f172a;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.shipping-modal-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.shipping-modal-total {
+  margin-top: 16px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+
+.shipping-modal-total span {
+  color: #1e3a8a;
+  font-weight: 700;
+}
+
+.shipping-modal-total strong {
+  color: #1d4ed8;
+  font-size: 18px;
+}
+
+.shipping-modal .modal-actions {
+  margin-top: 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .envios-list-header {
+    flex-direction: column;
+  }
+
+  .shipping-modal-summary,
+  .shipping-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .shipping-modal .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .shipping-modal .modal-actions .button {
+    width: 100%;
+  }
+}
