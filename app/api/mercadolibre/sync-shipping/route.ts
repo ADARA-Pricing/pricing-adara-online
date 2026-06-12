@@ -10,6 +10,9 @@ type MeliItem = {
   seller_custom_field?: string | null;
   price?: number;
   currency_id?: string | null;
+  listing_type_id?: string | null;
+  sale_terms?: Array<{ id?: string; name?: string; value_name?: string; value_id?: string }>;
+  tags?: string[];
   status?: string;
   available_quantity?: number;
   shipping?: {
@@ -151,6 +154,49 @@ async function getShippingCostsByItemIds(items: MeliItem[], account: any) {
   return costs;
 }
 
+
+function detectInstallmentsText(item: MeliItem, listingTypeName?: string | null) {
+  const saleTerms = item.sale_terms || [];
+  const searchable = [
+    listingTypeName,
+    item.listing_type_id,
+    ...(item.tags || []),
+    ...saleTerms.flatMap((term) => [term.id, term.name, term.value_name, term.value_id]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const explicitInstallments = saleTerms.find((term) => {
+    const text = `${term.id || ""} ${term.name || ""} ${term.value_name || ""}`.toLowerCase();
+    return text.includes("cuota") || text.includes("installment");
+  });
+
+  const explicitText = explicitInstallments?.value_name || explicitInstallments?.name;
+  const match = searchable.match(/(\d{1,2})\s*(x|cuotas?|installments?)/i);
+  if (match?.[1]) return `${match[1]} cuotas`;
+
+  if (explicitText) return explicitText;
+
+  if (searchable.includes("gold_pro") || searchable.includes("premium")) return "Premium / cuotas";
+  if (searchable.includes("gold_special") || searchable.includes("clásica") || searchable.includes("clasica")) return "Clásica / 1 pago";
+
+  return null;
+}
+
+async function getListingTypeNames(account: any) {
+  const map = new Map<string, string>();
+  try {
+    const data = await meliFetch("/sites/MLA/listing_types", account);
+    (Array.isArray(data) ? data : []).forEach((item: any) => {
+      if (item?.id) map.set(item.id, item.name || item.id);
+    });
+  } catch {
+    // Si no está disponible, seguimos sin nombre visible.
+  }
+  return map;
+}
+
 export async function POST() {
   const supabase = createAdminClient();
   const startedAt = Date.now();
@@ -160,6 +206,8 @@ export async function POST() {
     if (!account) {
       return NextResponse.json({ error: "Primero conectá MercadoLibre." }, { status: 400 });
     }
+
+    const listingTypeNames = await getListingTypeNames(account);
 
     const { data: products, error: productsError } = await supabase
       .from("products")
@@ -276,6 +324,11 @@ export async function POST() {
           meli_permalink: item.permalink || null,
           meli_price: Number(item.price ?? 0) || null,
           meli_currency_id: item.currency_id || null,
+          meli_listing_type_id: item.listing_type_id || null,
+          meli_listing_type_name: item.listing_type_id ? listingTypeNames.get(item.listing_type_id) || item.listing_type_id : null,
+          meli_sale_terms: item.sale_terms || [],
+          meli_tags: item.tags || [],
+          meli_installments_text: detectInstallmentsText(item, item.listing_type_id ? listingTypeNames.get(item.listing_type_id) || item.listing_type_id : null),
           meli_status: item.status || null,
           meli_stock: Number(item.available_quantity ?? 0),
           meli_free_shipping: Boolean(item.shipping?.free_shipping),

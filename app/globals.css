@@ -4084,7 +4084,8 @@ td strong {
   margin-top: 6px;
 }
 
-/* v7.55 - cuotas detectadas por precio */
+
+/* v7.59 - cuotas desde datos reales de MercadoLibre */
 .product-publications-table .badge {
   white-space: nowrap;
 }
