@@ -832,10 +832,6 @@ export default function ProductsPage() {
                       <strong>{publicationCount ? sharedMlStock : "-"}</strong>
                     </div>
                     <div className="product-row-stat">
-                      <span>Envío ML</span>
-                      <strong>{publicationCount ? money(Math.max(...shippings.map((item) => Number(item.shipping_cost_amount || 0)))) : "-"}</strong>
-                    </div>
-                    <div className="product-row-stat">
                       <span>Última sync</span>
                       <strong>{formatDateTime(latestSync)}</strong>
                     </div>
@@ -884,16 +880,12 @@ export default function ProductsPage() {
                                 <th>Precio venta</th>
                                 <th>Cuotas</th>
                                 <th>Stock publicado</th>
-                                <th>Envío</th>
-                                <th>Fijo</th>
-                                <th>Total</th>
                                 <th>Última sync</th>
                                 <th></th>
                               </tr>
                             </thead>
                             <tbody>
                               {shippings.map((shipping) => {
-                                const totalShipping = Number(shipping.fixed_fee_amount || 0) + Number(shipping.shipping_cost_amount || 0);
                                 return (
                                   <tr key={shipping.id || `${product.sku}-${shipping.meli_item_id}`}>
                                     <td>
@@ -905,9 +897,6 @@ export default function ProductsPage() {
                                     <td><strong>{shipping.meli_price ? money(shipping.meli_price) : "-"}</strong></td>
                                     <td><span className="badge">{installmentLabel(shipping.meli_title)}</span></td>
                                     <td>{shipping.meli_stock ?? "-"}</td>
-                                    <td>{money(shipping.shipping_cost_amount || 0)}</td>
-                                    <td>{money(shipping.fixed_fee_amount || 0)}</td>
-                                    <td><strong>{money(totalShipping)}</strong></td>
                                     <td>{formatDateTime(shipping.meli_last_sync_at || shipping.updated_at)}</td>
                                     <td>{shipping.meli_permalink ? <a className="button ghost small-button" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir</a> : null}</td>
                                   </tr>

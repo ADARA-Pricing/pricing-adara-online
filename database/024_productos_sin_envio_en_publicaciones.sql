@@ -1,0 +1,3 @@
+-- v7.54 no requiere SQL nuevo.
+-- Ajuste visual: se quitan datos de envío de la pantalla Productos.
+-- El envío queda disponible en las secciones Envíos y Precios.
