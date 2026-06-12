@@ -1,0 +1,2 @@
+-- v7.44 no requiere SQL nuevo.
+-- Rediseña la pantalla de Impuestos y mejora la explicación de IDC.
