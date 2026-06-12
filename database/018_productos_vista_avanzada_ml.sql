@@ -1,0 +1,2 @@
+-- v7.45 no requiere SQL nuevo.
+-- Usa datos ya disponibles de products y mercadolibre_shipping_costs para mejorar la pantalla Productos.

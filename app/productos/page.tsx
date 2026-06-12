@@ -155,12 +155,60 @@ const emptyProduct: Product = {
   status: "active"
 };
 
+
+function statusLabel(status?: Product["status"]) {
+  if (status === "paused") return "Pausado";
+  if (status === "discontinued") return "Discontinuado";
+  return "Activo";
+}
+
+function meliStatusLabel(status?: string | null) {
+  if (!status) return "Sin publicar";
+  const labels: Record<string, string> = {
+    active: "Activa",
+    paused: "Pausada",
+    closed: "Cerrada",
+    under_review: "En revisión",
+  };
+  return labels[status] || status;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "-";
+  try {
+    return new Intl.DateTimeFormat("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return "-";
+  }
+}
+
+function dimensions(product: Product) {
+  const values = [product.height_cm, product.width_cm, product.depth_cm]
+    .map((value) => Number(value || 0))
+    .filter((value) => value > 0);
+  return values.length ? `${values.join(" × ")} cm` : "-";
+}
+
+function productInitial(product: Product) {
+  const value = product.brand || product.name || product.sku || "P";
+  return value.slice(0, 2).toUpperCase();
+}
+
 export default function ProductsPage() {
   const router = useRouter();
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>([]);
+  const [shippingCosts, setShippingCosts] = useState<any[]>([]);
   const [form, setForm] = useState<Product>(emptyProduct);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [meliStatusFilter, setMeliStatusFilter] = useState("");
+  const [expandedSku, setExpandedSku] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -183,17 +231,27 @@ export default function ProductsPage() {
 
   async function loadProducts() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("products")
-      .select("*")
-      .order("updated_at", { ascending: false });
+    setError(null);
+
+    const [productsResponse, shippingResponse] = await Promise.all([
+      supabase.from("products").select("*").order("updated_at", { ascending: false }),
+      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
+    ]);
 
     setLoading(false);
-    if (error) {
-      setError(error.message);
+
+    if (productsResponse.error) {
+      setError(productsResponse.error.message);
       return;
     }
-    setProducts((data || []) as Product[]);
+
+    if (shippingResponse.error) {
+      setError(shippingResponse.error.message);
+      return;
+    }
+
+    setProducts((productsResponse.data || []) as Product[]);
+    setShippingCosts((shippingResponse.data || []) as any[]);
   }
 
   useEffect(() => {
@@ -211,6 +269,10 @@ export default function ProductsPage() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function shippingForProduct(product: Product) {
+    return shippingCosts.find((item) => item.product_id === product.id || item.sku === product.sku) || null;
+  }
+
   function editProduct(product: Product) {
     setActiveProductTab("manual");
     setForm({ ...emptyProduct, ...product });
@@ -218,6 +280,18 @@ export default function ProductsPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function duplicateProduct(product: Product) {
+    setActiveProductTab("manual");
+    setForm({
+      ...emptyProduct,
+      ...product,
+      id: undefined,
+      sku: `${product.sku}-COPY`,
+      name: `${product.name} copia`,
+    });
+    setMessage(`Duplicando SKU ${product.sku}. Revisá el nuevo SKU antes de guardar.`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   async function deleteProduct(product: Product) {
     const ok = window.confirm(`¿Seguro que querés eliminar el producto ${product.sku} - ${product.name}?`);
@@ -235,10 +309,7 @@ export default function ProductsPage() {
       return;
     }
 
-    if (form.sku === product.sku) {
-      setForm(emptyProduct);
-    }
-
+    if (form.sku === product.sku) setForm(emptyProduct);
     setMessage(`Producto eliminado: ${product.sku}`);
     await loadProducts();
   }
@@ -272,7 +343,7 @@ export default function ProductsPage() {
       depth_cm: form.depth_cm ?? null,
       supplier: form.supplier?.trim() || null,
       warranty_months: form.warranty_months ?? null,
-      status: form.status || "active"
+      status: form.status || "active",
     };
 
     if (!payload.name) {
@@ -384,9 +455,7 @@ export default function ProductsPage() {
     setError(null);
 
     const payload = importRows.map((row) => row.payload);
-    const { error } = await supabase
-      .from("products")
-      .upsert(payload, { onConflict: "sku" });
+    const { error } = await supabase.from("products").upsert(payload, { onConflict: "sku" });
 
     setImporting(false);
     setSaving(false);
@@ -402,24 +471,142 @@ export default function ProductsPage() {
     await loadProducts();
   }
 
-  const filtered = products.filter((product) => {
-    const text = `${product.sku} ${product.name} ${product.brand || ""} ${product.model || ""} ${product.category || ""}`.toLowerCase();
-    return text.includes(query.toLowerCase());
-  });
+  const categories = useMemo(() => {
+    const values = new Set(products.map((product) => product.category).filter(Boolean) as string[]);
+    return [...values].sort((a, b) => a.localeCompare(b, "es"));
+  }, [products]);
+
+  const enriched = useMemo(() => {
+    return products.map((product) => {
+      const shipping = shippingForProduct(product);
+      return { product, shipping };
+    });
+  }, [products, shippingCosts]);
+
+  const filtered = useMemo(() => {
+    const normalized = query.toLowerCase().trim();
+
+    return enriched.filter(({ product, shipping }) => {
+      const text = [
+        product.sku,
+        product.ean,
+        product.name,
+        product.brand,
+        product.model,
+        product.category,
+        shipping?.meli_item_id,
+        shipping?.meli_title,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesQuery = !normalized || text.includes(normalized);
+      const matchesCategory = !categoryFilter || product.category === categoryFilter;
+      const mlStatus = shipping?.meli_status || "none";
+      const matchesMlStatus = !meliStatusFilter || mlStatus === meliStatusFilter;
+      return matchesQuery && matchesCategory && matchesMlStatus;
+    });
+  }, [enriched, query, categoryFilter, meliStatusFilter]);
+
+  const metrics = useMemo(() => {
+    const total = products.length;
+    const withMl = enriched.filter(({ shipping }) => Boolean(shipping?.meli_item_id)).length;
+    const withoutMl = Math.max(total - withMl, 0);
+    const syncedToday = enriched.filter(({ shipping }) => {
+      if (!shipping?.meli_last_sync_at) return false;
+      const date = new Date(shipping.meli_last_sync_at);
+      const now = new Date();
+      return date.toDateString() === now.toDateString();
+    }).length;
+
+    return { total, withMl, withoutMl, syncedToday };
+  }, [products, enriched]);
 
   return (
-    <main className="container">
+    <main className="container wide products-advanced-page">
       <PageHero
         title="Productos"
-        description="Carga y actualización de productos por SKU"
+        description="Visualizá, filtrá y actualizá productos con datos comerciales y de MercadoLibre."
         onRefresh={loadProducts}
-        onLogout={logout}
+        icon="▧"
       />
 
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}
 
-      <section className="card" style={{ marginBottom: 20 }}>
+      <section className="products-toolbar-card card">
+        <div className="products-toolbar-grid">
+          <div className="field">
+            <label>Buscar producto</label>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nombre, SKU, EAN o Item ID..." />
+          </div>
+          <div className="field">
+            <label>Categoría</label>
+            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+              <option value="">Todas las categorías</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Estado ML</label>
+            <select value={meliStatusFilter} onChange={(e) => setMeliStatusFilter(e.target.value)}>
+              <option value="">Todos los estados ML</option>
+              <option value="active">Activa</option>
+              <option value="paused">Pausada</option>
+              <option value="closed">Cerrada</option>
+              <option value="none">Sin publicar</option>
+            </select>
+          </div>
+          <div className="products-toolbar-actions">
+            <button className="button" type="button" onClick={() => setActiveProductTab("manual")}>
+              Nuevo producto
+            </button>
+            <button className="button ghost" type="button" onClick={() => setActiveProductTab("excel")}>
+              Importar Excel
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="products-kpi-grid">
+        <div className="card product-kpi-card">
+          <span className="product-kpi-icon">▧</span>
+          <div>
+            <p>Total productos</p>
+            <strong>{metrics.total}</strong>
+            <small>100% del catálogo</small>
+          </div>
+        </div>
+        <div className="card product-kpi-card">
+          <span className="product-kpi-icon green">⌑</span>
+          <div>
+            <p>Con publicación ML</p>
+            <strong>{metrics.withMl}</strong>
+            <small>{metrics.total ? `${Math.round((metrics.withMl / metrics.total) * 100)}% del catálogo` : "0% del catálogo"}</small>
+          </div>
+        </div>
+        <div className="card product-kpi-card">
+          <span className="product-kpi-icon violet">↻</span>
+          <div>
+            <p>Sincronizados hoy</p>
+            <strong>{metrics.syncedToday}</strong>
+            <small>Última sync disponible</small>
+          </div>
+        </div>
+        <div className="card product-kpi-card">
+          <span className="product-kpi-icon amber">!</span>
+          <div>
+            <p>Sin publicación ML</p>
+            <strong>{metrics.withoutMl}</strong>
+            <small>{metrics.total ? `${Math.round((metrics.withoutMl / metrics.total) * 100)}% del catálogo` : "0% del catálogo"}</small>
+          </div>
+        </div>
+      </section>
+
+      <section className="card product-editor-card">
         <div className="header" style={{ alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
           <div>
             <h2 style={{ marginTop: 0, marginBottom: 8 }}>
@@ -432,18 +619,10 @@ export default function ProductsPage() {
             </p>
           </div>
           <div className="actions" style={{ alignItems: "center", flexWrap: "nowrap" }}>
-            <button
-              className={activeProductTab === "manual" ? "button" : "button ghost"}
-              type="button"
-              onClick={() => setActiveProductTab("manual")}
-            >
+            <button className={activeProductTab === "manual" ? "button" : "button ghost"} type="button" onClick={() => setActiveProductTab("manual")}>
               Carga manual
             </button>
-            <button
-              className={activeProductTab === "excel" ? "button" : "button ghost"}
-              type="button"
-              onClick={() => setActiveProductTab("excel")}
-            >
+            <button className={activeProductTab === "excel" ? "button" : "button ghost"} type="button" onClick={() => setActiveProductTab("excel")}>
               Carga masiva Excel
             </button>
           </div>
@@ -452,122 +631,53 @@ export default function ProductsPage() {
         {activeProductTab === "manual" ? (
           <form onSubmit={saveProduct}>
             <div className="grid">
-              <div className="field">
-                <label>SKU *</label>
-                <input value={form.sku} onChange={(e) => update("sku", e.target.value)} placeholder="TVEN043GTV01" required />
-              </div>
-              <div className="field">
-                <label>EAN</label>
-                <input value={form.ean || ""} onChange={(e) => update("ean", e.target.value)} placeholder="779..." />
-              </div>
-              <div className="field">
-                <label>Nombre *</label>
-                <input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="Smart TV Enova 43 Google TV" required />
-              </div>
-              <div className="field">
-                <label>Estado</label>
-                <select value={form.status} onChange={(e) => update("status", e.target.value as Product["status"])}>
-                  <option value="active">Activo</option>
-                  <option value="paused">Pausado</option>
-                  <option value="discontinued">Discontinuado</option>
-                </select>
-              </div>
+              <div className="field"><label>SKU *</label><input value={form.sku} onChange={(e) => update("sku", e.target.value)} placeholder="TVEN043GTV01" required /></div>
+              <div className="field"><label>EAN</label><input value={form.ean || ""} onChange={(e) => update("ean", e.target.value)} placeholder="779..." /></div>
+              <div className="field"><label>Nombre *</label><input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="Smart TV Enova 43 Google TV" required /></div>
+              <div className="field"><label>Estado</label><select value={form.status} onChange={(e) => update("status", e.target.value as Product["status"])}><option value="active">Activo</option><option value="paused">Pausado</option><option value="discontinued">Discontinuado</option></select></div>
             </div>
 
             <div className="grid" style={{ marginTop: 12 }}>
-              <div className="field">
-                <label>Marca</label>
-                <input value={form.brand || ""} onChange={(e) => update("brand", e.target.value)} placeholder="Enova" />
-              </div>
-              <div className="field">
-                <label>Modelo</label>
-                <input value={form.model || ""} onChange={(e) => update("model", e.target.value)} placeholder="43GTV" />
-              </div>
-              <div className="field">
-                <label>Categoría</label>
-                <input value={form.category || ""} onChange={(e) => update("category", e.target.value)} placeholder="TV" />
-              </div>
-              <div className="field">
-                <label>Proveedor</label>
-                <input value={form.supplier || ""} onChange={(e) => update("supplier", e.target.value)} placeholder="Radio Victoria" />
-              </div>
+              <div className="field"><label>Marca</label><input value={form.brand || ""} onChange={(e) => update("brand", e.target.value)} placeholder="Enova" /></div>
+              <div className="field"><label>Modelo</label><input value={form.model || ""} onChange={(e) => update("model", e.target.value)} placeholder="43GTV" /></div>
+              <div className="field"><label>Categoría</label><input value={form.category || ""} onChange={(e) => update("category", e.target.value)} placeholder="TV" /></div>
+              <div className="field"><label>Proveedor</label><input value={form.supplier || ""} onChange={(e) => update("supplier", e.target.value)} placeholder="Radio Victoria" /></div>
             </div>
 
             <div className="grid" style={{ marginTop: 12 }}>
-              <div className="field">
-                <label>Costo sin IVA *</label>
-                <input type="number" step="0.01" min="0" value={form.cost_without_vat} onChange={(e) => update("cost_without_vat", Number(e.target.value))} required />
-              </div>
-              <div className="field">
-                <label>IVA % *</label>
-                <select value={form.vat_rate} onChange={(e) => update("vat_rate", Number(e.target.value) as 21 | 10.5)}>
-                  <option value={21}>21%</option>
-                  <option value={10.5}>10,5%</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Costo con IVA automático</label>
-                <input value={money(costWithVatPreview)} disabled />
-              </div>
+              <div className="field"><label>Costo sin IVA *</label><input type="number" step="0.01" min="0" value={form.cost_without_vat} onChange={(e) => update("cost_without_vat", Number(e.target.value))} required /></div>
+              <div className="field"><label>IVA % *</label><select value={form.vat_rate} onChange={(e) => update("vat_rate", Number(e.target.value) as 21 | 10.5)}><option value={21}>21%</option><option value={10.5}>10,5%</option></select></div>
+              <div className="field"><label>Costo con IVA automático</label><input value={money(costWithVatPreview)} disabled /></div>
             </div>
 
             <div className="grid" style={{ marginTop: 12 }}>
-              <div className="field">
-                <label>Peso kg</label>
-                <input type="number" step="0.001" value={form.weight_kg ?? ""} onChange={(e) => update("weight_kg", toNumber(e.target.value))} />
-              </div>
-              <div className="field">
-                <label>Alto cm</label>
-                <input type="number" step="0.01" value={form.height_cm ?? ""} onChange={(e) => update("height_cm", toNumber(e.target.value))} />
-              </div>
-              <div className="field">
-                <label>Ancho cm</label>
-                <input type="number" step="0.01" value={form.width_cm ?? ""} onChange={(e) => update("width_cm", toNumber(e.target.value))} />
-              </div>
-              <div className="field">
-                <label>Profundidad cm</label>
-                <input type="number" step="0.01" value={form.depth_cm ?? ""} onChange={(e) => update("depth_cm", toNumber(e.target.value))} />
-              </div>
+              <div className="field"><label>Peso kg</label><input type="number" step="0.001" value={form.weight_kg ?? ""} onChange={(e) => update("weight_kg", toNumber(e.target.value))} /></div>
+              <div className="field"><label>Alto cm</label><input type="number" step="0.01" value={form.height_cm ?? ""} onChange={(e) => update("height_cm", toNumber(e.target.value))} /></div>
+              <div className="field"><label>Ancho cm</label><input type="number" step="0.01" value={form.width_cm ?? ""} onChange={(e) => update("width_cm", toNumber(e.target.value))} /></div>
+              <div className="field"><label>Profundidad cm</label><input type="number" step="0.01" value={form.depth_cm ?? ""} onChange={(e) => update("depth_cm", toNumber(e.target.value))} /></div>
             </div>
 
             <div className="grid-2" style={{ marginTop: 12 }}>
-              <div className="field">
-                <label>Garantía meses</label>
-                <input type="number" min="0" value={form.warranty_months ?? ""} onChange={(e) => update("warranty_months", toNumber(e.target.value))} />
-              </div>
-              <div className="field">
-                <label>Descripción</label>
-                <textarea value={form.description || ""} onChange={(e) => update("description", e.target.value)} placeholder="Descripción interna o comercial" />
-              </div>
+              <div className="field"><label>Garantía meses</label><input type="number" min="0" value={form.warranty_months ?? ""} onChange={(e) => update("warranty_months", toNumber(e.target.value))} /></div>
+              <div className="field"><label>Descripción</label><textarea value={form.description || ""} onChange={(e) => update("description", e.target.value)} placeholder="Descripción interna o comercial" /></div>
             </div>
 
             <div className="actions" style={{ marginTop: 16 }}>
-              <button className="button" disabled={saving} type="submit">
-                {saving ? "Guardando..." : "Guardar producto"}
-              </button>
-              <button className="button ghost" type="button" onClick={() => setForm(emptyProduct)}>
-                Limpiar
-              </button>
+              <button className="button" disabled={saving} type="submit">{saving ? "Guardando..." : "Guardar producto"}</button>
+              <button className="button ghost" type="button" onClick={() => setForm(emptyProduct)}>Limpiar</button>
             </div>
           </form>
         ) : (
           <div>
             <div className="header" style={{ alignItems: "flex-start", gap: 16 }}>
-              <div>
-                <p className="small" style={{ marginTop: 0 }}>
-                  Columnas obligatorias: <strong>SKU</strong>, <strong>Nombre</strong>, <strong>Costo sin IVA</strong> e <strong>IVA %</strong>. El IVA acepta 21 o 10,5. El Estado puede ser active, paused o discontinued.
-                </p>
-              </div>
+              <p className="small" style={{ marginTop: 0 }}>
+                Columnas obligatorias: <strong>SKU</strong>, <strong>Nombre</strong>, <strong>Costo sin IVA</strong> e <strong>IVA %</strong>.
+              </p>
               <div className="actions">
                 <button className="button ghost" type="button" onClick={downloadTemplate}>Descargar plantilla</button>
                 <label className="button ghost" style={{ cursor: "pointer" }}>
                   Subir Excel
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={handleImportFile}
-                    style={{ display: "none" }}
-                  />
+                  <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} style={{ display: "none" }} />
                 </label>
               </div>
             </div>
@@ -587,33 +697,19 @@ export default function ProductsPage() {
                     <p className="small" style={{ margin: "4px 0 0" }}>Vista previa de los primeros productos del archivo.</p>
                   </div>
                   <div className="actions">
-                    <button className="button" type="button" disabled={importing || saving} onClick={importProducts}>
-                      {importing ? "Importando..." : "Importar productos"}
-                    </button>
+                    <button className="button" type="button" disabled={importing || saving} onClick={importProducts}>{importing ? "Importando..." : "Importar productos"}</button>
                     <button className="button ghost" type="button" disabled={importing} onClick={() => setImportRows([])}>Cancelar</button>
                   </div>
                 </div>
 
                 <div className="table-wrap">
                   <table>
-                    <thead>
-                      <tr>
-                        <th>SKU</th>
-                        <th>Producto</th>
-                        <th>Categoría</th>
-                        <th>Costo s/IVA</th>
-                        <th>IVA</th>
-                        <th>Estado</th>
-                      </tr>
-                    </thead>
+                    <thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Costo s/IVA</th><th>IVA</th><th>Estado</th></tr></thead>
                     <tbody>
                       {importRows.slice(0, 8).map((row) => (
                         <tr key={`${row.rowNumber}-${row.payload.sku}`}>
                           <td>{row.payload.sku}</td>
-                          <td>
-                            <strong>{row.payload.name}</strong><br />
-                            <span className="small">{row.payload.brand || ""} {row.payload.model || ""}</span>
-                          </td>
+                          <td><strong>{row.payload.name}</strong><br /><span className="small">{row.payload.brand || ""} {row.payload.model || ""}</span></td>
                           <td>{row.payload.category || "-"}</td>
                           <td>{money(row.payload.cost_without_vat)}</td>
                           <td>{row.payload.vat_rate}%</td>
@@ -628,61 +724,121 @@ export default function ProductsPage() {
           </div>
         )}
       </section>
-      <section className="card">
-        <div className="header" style={{ marginBottom: 12 }}>
+
+      <section className="products-list-section">
+        <div className="products-list-header">
           <div>
-            <h2 style={{ margin: 0 }}>Listado</h2>
-            <p className="small">{filtered.length} productos visibles</p>
-          </div>
-          <div className="field" style={{ minWidth: 280 }}>
-            <label>Buscar</label>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SKU, nombre, marca, categoría" />
+            <h2>Listado avanzado</h2>
+            <p className="small">Mostrando {filtered.length} de {products.length} productos</p>
           </div>
         </div>
 
         {loading ? (
-          <p>Cargando productos...</p>
+          <section className="card"><p>Cargando productos...</p></section>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>SKU</th>
-                  <th>Producto</th>
-                  <th>Categoría</th>
-                  <th>Costo s/IVA</th>
-                  <th>IVA</th>
-                  <th>Costo c/IVA</th>
-                  <th>Estado</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((product) => (
-                  <tr key={product.id || product.sku}>
-                    <td>{product.sku}</td>
-                    <td>
-                      <strong>{product.name}</strong><br />
-                      <span className="small">{product.brand || ""} {product.model || ""}</span>
-                    </td>
-                    <td>{product.category || "-"}</td>
-                    <td>{money(product.cost_without_vat)}</td>
-                    <td>{product.vat_rate}%</td>
-                    <td>{money(product.cost_with_vat)}</td>
-                    <td><span className="badge">{product.status}</span></td>
-                    <td className="actions-cell">
-                      <button className="button ghost" onClick={() => editProduct(product)}>Editar</button>
-                      <button className="button danger" onClick={() => deleteProduct(product)}>Eliminar</button>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={8}>Todavía no hay productos cargados.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="products-advanced-list">
+            {filtered.map(({ product, shipping }) => {
+              const expanded = expandedSku === product.sku;
+              const totalShipping = Number(shipping?.fixed_fee_amount || 0) + Number(shipping?.shipping_cost_amount || 0);
+              return (
+                <article key={product.id || product.sku} className={`product-row-card ${expanded ? "expanded" : ""}`}>
+                  <div className="product-row-main">
+                    <button className="product-select-box" type="button" aria-label="Seleccionar producto" />
+                    <div className="product-thumb">{productInitial(product)}</div>
+
+                    <div className="product-primary">
+                      <h3>{product.name}</h3>
+                      <p>
+                        <strong>SKU:</strong> {product.sku}
+                        {product.ean ? <> · <strong>EAN:</strong> {product.ean}</> : null}
+                      </p>
+                      <p>Categoría: {product.category || "-"} · {product.brand || ""} {product.model || ""}</p>
+                    </div>
+
+                    <div className="product-row-stat">
+                      <span>Costo sin IVA</span>
+                      <strong>{money(product.cost_without_vat)}</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>IVA</span>
+                      <strong>{product.vat_rate}%</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>ML Item ID</span>
+                      <strong>{shipping?.meli_item_id || "-"}</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Estado ML</span>
+                      <strong>
+                        <span className={`badge meli-status-${shipping?.meli_status || "none"}`}>
+                          {meliStatusLabel(shipping?.meli_status)}
+                        </span>
+                      </strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Stock ML</span>
+                      <strong>{shipping?.meli_stock ?? "-"}</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Envío ML</span>
+                      <strong>{shipping ? money(shipping.shipping_cost_amount || 0) : "-"}</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Última sync</span>
+                      <strong>{formatDateTime(shipping?.meli_last_sync_at || shipping?.updated_at)}</strong>
+                    </div>
+
+                    <button className="product-expand-button" type="button" onClick={() => setExpandedSku(expanded ? null : product.sku)}>
+                      {expanded ? "⌃" : "⌄"}
+                    </button>
+                  </div>
+
+                  {expanded && (
+                    <div className="product-expanded-panel">
+                      <div className="product-detail-grid">
+                        <div>
+                          <h4>Dimensiones</h4>
+                          <p>{dimensions(product)}</p>
+                          <h4>Peso</h4>
+                          <p>{product.weight_kg ? `${product.weight_kg} kg` : "-"}</p>
+                        </div>
+                        <div>
+                          <h4>Marca / modelo</h4>
+                          <p>{product.brand || "-"} {product.model || ""}</p>
+                          <h4>Garantía</h4>
+                          <p>{product.warranty_months ? `${product.warranty_months} meses` : "-"}</p>
+                        </div>
+                        <div>
+                          <h4>MercadoLibre</h4>
+                          <p>Envío gratis: {shipping?.meli_free_shipping ? "Sí" : "No"}</p>
+                          <p>Modo: {shipping?.meli_shipping_mode || "-"}</p>
+                          <p>Tipo logístico: {shipping?.meli_logistic_type || shipping?.shipping_method || "-"}</p>
+                          <p>Costo total fijo: {money(totalShipping)}</p>
+                        </div>
+                        <div>
+                          <h4>Notas</h4>
+                          <p>{product.description || shipping?.notes || "-"}</p>
+                        </div>
+                      </div>
+
+                      <div className="product-row-actions">
+                        <button className="button ghost" onClick={() => editProduct(product)}>Editar</button>
+                        <button className="button ghost" onClick={() => duplicateProduct(product)}>Duplicar</button>
+                        <a className="button ghost" href={`/precios?sku=${encodeURIComponent(product.sku)}`}>Ver precios</a>
+                        {shipping?.meli_permalink && (
+                          <a className="button ghost" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir en ML</a>
+                        )}
+                        <button className="button danger" onClick={() => deleteProduct(product)}>Eliminar</button>
+                      </div>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+
+            {filtered.length === 0 && (
+              <section className="card"><p>No hay productos para mostrar con esos filtros.</p></section>
+            )}
           </div>
         )}
       </section>
