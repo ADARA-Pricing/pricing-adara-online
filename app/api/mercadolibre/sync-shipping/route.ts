@@ -29,6 +29,21 @@ type MeliItem = {
   }>;
 };
 
+type PromotionSummary = {
+  originalPrice: number | null;
+  promoPrice: number | null;
+  name: string | null;
+  status: string | null;
+  discountAmount: number | null;
+  discountRate: number | null;
+  sellerAmount: number | null;
+  sellerRate: number | null;
+  meliAmount: number | null;
+  meliRate: number | null;
+  receiveAmount: number | null;
+  raw: unknown[];
+};
+
 function chunk<T>(items: T[], size: number) {
   const result: T[][] = [];
   for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));
@@ -184,6 +199,169 @@ function detectInstallmentsText(item: MeliItem, listingTypeName?: string | null)
   return null;
 }
 
+function numberFromValue(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function pickNumber(source: any, keys: string[]) {
+  if (!source || typeof source !== "object") return null;
+  for (const key of keys) {
+    const value = numberFromValue(source[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function pickString(source: any, keys: string[]) {
+  if (!source || typeof source !== "object") return null;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function isPromotionLike(value: any) {
+  if (!value || typeof value !== "object") return false;
+  const text = [
+    value.type,
+    value.price_type,
+    value.promotion_type,
+    value.promotion_id,
+    value.campaign_id,
+    value.name,
+    value.status,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return /promo|promotion|deal|campaign|oferta|discount|rebate|active|started|programada/.test(text);
+}
+
+function collectPromotionCandidates(value: unknown, result: any[] = []) {
+  if (!value) return result;
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectPromotionCandidates(item, result));
+    return result;
+  }
+
+  if (typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    if (isPromotionLike(item)) result.push(item);
+    Object.values(item).forEach((nested) => collectPromotionCandidates(nested, result));
+  }
+
+  return result;
+}
+
+function promotionScore(value: any) {
+  const status = String(value?.status || value?.state || "").toLowerCase();
+  const hasPrice = pickNumber(value, ["promo_price", "promotion_price", "discounted_price", "final_price", "price", "amount"]) !== null;
+  const hasSellerDiscount = pickNumber(value, ["seller_discount_amount", "seller_amount", "discount_seller_amount", "seller_funded_amount"]) !== null;
+  let score = 0;
+  if (status.includes("active") || status.includes("started") || status.includes("activa")) score += 4;
+  if (hasPrice) score += 3;
+  if (hasSellerDiscount) score += 2;
+  if (pickString(value, ["name", "promotion_name", "campaign_name", "type", "promotion_type"])) score += 1;
+  return score;
+}
+
+function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null): PromotionSummary {
+  const candidates = collectPromotionCandidates(rawResponses)
+    .filter((candidate) => promotionScore(candidate) > 0)
+    .sort((a, b) => promotionScore(b) - promotionScore(a));
+  const best = candidates[0] || {};
+  const originalPrice =
+    pickNumber(best, ["original_price", "regular_price", "standard_price", "list_price", "base_price"]) ||
+    Number(itemPrice || 0) ||
+    null;
+  const promoPrice = pickNumber(best, [
+    "promo_price",
+    "promotion_price",
+    "discounted_price",
+    "final_price",
+    "deal_price",
+    "price",
+    "amount",
+  ]);
+  const sellerAmount = pickNumber(best, [
+    "seller_discount_amount",
+    "seller_amount",
+    "seller_funded_amount",
+    "discount_seller_amount",
+    "seller_contribution",
+  ]);
+  const meliAmount = pickNumber(best, [
+    "meli_discount_amount",
+    "marketplace_discount_amount",
+    "marketplace_amount",
+    "meli_amount",
+    "meli_funded_amount",
+    "funding_amount",
+  ]);
+  const receiveAmount = pickNumber(best, [
+    "receive_amount",
+    "seller_receives_amount",
+    "seller_receive_amount",
+    "net_amount",
+    "net_received_amount",
+    "payout_amount",
+  ]);
+  const discountAmount =
+    pickNumber(best, ["discount_amount", "total_discount_amount"]) ||
+    (originalPrice && promoPrice ? originalPrice - promoPrice : null);
+  const discountRate =
+    pickNumber(best, ["discount_rate", "discount_percentage", "discount_percent"]) ||
+    (originalPrice && discountAmount ? (discountAmount / originalPrice) * 100 : null);
+  const sellerRate =
+    pickNumber(best, ["seller_discount_rate", "seller_percentage", "seller_percent"]) ||
+    (originalPrice && sellerAmount ? (sellerAmount / originalPrice) * 100 : null);
+  const meliRate =
+    pickNumber(best, ["meli_discount_rate", "meli_percentage", "marketplace_percentage"]) ||
+    (originalPrice && meliAmount ? (meliAmount / originalPrice) * 100 : null);
+
+  return {
+    originalPrice,
+    promoPrice,
+    name: pickString(best, ["name", "promotion_name", "campaign_name", "type", "promotion_type"]),
+    status: pickString(best, ["status", "state"]),
+    discountAmount,
+    discountRate,
+    sellerAmount,
+    sellerRate,
+    meliAmount,
+    meliRate,
+    receiveAmount,
+    raw: rawResponses,
+  };
+}
+
+async function getPromotionSummaryForItem(item: MeliItem, account: any) {
+  const endpoints = [
+    `/items/${item.id}/prices`,
+    `/seller-promotions/items/${item.id}?app_version=v2`,
+    `/seller-promotions/items/${item.id}/offers?app_version=v2`,
+  ];
+  const rawResponses: unknown[] = [];
+
+  for (const endpoint of endpoints) {
+    try {
+      const data = await meliFetch(endpoint, account);
+      rawResponses.push({ endpoint, data });
+    } catch {
+      // Algunas cuentas o publicaciones no tienen acceso a todos los endpoints de promociones.
+    }
+  }
+
+  return summarizePromotion(rawResponses, item.price);
+}
+
 async function getListingTypeNames(account: any) {
   const map = new Map<string, string>();
   try {
@@ -252,6 +430,7 @@ export async function POST() {
     }
 
     const shippingCostsByItem = new Map<string, { cost: number; source: string | null }>();
+    const promotionsByItem = new Map<string, PromotionSummary>();
 
     async function shippingCostForMatchedItem(item: MeliItem) {
       const cached = shippingCostsByItem.get(item.id);
@@ -259,6 +438,15 @@ export async function POST() {
 
       const result = await getShippingCostForItem(item, account);
       shippingCostsByItem.set(item.id, result);
+      return result;
+    }
+
+    async function promotionForMatchedItem(item: MeliItem) {
+      const cached = promotionsByItem.get(item.id);
+      if (cached) return cached;
+
+      const result = await getPromotionSummaryForItem(item, account);
+      promotionsByItem.set(item.id, result);
       return result;
     }
 
@@ -306,6 +494,7 @@ export async function POST() {
         }
 
         const shippingResult = await shippingCostForMatchedItem(item);
+        const promotionResult = await promotionForMatchedItem(item);
         const newShippingCost = Number(shippingResult?.cost || 0);
         const shippingSource = shippingResult?.source || null;
         const { data: current } = await supabase
@@ -324,6 +513,18 @@ export async function POST() {
           meli_permalink: item.permalink || null,
           meli_price: Number(item.price ?? 0) || null,
           meli_currency_id: item.currency_id || null,
+          meli_original_price: promotionResult.originalPrice,
+          meli_promo_price: promotionResult.promoPrice,
+          meli_promo_name: promotionResult.name,
+          meli_promo_status: promotionResult.status,
+          meli_promo_discount_amount: promotionResult.discountAmount,
+          meli_promo_discount_rate: promotionResult.discountRate,
+          meli_promo_seller_amount: promotionResult.sellerAmount,
+          meli_promo_seller_rate: promotionResult.sellerRate,
+          meli_promo_meli_amount: promotionResult.meliAmount,
+          meli_promo_meli_rate: promotionResult.meliRate,
+          meli_promo_receive_amount: promotionResult.receiveAmount,
+          meli_promotions: promotionResult.raw,
           meli_listing_type_id: item.listing_type_id || null,
           meli_listing_type_name: item.listing_type_id ? listingTypeNames.get(item.listing_type_id) || item.listing_type_id : null,
           meli_sale_terms: item.sale_terms || [],
@@ -423,6 +624,7 @@ export async function POST() {
       no_shipping_cost: noShippingCost,
       duration_ms: Date.now() - startedAt,
       shipping_queries: shippingCostsByItem.size,
+      promotion_queries: promotionsByItem.size,
       logs: logs.slice(0, 50),
     });
   } catch (error) {

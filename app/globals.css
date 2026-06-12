@@ -4146,6 +4146,11 @@ td strong {
   background: #f8fafc;
 }
 
+.rentabilidad-kpi-card.promo {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
 .rentabilidad-filters-card {
   border-radius: 18px;
   padding: 18px;
@@ -4220,6 +4225,38 @@ td strong {
   font-size: 12px;
   font-style: normal;
   margin-top: 6px;
+}
+
+.rentabilidad-price-cell strong,
+.rentabilidad-price-cell span,
+.rentabilidad-promo-cell strong,
+.rentabilidad-promo-cell span {
+  display: block;
+}
+
+.rentabilidad-price-cell strong {
+  color: #0f172a;
+}
+
+.rentabilidad-price-cell span,
+.rentabilidad-promo-cell span {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.rentabilidad-promo-cell {
+  min-width: 190px;
+}
+
+.rentabilidad-promo-cell strong {
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.rentabilidad-promo-cell span:nth-child(3) {
+  color: #047857;
+  font-weight: 750;
 }
 
 .rentabilidad-status {

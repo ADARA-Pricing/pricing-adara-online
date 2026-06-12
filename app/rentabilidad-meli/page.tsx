@@ -30,7 +30,13 @@ type ProfitRow = {
   product: Product;
   shipping: MercadoLibreShippingCost;
   option: MercadoLibrePriceOption;
-  currentPrice: number | null;
+  listPrice: number | null;
+  buyerPrice: number | null;
+  sellerEffectivePrice: number | null;
+  sellerDiscountAmount: number | null;
+  meliContributionAmount: number | null;
+  receiveAmount: number | null;
+  promoName: string | null;
   suggestedPrice: number | null;
   differenceAmount: number | null;
   differenceRate: number | null;
@@ -179,6 +185,17 @@ function meliStatusLabel(status?: string | null) {
   return labels[status] || status;
 }
 
+function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost) {
+  const listPrice = Number(shipping.meli_original_price || shipping.meli_price || 0) || null;
+  const buyerPrice = Number(shipping.meli_promo_price || shipping.meli_price || 0) || null;
+  const sellerDiscount = Number(shipping.meli_promo_seller_amount || 0) || null;
+  const meliContribution = Number(shipping.meli_promo_meli_amount || 0) || null;
+
+  if (listPrice && sellerDiscount) return listPrice - sellerDiscount;
+  if (buyerPrice && meliContribution) return buyerPrice + meliContribution;
+  return buyerPrice;
+}
+
 export default function RentabilidadMeliPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -292,7 +309,16 @@ export default function RentabilidadMeliPage() {
           (item) => item.category?.toLowerCase() === (product.category || "").toLowerCase(),
         );
         const targetMargin = Number(setting?.desired_margin_rate ?? 5);
-        const currentPrice = Number(shipping.meli_price || 0) > 0 ? Number(shipping.meli_price) : null;
+        const listPrice = Number(shipping.meli_original_price || shipping.meli_price || 0) > 0
+          ? Number(shipping.meli_original_price || shipping.meli_price)
+          : null;
+        const buyerPrice = Number(shipping.meli_promo_price || shipping.meli_price || 0) > 0
+          ? Number(shipping.meli_promo_price || shipping.meli_price)
+          : null;
+        const sellerEffectivePrice = effectiveMeliSalePrice(shipping);
+        const sellerDiscountAmount = Number(shipping.meli_promo_seller_amount || 0) || null;
+        const meliContributionAmount = Number(shipping.meli_promo_meli_amount || 0) || null;
+        const receiveAmount = Number(shipping.meli_promo_receive_amount || 0) || null;
 
         const commonTarget = {
           structureAmount: Number(setting?.structure_amount || 0),
@@ -317,7 +343,7 @@ export default function RentabilidadMeliPage() {
           },
         );
 
-        const current = currentPrice
+        const current = sellerEffectivePrice
           ? calculatePriceSummary(
               product,
               option,
@@ -326,7 +352,7 @@ export default function RentabilidadMeliPage() {
               option.applies_shipping ? shipping : null,
               {
                 ...commonTarget,
-                salePrice: currentPrice,
+                salePrice: sellerEffectivePrice,
                 desiredMarginRate: targetMargin,
                 desiredNetProfit: null,
               },
@@ -338,15 +364,15 @@ export default function RentabilidadMeliPage() {
         const netProfit = current?.valid ? Number(current.netProfit || 0) : null;
         const suggestedNetProfit = suggested.valid ? Number(suggested.netProfit || 0) : null;
         const differenceAmount =
-          suggestedPrice !== null && currentPrice !== null ? suggestedPrice - currentPrice : null;
+          suggestedPrice !== null && sellerEffectivePrice !== null ? suggestedPrice - sellerEffectivePrice : null;
         const differenceRate =
-          differenceAmount !== null && currentPrice ? (differenceAmount / currentPrice) * 100 : null;
+          differenceAmount !== null && sellerEffectivePrice ? (differenceAmount / sellerEffectivePrice) * 100 : null;
 
         let status: ProfitStatus = "ok";
         let action = "Mantener";
         let issue: string | null = null;
 
-        if (!currentPrice) {
+        if (!sellerEffectivePrice) {
           status = "missing";
           action = "Completar precio ML";
           issue = "La publicacion no tiene precio sincronizado.";
@@ -378,7 +404,13 @@ export default function RentabilidadMeliPage() {
           product,
           shipping,
           option,
-          currentPrice,
+          listPrice,
+          buyerPrice,
+          sellerEffectivePrice,
+          sellerDiscountAmount,
+          meliContributionAmount,
+          receiveAmount,
+          promoName: shipping.meli_promo_name || null,
           suggestedPrice,
           differenceAmount,
           differenceRate,
@@ -405,6 +437,7 @@ export default function RentabilidadMeliPage() {
         row.product.category,
         row.shipping.meli_item_id,
         row.shipping.meli_title,
+        row.promoName,
         row.option.code,
         row.action,
       ]
@@ -421,16 +454,17 @@ export default function RentabilidadMeliPage() {
   }, [rows, query, statusFilter, actionFilter]);
 
   const metrics = useMemo(() => {
-    const total = rows.length;
-    const danger = rows.filter((row) => row.status === "danger").length;
-    const warning = rows.filter((row) => row.status === "warning").length;
-    const missing = rows.filter((row) => row.status === "missing").length;
-    const ok = rows.filter((row) => row.status === "ok").length;
-    const potential = rows.reduce((sum, row) => {
+      const total = rows.length;
+      const danger = rows.filter((row) => row.status === "danger").length;
+      const warning = rows.filter((row) => row.status === "warning").length;
+      const missing = rows.filter((row) => row.status === "missing").length;
+      const ok = rows.filter((row) => row.status === "ok").length;
+      const promos = rows.filter((row) => Boolean(row.shipping.meli_promo_price)).length;
+      const potential = rows.reduce((sum, row) => {
       if (row.differenceAmount === null || row.differenceAmount <= 0) return sum;
       return sum + row.differenceAmount;
     }, 0);
-    return { total, danger, warning, missing, ok, potential };
+    return { total, danger, warning, missing, ok, promos, potential };
   }, [rows]);
 
   const actions = useMemo(() => Array.from(new Set(rows.map((row) => row.action))).sort(), [rows]);
@@ -451,6 +485,11 @@ export default function RentabilidadMeliPage() {
           <span>Total publicaciones</span>
           <strong>{metrics.total}</strong>
           <small>Con item ID de MercadoLibre</small>
+        </div>
+        <div className="card rentabilidad-kpi-card promo">
+          <span>Con promocion</span>
+          <strong>{metrics.promos}</strong>
+          <small>Precio final o aporte ML detectado</small>
         </div>
         <div className="card rentabilidad-kpi-card danger">
           <span>Con perdida</span>
@@ -525,9 +564,10 @@ export default function RentabilidadMeliPage() {
                   <th>Estado</th>
                   <th>Producto / publicacion</th>
                   <th>Canal detectado</th>
-                  <th>Precio ML</th>
+                  <th>Precio ML / promo</th>
                   <th>Precio sugerido</th>
                   <th>Diferencia</th>
+                  <th>Promo compartida</th>
                   <th>Margen real</th>
                   <th>Ganancia real</th>
                   <th>Accion</th>
@@ -561,7 +601,13 @@ export default function RentabilidadMeliPage() {
                       <br />
                       <span className="small">{installmentLabel(row.shipping, shippingCosts)}</span>
                     </td>
-                    <td><strong>{row.currentPrice ? moneyWithCents(row.currentPrice) : "-"}</strong></td>
+                    <td className="rentabilidad-price-cell">
+                      <strong>{row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</strong>
+                      <span>Lista {row.listPrice ? moneyWithCents(row.listPrice) : "-"}</span>
+                      {row.buyerPrice && row.buyerPrice !== row.listPrice ? (
+                        <span>Comprador {moneyWithCents(row.buyerPrice)}</span>
+                      ) : null}
+                    </td>
                     <td>{row.suggestedPrice ? moneyWithCents(row.suggestedPrice) : "-"}</td>
                     <td>
                       {row.differenceAmount !== null ? (
@@ -572,12 +618,32 @@ export default function RentabilidadMeliPage() {
                         </span>
                       ) : "-"}
                     </td>
+                    <td className="rentabilidad-promo-cell">
+                      {row.promoName || row.shipping.meli_promo_price ? (
+                        <>
+                          <strong>{row.promoName || "Promocion activa"}</strong>
+                          <span>Tu cargo {row.sellerDiscountAmount ? moneyWithCents(row.sellerDiscountAmount) : "-"}</span>
+                          <span>Aporte ML {row.meliContributionAmount ? moneyWithCents(row.meliContributionAmount) : "-"}</span>
+                          <span>Recibis ML {row.receiveAmount ? moneyWithCents(row.receiveAmount) : "-"}</span>
+                        </>
+                      ) : (
+                        <span className="small">Sin promo detectada</span>
+                      )}
+                    </td>
                     <td>
                       <strong>{row.currentMargin !== null ? percent(row.currentMargin) : "-"}</strong>
                       <br />
                       <span className="small">Objetivo {percent(row.targetMargin)}</span>
                     </td>
-                    <td>{row.netProfit !== null ? moneyWithCents(row.netProfit) : "-"}</td>
+                    <td>
+                      {row.netProfit !== null ? moneyWithCents(row.netProfit) : "-"}
+                      {row.suggestedNetProfit !== null ? (
+                        <>
+                          <br />
+                          <span className="small">Sug. {moneyWithCents(row.suggestedNetProfit)}</span>
+                        </>
+                      ) : null}
+                    </td>
                     <td><span className="badge">{row.action}</span></td>
                     <td>
                       <span className="small">{formatDateTime(row.shipping.meli_last_sync_at || row.shipping.updated_at)}</span>
@@ -586,7 +652,7 @@ export default function RentabilidadMeliPage() {
                 ))}
                 {filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={10}>No hay publicaciones para mostrar con esos filtros.</td>
+                    <td colSpan={11}>No hay publicaciones para mostrar con esos filtros.</td>
                   </tr>
                 )}
               </tbody>
