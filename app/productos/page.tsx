@@ -4,7 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import type { Product } from "@/lib/types";
+import type { MercadoLibreShippingCost, Product } from "@/lib/types";
 import { money, toNumber } from "@/lib/pricing";
 import { PageHero } from "@/components/PageHero";
 
@@ -199,11 +199,20 @@ function productInitial(product: Product) {
   return value.slice(0, 2).toUpperCase();
 }
 
+function installmentLabel(title?: string | null) {
+  const text = (title || "").toLowerCase();
+  const match = text.match(/(\d{1,2})\s*cuotas?/i);
+  if (match?.[1]) return `${match[1]} cuotas`;
+  if (text.includes("sin cuota") || text.includes("contado")) return "Sin cuotas";
+  if (text.includes("cuota")) return "Con cuotas";
+  return "Sin info";
+}
+
 export default function ProductsPage() {
   const router = useRouter();
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>([]);
-  const [shippingCosts, setShippingCosts] = useState<any[]>([]);
+  const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
   const [form, setForm] = useState<Product>(emptyProduct);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -252,7 +261,7 @@ export default function ProductsPage() {
     }
 
     setProducts((productsResponse.data || []) as Product[]);
-    setShippingCosts((shippingResponse.data || []) as any[]);
+    setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
   }
 
   useEffect(() => {
@@ -270,8 +279,15 @@ export default function ProductsPage() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function shippingForProduct(product: Product) {
-    return shippingCosts.find((item) => item.product_id === product.id || item.sku === product.sku) || null;
+  function shippingsForProduct(product: Product) {
+    return shippingCosts
+      .filter((item) => item.product_id === product.id || item.sku === product.sku)
+      .sort((a, b) => {
+        const aActive = a.meli_status === "active" ? 1 : 0;
+        const bActive = b.meli_status === "active" ? 1 : 0;
+        if (aActive !== bActive) return bActive - aActive;
+        return String(b.updated_at || b.meli_last_sync_at || "").localeCompare(String(a.updated_at || a.meli_last_sync_at || ""));
+      });
   }
 
   function editProduct(product: Product) {
@@ -501,15 +517,15 @@ export default function ProductsPage() {
 
   const enriched = useMemo(() => {
     return products.map((product) => {
-      const shipping = shippingForProduct(product);
-      return { product, shipping };
+      const shippings = shippingsForProduct(product);
+      return { product, shippings };
     });
   }, [products, shippingCosts]);
 
   const filtered = useMemo(() => {
     const normalized = query.toLowerCase().trim();
 
-    return enriched.filter(({ product, shipping }) => {
+    return enriched.filter(({ product, shippings }) => {
       const text = [
         product.sku,
         product.ean,
@@ -517,8 +533,7 @@ export default function ProductsPage() {
         product.brand,
         product.model,
         product.category,
-        shipping?.meli_item_id,
-        shipping?.meli_title,
+        ...shippings.flatMap((shipping) => [shipping?.meli_item_id, shipping?.meli_title]),
       ]
         .filter(Boolean)
         .join(" ")
@@ -526,21 +541,22 @@ export default function ProductsPage() {
 
       const matchesQuery = !normalized || text.includes(normalized);
       const matchesCategory = !categoryFilter || product.category === categoryFilter;
-      const mlStatus = shipping?.meli_status || "none";
-      const matchesMlStatus = !meliStatusFilter || mlStatus === meliStatusFilter;
+      const matchesMlStatus = !meliStatusFilter || (meliStatusFilter === "none" ? shippings.length === 0 : shippings.some((shipping) => shipping?.meli_status === meliStatusFilter));
       return matchesQuery && matchesCategory && matchesMlStatus;
     });
   }, [enriched, query, categoryFilter, meliStatusFilter]);
 
   const metrics = useMemo(() => {
     const total = products.length;
-    const withMl = enriched.filter(({ shipping }) => Boolean(shipping?.meli_item_id)).length;
+    const withMl = enriched.filter(({ shippings }) => shippings.some((shipping) => Boolean(shipping?.meli_item_id))).length;
     const withoutMl = Math.max(total - withMl, 0);
-    const syncedToday = enriched.filter(({ shipping }) => {
-      if (!shipping?.meli_last_sync_at) return false;
-      const date = new Date(shipping.meli_last_sync_at);
+    const syncedToday = enriched.filter(({ shippings }) => {
       const now = new Date();
-      return date.toDateString() === now.toDateString();
+      return shippings.some((shipping) => {
+        if (!shipping?.meli_last_sync_at) return false;
+        const date = new Date(shipping.meli_last_sync_at);
+        return date.toDateString() === now.toDateString();
+      });
     }).length;
 
     return { total, withMl, withoutMl, syncedToday };
@@ -629,123 +645,6 @@ export default function ProductsPage() {
         </div>
       </section>
 
-      <section className="products-list-section">
-        <div className="products-list-header">
-          <div>
-            <h2>Listado avanzado</h2>
-            <p className="small">Mostrando {filtered.length} de {products.length} productos</p>
-          </div>
-        </div>
-
-        {loading ? (
-          <section className="card"><p>Cargando productos...</p></section>
-        ) : (
-          <div className="products-advanced-list">
-            {filtered.map(({ product, shipping }) => {
-              const expanded = expandedSku === product.sku;
-              const totalShipping = Number(shipping?.fixed_fee_amount || 0) + Number(shipping?.shipping_cost_amount || 0);
-              return (
-                <article key={product.id || product.sku} className={`product-row-card ${expanded ? "expanded" : ""}`}>
-                  <div className="product-row-main">
-                    <button className="product-select-box" type="button" aria-label="Seleccionar producto" />
-                    <div className="product-thumb">{productInitial(product)}</div>
-
-                    <div className="product-primary">
-                      <h3>{product.name}</h3>
-                      <p>
-                        <strong>SKU:</strong> {product.sku}
-                        {product.ean ? <> · <strong>EAN:</strong> {product.ean}</> : null}
-                      </p>
-                      <p>Categoría: {product.category || "-"} · {product.brand || ""} {product.model || ""}</p>
-                    </div>
-
-                    <div className="product-row-stat">
-                      <span>Costo sin IVA</span>
-                      <strong>{money(product.cost_without_vat)}</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>IVA</span>
-                      <strong>{product.vat_rate}%</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>ML Item ID</span>
-                      <strong>{shipping?.meli_item_id || "-"}</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>Estado ML</span>
-                      <strong>
-                        <span className={`badge meli-status-${shipping?.meli_status || "none"}`}>
-                          {meliStatusLabel(shipping?.meli_status)}
-                        </span>
-                      </strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>Stock ML</span>
-                      <strong>{shipping?.meli_stock ?? "-"}</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>Envío ML</span>
-                      <strong>{shipping ? money(shipping.shipping_cost_amount || 0) : "-"}</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>Última sync</span>
-                      <strong>{formatDateTime(shipping?.meli_last_sync_at || shipping?.updated_at)}</strong>
-                    </div>
-
-                    <button className="product-expand-button" type="button" onClick={() => setExpandedSku(expanded ? null : product.sku)}>
-                      {expanded ? "⌃" : "⌄"}
-                    </button>
-                  </div>
-
-                  {expanded && (
-                    <div className="product-expanded-panel">
-                      <div className="product-detail-grid">
-                        <div>
-                          <h4>Dimensiones</h4>
-                          <p>{dimensions(product)}</p>
-                          <h4>Peso</h4>
-                          <p>{product.weight_kg ? `${product.weight_kg} kg` : "-"}</p>
-                        </div>
-                        <div>
-                          <h4>Marca / modelo</h4>
-                          <p>{product.brand || "-"} {product.model || ""}</p>
-                          <h4>Garantía</h4>
-                          <p>{product.warranty_months ? `${product.warranty_months} meses` : "-"}</p>
-                        </div>
-                        <div>
-                          <h4>MercadoLibre</h4>
-                          <p>Envío gratis: {shipping?.meli_free_shipping ? "Sí" : "No"}</p>
-                          <p>Modo: {shipping?.meli_shipping_mode || "-"}</p>
-                          <p>Tipo logístico: {shipping?.meli_logistic_type || shipping?.shipping_method || "-"}</p>
-                          <p>Costo total fijo: {money(totalShipping)}</p>
-                        </div>
-                        <div>
-                          <h4>Notas</h4>
-                          <p>{product.description || shipping?.notes || "-"}</p>
-                        </div>
-                      </div>
-
-                      <div className="product-row-actions">
-                        <button className="button ghost" onClick={() => editProduct(product)}>Editar</button>
-                        <button className="button ghost" onClick={() => duplicateProduct(product)}>Duplicar</button>
-                        <a className="button ghost" href={`/precios?sku=${encodeURIComponent(product.sku)}`}>Ver precios</a>
-                        {shipping?.meli_permalink && (
-                          <a className="button ghost" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir en ML</a>
-                        )}
-                        <button className="button danger" onClick={() => deleteProduct(product)}>Eliminar</button>
-                      </div>
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-
-            {filtered.length === 0 && (
-              <section className="card"><p>No hay productos para mostrar con esos filtros.</p></section>
-            )}
-          </div>
-        )}
-      </section>
       {editorOpen && (
         <div className="modal-backdrop" onClick={closeEditorModal}>
           <section className="modal-card product-editor-modal" onClick={(event) => event.stopPropagation()}>
@@ -761,15 +660,9 @@ export default function ProductsPage() {
                 </p>
               </div>
               <div className="actions product-editor-controls" style={{ alignItems: "center", flexWrap: "nowrap" }}>
-                <button className={activeProductTab === "manual" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("manual")}>
-                  Carga manual
-                </button>
-                <button className={activeProductTab === "excel" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("excel")}>
-                  Carga masiva Excel
-                </button>
-                <button className="button ghost products-secondary-button" type="button" onClick={closeEditorModal}>
-                  Cerrar
-                </button>
+                <button className={activeProductTab === "manual" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("manual")}>Carga manual</button>
+                <button className={activeProductTab === "excel" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("excel")}>Carga masiva Excel</button>
+                <button className="button ghost products-secondary-button" type="button" onClick={closeEditorModal}>Cerrar</button>
               </div>
             </div>
 
@@ -872,6 +765,174 @@ export default function ProductsPage() {
         </div>
       )}
 
+      <section className="products-list-section">
+        <div className="products-list-header">
+          <div>
+            <h2>Listado avanzado</h2>
+            <p className="small">Mostrando {filtered.length} de {products.length} productos</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <section className="card"><p>Cargando productos...</p></section>
+        ) : (
+          <div className="products-advanced-list">
+            {filtered.map(({ product, shippings }) => {
+              const expanded = expandedSku === product.sku;
+              const publicationCount = shippings.length;
+              const activePublications = shippings.filter((item) => item.meli_status === "active").length;
+              const pausedPublications = shippings.filter((item) => item.meli_status === "paused").length;
+              const totalMlStock = shippings.reduce((acc, item) => acc + Number(item.meli_stock || 0), 0);
+              const latestSync = shippings
+                .map((item) => item.meli_last_sync_at || item.updated_at)
+                .filter(Boolean)
+                .sort()
+                .reverse()[0];
+              return (
+                <article key={product.id || product.sku} className={`product-row-card ${expanded ? "expanded" : ""}`}>
+                  <div className="product-row-main">
+                    <button className="product-select-box" type="button" aria-label="Seleccionar producto" />
+                    <div className="product-thumb">{productInitial(product)}</div>
+
+                    <div className="product-primary">
+                      <h3>{product.name}</h3>
+                      <p>
+                        <strong>SKU:</strong> {product.sku}
+                        {product.ean ? <> · <strong>EAN:</strong> {product.ean}</> : null}
+                      </p>
+                      <p>Categoría: {product.category || "-"} · {product.brand || ""} {product.model || ""}</p>
+                    </div>
+
+                    <div className="product-row-stat">
+                      <span>Costo sin IVA</span>
+                      <strong>{money(product.cost_without_vat)}</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>IVA</span>
+                      <strong>{product.vat_rate}%</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Publicaciones ML</span>
+                      <strong>{publicationCount || "-"}</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Estado ML</span>
+                      <strong>
+                        {publicationCount ? (
+                          <span className="badge">{activePublications} activas{pausedPublications ? ` · ${pausedPublications} pausadas` : ""}</span>
+                        ) : (
+                          <span className="badge meli-status-none">Sin publicar</span>
+                        )}
+                      </strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Stock ML total</span>
+                      <strong>{publicationCount ? totalMlStock : "-"}</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Envío ML</span>
+                      <strong>{publicationCount ? money(Math.max(...shippings.map((item) => Number(item.shipping_cost_amount || 0)))) : "-"}</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Última sync</span>
+                      <strong>{formatDateTime(latestSync)}</strong>
+                    </div>
+
+                    <button className="product-expand-button" type="button" onClick={() => setExpandedSku(expanded ? null : product.sku)}>
+                      {expanded ? "⌃" : "⌄"}
+                    </button>
+                  </div>
+
+                  {expanded && (
+                    <div className="product-expanded-panel">
+                      <div className="product-detail-grid">
+                        <div>
+                          <h4>Dimensiones</h4>
+                          <p>{dimensions(product)}</p>
+                          <h4>Peso</h4>
+                          <p>{product.weight_kg ? `${product.weight_kg} kg` : "-"}</p>
+                        </div>
+                        <div>
+                          <h4>Marca / modelo</h4>
+                          <p>{product.brand || "-"} {product.model || ""}</p>
+                          <h4>Garantía</h4>
+                          <p>{product.warranty_months ? `${product.warranty_months} meses` : "-"}</p>
+                        </div>
+                        <div>
+                          <h4>MercadoLibre</h4>
+                          <p>Publicaciones vinculadas: {publicationCount || 0}</p>
+                          <p>Stock total: {publicationCount ? totalMlStock : "-"}</p>
+                          <p>Activas: {activePublications}</p>
+                          <p>Pausadas: {pausedPublications}</p>
+                        </div>
+                        <div>
+                          <h4>Notas</h4>
+                          <p>{product.description || shippings[0]?.notes || "-"}</p>
+                        </div>
+                      </div>
+
+                      {publicationCount > 0 && (
+                        <div className="table-wrap product-publications-table">
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Publicación</th>
+                                <th>Estado</th>
+                                <th>Precio venta</th>
+                                <th>Cuotas</th>
+                                <th>Stock</th>
+                                <th>Envío</th>
+                                <th>Fijo</th>
+                                <th>Total</th>
+                                <th>Última sync</th>
+                                <th></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {shippings.map((shipping) => {
+                                const totalShipping = Number(shipping.fixed_fee_amount || 0) + Number(shipping.shipping_cost_amount || 0);
+                                return (
+                                  <tr key={shipping.id || `${product.sku}-${shipping.meli_item_id}`}>
+                                    <td>
+                                      <strong>{shipping.meli_title || product.name}</strong>
+                                      <br />
+                                      <span className="small">{shipping.meli_item_id || "-"} · {shipping.meli_logistic_type || shipping.shipping_method || "-"}</span>
+                                    </td>
+                                    <td><span className={`badge meli-status-${shipping.meli_status || "none"}`}>{meliStatusLabel(shipping.meli_status)}</span></td>
+                                    <td><strong>{shipping.meli_price ? money(shipping.meli_price) : "-"}</strong></td>
+                                    <td><span className="badge">{installmentLabel(shipping.meli_title)}</span></td>
+                                    <td>{shipping.meli_stock ?? "-"}</td>
+                                    <td>{money(shipping.shipping_cost_amount || 0)}</td>
+                                    <td>{money(shipping.fixed_fee_amount || 0)}</td>
+                                    <td><strong>{money(totalShipping)}</strong></td>
+                                    <td>{formatDateTime(shipping.meli_last_sync_at || shipping.updated_at)}</td>
+                                    <td>{shipping.meli_permalink ? <a className="button ghost small-button" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir</a> : null}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      <div className="product-row-actions">
+                        <button className="button ghost" onClick={() => editProduct(product)}>Editar</button>
+                        <button className="button ghost" onClick={() => duplicateProduct(product)}>Duplicar</button>
+                        <a className="button ghost" href={`/precios?sku=${encodeURIComponent(product.sku)}`}>Ver precios</a>
+                        <button className="button danger" onClick={() => deleteProduct(product)}>Eliminar</button>
+                      </div>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+
+            {filtered.length === 0 && (
+              <section className="card"><p>No hay productos para mostrar con esos filtros.</p></section>
+            )}
+          </div>
+        )}
+      </section>
     </main>
   );
 }

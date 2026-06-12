@@ -4013,7 +4013,29 @@ td strong {
 }
 
 
-/* v7.48 - productos con popup para alta/importacion */
+/* v7.47 - multiples publicaciones ML en productos */
+.product-publications-table {
+  margin-top: 18px;
+}
+
+.product-publications-table table {
+  width: 100%;
+}
+
+.product-publications-table th,
+.product-publications-table td {
+  vertical-align: top;
+  font-size: 13px;
+}
+
+.small-button {
+  min-height: 34px !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+}
+
+
+/* v7.49 - productos popup + publicaciones ML por SKU */
 .product-editor-modal {
   width: min(1280px, 100%);
   border-radius: 22px;

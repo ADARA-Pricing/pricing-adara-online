@@ -92,6 +92,8 @@ export type MercadoLibreShippingCost = {
   meli_item_id?: string | null;
   meli_title?: string | null;
   meli_permalink?: string | null;
+  meli_price?: number | null;
+  meli_currency_id?: string | null;
   meli_status?: string | null;
   meli_stock?: number | null;
   meli_free_shipping?: boolean | null;
