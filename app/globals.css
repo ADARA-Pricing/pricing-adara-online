@@ -4011,3 +4011,25 @@ td strong {
     min-width: 100%;
   }
 }
+
+
+/* v7.47 - multiples publicaciones ML en productos */
+.product-publications-table {
+  margin-top: 18px;
+}
+
+.product-publications-table table {
+  width: 100%;
+}
+
+.product-publications-table th,
+.product-publications-table td {
+  vertical-align: top;
+  font-size: 13px;
+}
+
+.small-button {
+  min-height: 34px !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+}
