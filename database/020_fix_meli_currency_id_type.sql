@@ -1,0 +1,2 @@
+-- v7.50 no requiere SQL nuevo si ya ejecutaste 019.
+-- Corrige el build TypeScript agregando currency_id al tipo interno de MercadoLibre.

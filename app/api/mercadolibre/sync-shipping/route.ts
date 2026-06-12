@@ -9,6 +9,7 @@ type MeliItem = {
   permalink?: string | null;
   seller_custom_field?: string | null;
   price?: number;
+  currency_id?: string | null;
   status?: string;
   available_quantity?: number;
   shipping?: {
@@ -332,7 +333,7 @@ export async function POST() {
             ...metadataPayload,
             updated_at: now,
           },
-          { onConflict: "product_id" },
+          { onConflict: "product_id,meli_item_id" },
         );
 
         if (upsertError) throw new Error(upsertError.message);
