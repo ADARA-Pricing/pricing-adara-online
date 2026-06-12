@@ -224,6 +224,56 @@ function pickNumber(source: any, keys: string[]) {
   return null;
 }
 
+function pickNumberDeep(source: unknown, keys: string[]): number | null {
+  if (!source || typeof source !== "object") return null;
+  if (Array.isArray(source)) {
+    for (const item of source) {
+      const found = pickNumberDeep(item, keys);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  const item = source as Record<string, unknown>;
+  for (const key of keys) {
+    const value = numberFromValue(item[key]);
+    if (value !== null) return value;
+  }
+
+  for (const nested of Object.values(item)) {
+    const found = pickNumberDeep(nested, keys);
+    if (found !== null) return found;
+  }
+
+  return null;
+}
+
+function pickNumberByKeyPattern(source: unknown, matcher: (key: string) => boolean): number | null {
+  if (!source || typeof source !== "object") return null;
+  if (Array.isArray(source)) {
+    for (const item of source) {
+      const found = pickNumberByKeyPattern(item, matcher);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  const item = source as Record<string, unknown>;
+  for (const [key, raw] of Object.entries(item)) {
+    if (matcher(key.toLowerCase())) {
+      const value = numberFromValue(raw);
+      if (value !== null) return value;
+    }
+  }
+
+  for (const nested of Object.values(item)) {
+    const found = pickNumberByKeyPattern(nested, matcher);
+    if (found !== null) return found;
+  }
+
+  return null;
+}
+
 function pickString(source: any, keys: string[]) {
   if (!source || typeof source !== "object") return null;
   for (const key of keys) {
@@ -303,6 +353,20 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null):
     "seller_funded_amount",
     "discount_seller_amount",
     "seller_contribution",
+    "seller_contribution_amount",
+    "seller_funding_amount",
+  ]) || pickNumberDeep(best, [
+    "seller_discount_amount",
+    "seller_funded_amount",
+    "discount_seller_amount",
+    "seller_contribution_amount",
+    "seller_funding_amount",
+  ]) || pickNumberDeep(rawResponses, [
+    "seller_discount_amount",
+    "seller_funded_amount",
+    "discount_seller_amount",
+    "seller_contribution_amount",
+    "seller_funding_amount",
   ]);
   const meliAmount = pickNumber(best, [
     "meli_discount_amount",
@@ -311,7 +375,33 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null):
     "meli_amount",
     "meli_funded_amount",
     "funding_amount",
-  ]);
+    "meli_contribution_amount",
+    "marketplace_contribution_amount",
+    "cofunded_amount",
+    "co_funded_amount",
+  ]) || pickNumberDeep(best, [
+    "meli_discount_amount",
+    "marketplace_discount_amount",
+    "meli_funded_amount",
+    "meli_contribution_amount",
+    "marketplace_contribution_amount",
+    "cofunded_amount",
+    "co_funded_amount",
+  ]) || pickNumberDeep(rawResponses, [
+    "meli_discount_amount",
+    "marketplace_discount_amount",
+    "meli_funded_amount",
+    "meli_contribution_amount",
+    "marketplace_contribution_amount",
+    "cofunded_amount",
+    "co_funded_amount",
+  ]) || pickNumberByKeyPattern(best, (key) =>
+    /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
+    /(amount|discount|fund|funded|contribution|benefit)/.test(key)
+  ) || pickNumberByKeyPattern(rawResponses, (key) =>
+    /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
+    /(amount|discount|fund|funded|contribution|benefit)/.test(key)
+  );
   const receiveAmount = pickNumber(best, [
     "receive_amount",
     "seller_receives_amount",
@@ -327,10 +417,22 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null):
     pickNumber(best, ["discount_rate", "discount_percentage", "discount_percent"]) ||
     (originalPrice && discountAmount ? (discountAmount / originalPrice) * 100 : null);
   const sellerRate =
-    pickNumber(best, ["seller_discount_rate", "seller_percentage", "seller_percent"]) ||
+    pickNumber(best, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
+    pickNumberDeep(best, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
+    pickNumberDeep(rawResponses, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
     (originalPrice && sellerAmount ? (sellerAmount / originalPrice) * 100 : null);
   const meliRate =
-    pickNumber(best, ["meli_discount_rate", "meli_percentage", "marketplace_percentage"]) ||
+    pickNumber(best, ["meli_discount_rate", "meli_percentage", "marketplace_percentage", "meli_percent", "marketplace_percent"]) ||
+    pickNumberDeep(best, ["meli_discount_rate", "meli_percentage", "marketplace_percentage", "meli_percent", "marketplace_percent"]) ||
+    pickNumberDeep(rawResponses, ["meli_discount_rate", "meli_percentage", "marketplace_percentage", "meli_percent", "marketplace_percent"]) ||
+    pickNumberByKeyPattern(best, (key) =>
+      /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
+      /(rate|percent|percentage)/.test(key)
+    ) ||
+    pickNumberByKeyPattern(rawResponses, (key) =>
+      /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
+      /(rate|percent|percentage)/.test(key)
+    ) ||
     (originalPrice && meliAmount ? (meliAmount / originalPrice) * 100 : null);
 
   return {

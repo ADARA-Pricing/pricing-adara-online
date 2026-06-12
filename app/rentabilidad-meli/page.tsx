@@ -25,7 +25,10 @@ import type {
 
 type ProfitStatus = "ok" | "warning" | "danger" | "missing";
 
-const DEFAULT_MELI_PROMO_COFUNDING_RATE = 3.5;
+const FALLBACK_MELI_PROMO_COFUNDING_RATES_BY_CHANNEL: Record<string, number> = {
+  MP3: 3.562529,
+  MP9: 2.363429,
+};
 
 type ProfitRow = {
   key: string;
@@ -198,7 +201,11 @@ function meliStatusLabel(status?: string | null) {
   return labels[status] || status;
 }
 
-function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost) {
+function fallbackMeliFundedRate(option: MercadoLibrePriceOption) {
+  return FALLBACK_MELI_PROMO_COFUNDING_RATES_BY_CHANNEL[option.code] || 0;
+}
+
+function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost, option: MercadoLibrePriceOption) {
   const buyerPrice = Number(shipping.meli_promo_price || shipping.meli_price || 0) || null;
   const listPrice = Number(shipping.meli_original_price || shipping.meli_price || 0) || null;
   if (!buyerPrice) return null;
@@ -210,8 +217,10 @@ function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost) {
   const meliFundedRate = Number(shipping.meli_promo_meli_rate || 0);
   if (meliFundedRate > 0) return buyerPrice + (listPrice * meliFundedRate) / 100;
 
-  // ML calcula comisiones sobre el precio promo al comprador mas su aporte cofinanciado.
-  return buyerPrice * (1 + DEFAULT_MELI_PROMO_COFUNDING_RATE / 100);
+  const fallbackRate = fallbackMeliFundedRate(option);
+  if (fallbackRate > 0) return buyerPrice + (listPrice * fallbackRate) / 100;
+
+  return buyerPrice;
 }
 
 export default function RentabilidadMeliPage() {
@@ -334,7 +343,7 @@ export default function RentabilidadMeliPage() {
         const buyerPrice = Number(shipping.meli_promo_price || shipping.meli_price || 0) > 0
           ? Number(shipping.meli_promo_price || shipping.meli_price)
           : null;
-        const sellerEffectivePrice = effectiveMeliSalePrice(shipping);
+        const sellerEffectivePrice = effectiveMeliSalePrice(shipping, option);
         const sellerDiscountAmount =
           Number(shipping.meli_promo_seller_amount || 0) ||
           (listPrice && buyerPrice && buyerPrice < listPrice
