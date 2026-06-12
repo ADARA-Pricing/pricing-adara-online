@@ -1,13 +1,11 @@
 "use client";
 
 import { ReactNode } from "react";
-import { AppNav } from "@/components/AppNav";
 
 export function PageHero({
   title,
   description,
   onRefresh,
-  onLogout,
   icon = "⌁",
 }: {
   title: string;
@@ -25,13 +23,12 @@ export function PageHero({
           <p>{description}</p>
         </div>
       </div>
-      <div className="nav prices-hero-nav page-hero-actions">
+      <div className="page-hero-actions">
         {onRefresh && (
           <button className="button ghost page-refresh-button" onClick={onRefresh} type="button">
             Actualizar
           </button>
         )}
-        <AppNav onLogout={onLogout} />
       </div>
     </header>
   );

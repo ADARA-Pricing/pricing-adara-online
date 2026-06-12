@@ -1,0 +1,2 @@
+-- v7.40 no requiere SQL nuevo.
+-- Reorganiza la navegación y mueve la conexión MercadoLibre a Configuración.
