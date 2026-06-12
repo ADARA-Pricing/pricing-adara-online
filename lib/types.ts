@@ -105,9 +105,6 @@ export type MercadoLibreShippingCost = {
   meli_promo_meli_amount?: number | null;
   meli_promo_meli_rate?: number | null;
   meli_promo_receive_amount?: number | null;
-  meli_promo_meli_amount_override?: number | null;
-  meli_promo_receive_amount_override?: number | null;
-  meli_promo_override_notes?: string | null;
   meli_promotions?: unknown[] | null;
   meli_listing_type_id?: string | null;
   meli_listing_type_name?: string | null;
