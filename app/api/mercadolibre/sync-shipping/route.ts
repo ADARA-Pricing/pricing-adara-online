@@ -288,23 +288,24 @@ export async function POST() {
         if (!newShippingCost) {
           noShippingCost += 1;
 
-          const { error: upsertError } = await supabase.from("mercadolibre_shipping_costs").upsert(
-            {
-              product_id: product.id,
-              sku: product.sku,
-              fixed_fee_amount: Number(current?.fixed_fee_amount || 0),
-              shipping_cost_amount: oldShippingCost,
-              free_shipping: Boolean(current?.free_shipping ?? item.shipping?.free_shipping ?? true),
-              shipping_method: current?.shipping_method || item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
-              notes: current?.notes || `Sincronizado desde MercadoLibre ${item.id} · sin costo devuelto`,
-              active: Boolean(current?.active ?? true),
-              ...metadataPayload,
-              updated_at: now,
-            },
-            { onConflict: "product_id,meli_item_id" },
-          );
+          const shippingPayload = {
+            product_id: product.id,
+            sku: product.sku,
+            fixed_fee_amount: Number(current?.fixed_fee_amount || 0),
+            shipping_cost_amount: oldShippingCost,
+            free_shipping: Boolean(current?.free_shipping ?? item.shipping?.free_shipping ?? true),
+            shipping_method: current?.shipping_method || item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
+            notes: current?.notes || `Sincronizado desde MercadoLibre ${item.id} · sin costo devuelto`,
+            active: Boolean(current?.active ?? true),
+            ...metadataPayload,
+            updated_at: now,
+          };
 
-          if (upsertError) throw new Error(upsertError.message);
+          const { error: saveError } = current?.id
+            ? await supabase.from("mercadolibre_shipping_costs").update(shippingPayload).eq("id", current.id)
+            : await supabase.from("mercadolibre_shipping_costs").insert(shippingPayload);
+
+          if (saveError) throw new Error(saveError.message);
 
           logs.push({
             sku: product.sku,
@@ -320,23 +321,24 @@ export async function POST() {
 
         if (Math.round(oldShippingCost) !== Math.round(newShippingCost)) changed += 1;
 
-        const { error: upsertError } = await supabase.from("mercadolibre_shipping_costs").upsert(
-          {
-            product_id: product.id,
-            sku: product.sku,
-            fixed_fee_amount: Number(current?.fixed_fee_amount || 0),
-            shipping_cost_amount: newShippingCost,
-            free_shipping: Boolean(item.shipping?.free_shipping ?? true),
-            shipping_method: item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
-            notes: `Sincronizado desde MercadoLibre ${item.id} · ${shippingSource || "endpoint compatible"}`,
-            active: true,
-            ...metadataPayload,
-            updated_at: now,
-          },
-          { onConflict: "product_id,meli_item_id" },
-        );
+        const shippingPayload = {
+          product_id: product.id,
+          sku: product.sku,
+          fixed_fee_amount: Number(current?.fixed_fee_amount || 0),
+          shipping_cost_amount: newShippingCost,
+          free_shipping: Boolean(item.shipping?.free_shipping ?? true),
+          shipping_method: item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
+          notes: `Sincronizado desde MercadoLibre ${item.id} · ${shippingSource || "endpoint compatible"}`,
+          active: true,
+          ...metadataPayload,
+          updated_at: now,
+        };
 
-        if (upsertError) throw new Error(upsertError.message);
+        const { error: saveError } = current?.id
+          ? await supabase.from("mercadolibre_shipping_costs").update(shippingPayload).eq("id", current.id)
+          : await supabase.from("mercadolibre_shipping_costs").insert(shippingPayload);
+
+        if (saveError) throw new Error(saveError.message);
 
         updated += 1;
         logs.push({
