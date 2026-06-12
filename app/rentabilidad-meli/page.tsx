@@ -1,0 +1,599 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { PageHero } from "@/components/PageHero";
+import { createClient } from "@/lib/supabase";
+import {
+  calculatePriceSummary,
+  defaultTaxSettings,
+  mercadoLibreClassicOption,
+  money,
+  moneyWithCents,
+  normalizeOption,
+  percent,
+} from "@/lib/pricing";
+import type {
+  MercadoLibreCategoryFee,
+  MercadoLibreInstallmentFee,
+  MercadoLibrePriceOption,
+  MercadoLibreShippingCost,
+  Product,
+  ProductChannelMargin,
+  TaxSettings,
+} from "@/lib/types";
+
+type ProfitStatus = "ok" | "warning" | "danger" | "missing";
+
+type ProfitRow = {
+  key: string;
+  product: Product;
+  shipping: MercadoLibreShippingCost;
+  option: MercadoLibrePriceOption;
+  currentPrice: number | null;
+  suggestedPrice: number | null;
+  differenceAmount: number | null;
+  differenceRate: number | null;
+  currentMargin: number | null;
+  targetMargin: number;
+  netProfit: number | null;
+  suggestedNetProfit: number | null;
+  status: ProfitStatus;
+  action: string;
+  issue: string | null;
+};
+
+function rawInstallmentLabel(shipping?: MercadoLibreShippingCost | null) {
+  if (!shipping) return "Sin dato ML";
+  if (shipping.meli_installments_text) return shipping.meli_installments_text;
+
+  const saleTerms = Array.isArray(shipping.meli_sale_terms) ? shipping.meli_sale_terms : [];
+  const searchable = [
+    shipping.meli_listing_type_id,
+    shipping.meli_listing_type_name,
+    ...(Array.isArray(shipping.meli_tags) ? shipping.meli_tags : []),
+    ...saleTerms.flatMap((term) => {
+      const value = term as { id?: string; name?: string; value_name?: string; value_id?: string };
+      return [value?.id, value?.name, value?.value_name, value?.value_id];
+    }),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const match = searchable.match(/(\d{1,2})\s*(x|cuotas?|installments?)/i);
+  if (match?.[1]) return `${match[1]} cuotas`;
+  if (searchable.includes("gold_pro") || searchable.includes("premium")) return "Premium / cuotas";
+  if (searchable.includes("gold_special") || searchable.includes("clasica")) return "Clasica / 1 pago";
+  return "Sin dato ML";
+}
+
+function installmentNumberFromLabel(label: string) {
+  const normalized = label.toLowerCase();
+  const match = normalized.match(/(\d{1,2})\s*cuotas?/i);
+  if (match?.[1]) return Number(match[1]);
+  if (normalized.includes("1 pago") || normalized.includes("clasica")) return 1;
+  return null;
+}
+
+function sortedDistinctPrices(shippings: MercadoLibreShippingCost[]) {
+  return Array.from(
+    new Set(
+      shippings
+        .map((item) => Math.round(Number(item.meli_price || 0)))
+        .filter((price) => price > 0),
+    ),
+  ).sort((a, b) => a - b);
+}
+
+function inferredInstallmentNumber(
+  shipping: MercadoLibreShippingCost,
+  shippings: MercadoLibreShippingCost[],
+) {
+  const explicit = installmentNumberFromLabel(rawInstallmentLabel(shipping));
+  if (explicit) return explicit;
+
+  const price = Math.round(Number(shipping.meli_price || 0));
+  if (!price) return null;
+
+  const prices = sortedDistinctPrices(shippings);
+  const index = prices.findIndex((item) => item === price);
+  const inferredByOrder = [1, 3, 6, 9, 12];
+  return index >= 0 ? inferredByOrder[index] || null : null;
+}
+
+function installmentLabel(shipping: MercadoLibreShippingCost, shippings: MercadoLibreShippingCost[]) {
+  const rawLabel = rawInstallmentLabel(shipping);
+  if (rawLabel !== "Premium / cuotas" && rawLabel !== "Sin dato ML") return rawLabel;
+
+  const inferred = inferredInstallmentNumber(shipping, shippings);
+  if (inferred) return inferred === 1 ? "Clasica / 1 pago" : `${inferred} cuotas`;
+
+  return rawLabel;
+}
+
+function sortPricingOptions(options: MercadoLibrePriceOption[]) {
+  const fixedOrder: Record<string, number> = {
+    MC: 1,
+    MP3: 2,
+    MP6: 3,
+    MP9: 4,
+    MP12: 5,
+  };
+
+  return [...options].sort((a, b) => {
+    const orderA = fixedOrder[a.code] ?? 1000;
+    const orderB = fixedOrder[b.code] ?? 1000;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.code.localeCompare(b.code, "es");
+  });
+}
+
+function findOptionForPublication(
+  shipping: MercadoLibreShippingCost,
+  productShippings: MercadoLibreShippingCost[],
+  options: MercadoLibrePriceOption[],
+) {
+  const installments = inferredInstallmentNumber(shipping, productShippings);
+  if (!installments || installments === 1) {
+    return options.find((option) => option.code === "MC") || mercadoLibreClassicOption();
+  }
+
+  return (
+    options.find((option) => Number(option.installment_count || 0) === installments) ||
+    options.find((option) => option.code === `MP${installments}`) ||
+    options.find((option) => option.code === "MC") ||
+    mercadoLibreClassicOption()
+  );
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "-";
+  try {
+    return new Intl.DateTimeFormat("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return "-";
+  }
+}
+
+function statusLabel(status: ProfitStatus) {
+  if (status === "ok") return "OK";
+  if (status === "warning") return "Revisar";
+  if (status === "danger") return "Perdida";
+  return "Datos faltantes";
+}
+
+function meliStatusLabel(status?: string | null) {
+  if (!status) return "-";
+  const labels: Record<string, string> = {
+    active: "Activa",
+    paused: "Pausada",
+    closed: "Cerrada",
+    under_review: "En revision",
+  };
+  return labels[status] || status;
+}
+
+export default function RentabilidadMeliPage() {
+  const router = useRouter();
+  const supabase = createClient();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
+  const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
+  const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
+  const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
+  const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function checkSession() {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) router.push("/login");
+  }
+
+  async function loadData() {
+    setLoading(true);
+    setError(null);
+
+    const [
+      productsResponse,
+      installmentsResponse,
+      categoryFeesResponse,
+      taxesResponse,
+      shippingResponse,
+      marginsResponse,
+    ] = await Promise.all([
+      supabase.from("products").select("*").eq("status", "active").order("name", { ascending: true }),
+      supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
+      supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
+      supabase.from("tax_settings").select("*").eq("key", "default").single(),
+      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).order("updated_at", { ascending: false }),
+      supabase.from("product_channel_margins").select("*"),
+    ]);
+
+    setLoading(false);
+
+    if (productsResponse.error) setError(productsResponse.error.message);
+    else setProducts((productsResponse.data || []) as Product[]);
+
+    if (installmentsResponse.error) setError(installmentsResponse.error.message);
+    else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
+
+    if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
+    else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
+
+    if (taxesResponse.error) setError(taxesResponse.error.message);
+    else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
+
+    if (shippingResponse.error) setError(shippingResponse.error.message);
+    else setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
+
+    if (marginsResponse.error) setError(marginsResponse.error.message);
+    else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
+  }
+
+  useEffect(() => {
+    checkSession();
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
+    return sortPricingOptions([
+      mercadoLibreClassicOption(),
+      ...installments.map((item) =>
+        normalizeOption({
+          code: item.code,
+          name: item.name,
+          channel_type: item.channel_type,
+          installment_count: item.installment_count,
+          financing_fee_rate: item.financing_fee_rate,
+          applies_marketplace_fee: item.applies_marketplace_fee,
+          applies_shipping: item.applies_shipping,
+          applies_iibb: item.applies_iibb,
+          applies_idc: item.applies_idc,
+          applies_iigg: item.applies_iigg,
+          applies_structure: item.applies_structure,
+          applies_vat: item.applies_vat,
+          active: item.active,
+        }),
+      ),
+    ]);
+  }, [installments]);
+
+  const rows = useMemo<ProfitRow[]>(() => {
+    const productsById = new Map(products.map((product) => [product.id, product]));
+    const productsBySku = new Map(products.map((product) => [product.sku, product]));
+
+    return shippingCosts
+      .filter((shipping) => Boolean(shipping.meli_item_id))
+      .map((shipping) => {
+        const product =
+          productsById.get(shipping.product_id) ||
+          (shipping.sku ? productsBySku.get(shipping.sku) : undefined);
+        if (!product) return null;
+
+        const productShippings = shippingCosts.filter(
+          (item) => item.product_id === product.id || item.sku === product.sku,
+        );
+        const option = normalizeOption(findOptionForPublication(shipping, productShippings, pricingOptions));
+        const setting = marginSettings.find(
+          (item) => item.product_id === product.id && item.channel_code === option.code,
+        );
+        const categoryFee = categoryFees.find(
+          (item) => item.category?.toLowerCase() === (product.category || "").toLowerCase(),
+        );
+        const targetMargin = Number(setting?.desired_margin_rate ?? 5);
+        const currentPrice = Number(shipping.meli_price || 0) > 0 ? Number(shipping.meli_price) : null;
+
+        const commonTarget = {
+          structureAmount: Number(setting?.structure_amount || 0),
+          manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
+          salesCommissionRate: Number(setting?.sales_commission_rate || 0),
+          saleAppliesVat: setting?.sale_applies_vat ?? option.applies_vat,
+          costVatRate: Number(setting?.cost_vat_rate || 0),
+          roundTo: 100,
+          roundingMode: "nearest" as const,
+        };
+
+        const suggested = calculatePriceSummary(
+          product,
+          option,
+          option.applies_marketplace_fee ? categoryFee : null,
+          taxes,
+          option.applies_shipping ? shipping : null,
+          {
+            ...commonTarget,
+            desiredMarginRate: targetMargin,
+            desiredNetProfit: setting?.desired_net_profit ?? null,
+          },
+        );
+
+        const current = currentPrice
+          ? calculatePriceSummary(
+              product,
+              option,
+              option.applies_marketplace_fee ? categoryFee : null,
+              taxes,
+              option.applies_shipping ? shipping : null,
+              {
+                ...commonTarget,
+                salePrice: currentPrice,
+                desiredMarginRate: targetMargin,
+                desiredNetProfit: null,
+              },
+            )
+          : null;
+
+        const suggestedPrice = suggested.valid ? Number(suggested.roundedPrice || 0) : null;
+        const currentMargin = current?.valid ? Number(current.marginOnNetSale || 0) : null;
+        const netProfit = current?.valid ? Number(current.netProfit || 0) : null;
+        const suggestedNetProfit = suggested.valid ? Number(suggested.netProfit || 0) : null;
+        const differenceAmount =
+          suggestedPrice !== null && currentPrice !== null ? suggestedPrice - currentPrice : null;
+        const differenceRate =
+          differenceAmount !== null && currentPrice ? (differenceAmount / currentPrice) * 100 : null;
+
+        let status: ProfitStatus = "ok";
+        let action = "Mantener";
+        let issue: string | null = null;
+
+        if (!currentPrice) {
+          status = "missing";
+          action = "Completar precio ML";
+          issue = "La publicacion no tiene precio sincronizado.";
+        } else if (!suggested.valid || !current?.valid) {
+          status = "missing";
+          action = "Revisar datos";
+          issue = suggested.error || current?.error || "No se pudo calcular la rentabilidad.";
+        } else if (!categoryFee && option.applies_marketplace_fee) {
+          status = "missing";
+          action = "Completar comision";
+          issue = "Falta comision de MercadoLibre para la categoria.";
+        } else if (Number(shipping.shipping_cost_amount || 0) <= 0 && option.applies_shipping) {
+          status = "missing";
+          action = "Completar envio";
+          issue = "Falta costo de envio para esta publicacion.";
+        } else if ((netProfit ?? 0) < 0 || (currentMargin ?? 0) < 0) {
+          status = "danger";
+          action = "Pausar o subir precio";
+        } else if ((currentMargin ?? 0) + 0.5 < targetMargin) {
+          status = "warning";
+          action = "Subir precio";
+        } else if (differenceRate !== null && differenceRate < -8) {
+          status = "warning";
+          action = "Validar competitividad";
+        }
+
+        return {
+          key: `${shipping.id || shipping.meli_item_id}-${product.id || product.sku}`,
+          product,
+          shipping,
+          option,
+          currentPrice,
+          suggestedPrice,
+          differenceAmount,
+          differenceRate,
+          currentMargin,
+          targetMargin,
+          netProfit,
+          suggestedNetProfit,
+          status,
+          action,
+          issue,
+        };
+      })
+      .filter(Boolean) as ProfitRow[];
+  }, [products, shippingCosts, pricingOptions, marginSettings, categoryFees, taxes]);
+
+  const filteredRows = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return rows.filter((row) => {
+      const searchable = [
+        row.product.sku,
+        row.product.name,
+        row.product.brand,
+        row.product.model,
+        row.product.category,
+        row.shipping.meli_item_id,
+        row.shipping.meli_title,
+        row.option.code,
+        row.action,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return (
+        (!normalized || searchable.includes(normalized)) &&
+        (!statusFilter || row.status === statusFilter) &&
+        (!actionFilter || row.action === actionFilter)
+      );
+    });
+  }, [rows, query, statusFilter, actionFilter]);
+
+  const metrics = useMemo(() => {
+    const total = rows.length;
+    const danger = rows.filter((row) => row.status === "danger").length;
+    const warning = rows.filter((row) => row.status === "warning").length;
+    const missing = rows.filter((row) => row.status === "missing").length;
+    const ok = rows.filter((row) => row.status === "ok").length;
+    const potential = rows.reduce((sum, row) => {
+      if (row.differenceAmount === null || row.differenceAmount <= 0) return sum;
+      return sum + row.differenceAmount;
+    }, 0);
+    return { total, danger, warning, missing, ok, potential };
+  }, [rows]);
+
+  const actions = useMemo(() => Array.from(new Set(rows.map((row) => row.action))).sort(), [rows]);
+
+  return (
+    <main className="container wide rentabilidad-meli-page">
+      <PageHero
+        title="Rentabilidad Meli"
+        description="Comparacion entre precio publicado en MercadoLibre, precio sugerido y margen real por publicacion."
+        onRefresh={loadData}
+        icon="$"
+      />
+
+      {error && <div className="message error">{error}</div>}
+
+      <section className="rentabilidad-kpi-grid">
+        <div className="card rentabilidad-kpi-card">
+          <span>Total publicaciones</span>
+          <strong>{metrics.total}</strong>
+          <small>Con item ID de MercadoLibre</small>
+        </div>
+        <div className="card rentabilidad-kpi-card danger">
+          <span>Con perdida</span>
+          <strong>{metrics.danger}</strong>
+          <small>Ganancia o margen negativo</small>
+        </div>
+        <div className="card rentabilidad-kpi-card warning">
+          <span>Para revisar</span>
+          <strong>{metrics.warning}</strong>
+          <small>Margen bajo o precio alto</small>
+        </div>
+        <div className="card rentabilidad-kpi-card missing">
+          <span>Datos faltantes</span>
+          <strong>{metrics.missing}</strong>
+          <small>Precio, envio o comision</small>
+        </div>
+        <div className="card rentabilidad-kpi-card">
+          <span>Oportunidad bruta</span>
+          <strong>{money(metrics.potential)}</strong>
+          <small>Suma de brechas positivas</small>
+        </div>
+      </section>
+
+      <section className="card rentabilidad-filters-card">
+        <div className="rentabilidad-filter-grid">
+          <div className="field">
+            <label>Buscar</label>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="SKU, producto, item ID, canal o accion"
+            />
+          </div>
+          <div className="field">
+            <label>Estado</label>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">Todos</option>
+              <option value="danger">Perdida</option>
+              <option value="warning">Revisar</option>
+              <option value="missing">Datos faltantes</option>
+              <option value="ok">OK</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Accion</label>
+            <select value={actionFilter} onChange={(event) => setActionFilter(event.target.value)}>
+              <option value="">Todas</option>
+              {actions.map((action) => (
+                <option key={action} value={action}>{action}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section className="card rentabilidad-table-card">
+        <div className="rentabilidad-table-header">
+          <div>
+            <h2>Revision de publicaciones</h2>
+            <p className="small">Mostrando {filteredRows.length} de {rows.length} publicaciones sincronizadas.</p>
+          </div>
+          <span className="badge">{metrics.ok} OK</span>
+        </div>
+
+        {loading ? (
+          <p>Cargando rentabilidad...</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="rentabilidad-table">
+              <thead>
+                <tr>
+                  <th>Estado</th>
+                  <th>Producto / publicacion</th>
+                  <th>Canal detectado</th>
+                  <th>Precio ML</th>
+                  <th>Precio sugerido</th>
+                  <th>Diferencia</th>
+                  <th>Margen real</th>
+                  <th>Ganancia real</th>
+                  <th>Accion</th>
+                  <th>Sync</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row) => (
+                  <tr key={row.key}>
+                    <td>
+                      <span className={`rentabilidad-status rentabilidad-status-${row.status}`}>
+                        {statusLabel(row.status)}
+                      </span>
+                    </td>
+                    <td className="rentabilidad-product-cell">
+                      <strong>{row.product.name}</strong>
+                      <span>{row.product.sku} · {row.product.category || "Sin categoria"}</span>
+                      <span>
+                        {row.shipping.meli_item_id || "-"} · {meliStatusLabel(row.shipping.meli_status)}
+                        {row.shipping.meli_permalink ? (
+                          <>
+                            {" · "}
+                            <a href={row.shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir ML</a>
+                          </>
+                        ) : null}
+                      </span>
+                      {row.issue && <em>{row.issue}</em>}
+                    </td>
+                    <td>
+                      <strong>{row.option.code}</strong>
+                      <br />
+                      <span className="small">{installmentLabel(row.shipping, shippingCosts)}</span>
+                    </td>
+                    <td><strong>{row.currentPrice ? moneyWithCents(row.currentPrice) : "-"}</strong></td>
+                    <td>{row.suggestedPrice ? moneyWithCents(row.suggestedPrice) : "-"}</td>
+                    <td>
+                      {row.differenceAmount !== null ? (
+                        <span className={row.differenceAmount > 0 ? "rentabilidad-gap-up" : "rentabilidad-gap-down"}>
+                          {moneyWithCents(row.differenceAmount)}
+                          <br />
+                          <small>{percent(row.differenceRate)}</small>
+                        </span>
+                      ) : "-"}
+                    </td>
+                    <td>
+                      <strong>{row.currentMargin !== null ? percent(row.currentMargin) : "-"}</strong>
+                      <br />
+                      <span className="small">Objetivo {percent(row.targetMargin)}</span>
+                    </td>
+                    <td>{row.netProfit !== null ? moneyWithCents(row.netProfit) : "-"}</td>
+                    <td><span className="badge">{row.action}</span></td>
+                    <td>
+                      <span className="small">{formatDateTime(row.shipping.meli_last_sync_at || row.shipping.updated_at)}</span>
+                    </td>
+                  </tr>
+                ))}
+                {filteredRows.length === 0 && (
+                  <tr>
+                    <td colSpan={10}>No hay publicaciones para mostrar con esos filtros.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}

@@ -4089,3 +4089,202 @@ td strong {
 .product-publications-table .badge {
   white-space: nowrap;
 }
+
+
+/* v7.60 - Rentabilidad Meli */
+.rentabilidad-meli-page .app-page-hero {
+  margin-bottom: 18px;
+}
+
+.rentabilidad-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.rentabilidad-kpi-card {
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.rentabilidad-kpi-card span {
+  display: block;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 10px;
+}
+
+.rentabilidad-kpi-card strong {
+  display: block;
+  color: #0f172a;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.rentabilidad-kpi-card small {
+  display: block;
+  color: #64748b;
+  margin-top: 8px;
+}
+
+.rentabilidad-kpi-card.danger {
+  border-color: #fecaca;
+  background: #fff8f8;
+}
+
+.rentabilidad-kpi-card.warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.rentabilidad-kpi-card.missing {
+  border-color: #dbe4f0;
+  background: #f8fafc;
+}
+
+.rentabilidad-filters-card {
+  border-radius: 18px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.rentabilidad-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 220px 240px;
+  gap: 14px;
+  align-items: end;
+}
+
+.rentabilidad-table-card {
+  border-radius: 20px;
+  padding: 18px;
+}
+
+.rentabilidad-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.rentabilidad-table-header h2 {
+  margin: 0 0 4px;
+}
+
+.rentabilidad-table {
+  min-width: 1240px;
+  font-size: 13px;
+}
+
+.rentabilidad-table th {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.rentabilidad-table td {
+  vertical-align: middle;
+}
+
+.rentabilidad-product-cell {
+  min-width: 320px;
+}
+
+.rentabilidad-product-cell strong,
+.rentabilidad-product-cell span,
+.rentabilidad-product-cell em {
+  display: block;
+}
+
+.rentabilidad-product-cell span {
+  color: #475569;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.rentabilidad-product-cell a {
+  color: #2563eb;
+  font-weight: 850;
+}
+
+.rentabilidad-product-cell em {
+  color: #be123c;
+  font-size: 12px;
+  font-style: normal;
+  margin-top: 6px;
+}
+
+.rentabilidad-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  min-width: 92px;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.rentabilidad-status-ok {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.rentabilidad-status-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.rentabilidad-status-danger {
+  background: #fee2e2;
+  color: #be123c;
+}
+
+.rentabilidad-status-missing {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.rentabilidad-gap-up {
+  color: #be123c;
+  font-weight: 850;
+}
+
+.rentabilidad-gap-down {
+  color: #047857;
+  font-weight: 850;
+}
+
+.rentabilidad-gap-up small,
+.rentabilidad-gap-down small {
+  color: currentColor;
+}
+
+@media (max-width: 1260px) {
+  .rentabilidad-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rentabilidad-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .rentabilidad-kpi-grid,
+  .rentabilidad-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rentabilidad-table-header {
+    flex-direction: column;
+  }
+}

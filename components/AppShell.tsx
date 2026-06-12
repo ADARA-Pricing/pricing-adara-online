@@ -80,6 +80,17 @@ function IconSimulator() {
   );
 }
 
+function IconProfit() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sidebar-icon-svg" aria-hidden="true">
+      <path d="M4 19V5" />
+      <path d="M4 19h16" />
+      <path d="M7 15l3-3 3 2 5-7" />
+      <path d="M16 7h2v2" />
+    </svg>
+  );
+}
+
 function IconSettings() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sidebar-icon-svg" aria-hidden="true">
@@ -105,6 +116,7 @@ const mainItems: NavItem[] = [
   { href: "/envios-meli", label: "Envíos", icon: <IconShipping /> },
   { href: "/impuestos", label: "Impuestos", icon: <IconTaxes /> },
   { href: "/precios", label: "Precios", icon: <IconPrices /> },
+  { href: "/rentabilidad-meli", label: "Rentabilidad Meli", icon: <IconProfit /> },
   { href: "/simulador", label: "Simulador", icon: <IconSimulator /> },
 ];
 
