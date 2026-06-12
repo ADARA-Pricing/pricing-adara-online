@@ -35,6 +35,7 @@ type ProfitRow = {
   sellerEffectivePrice: number | null;
   sellerDiscountAmount: number | null;
   meliContributionAmount: number | null;
+  meliContributionManual: boolean;
   receiveAmount: number | null;
   promoName: string | null;
   suggestedPrice: number | null;
@@ -202,7 +203,7 @@ function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost) {
   const listPrice = Number(shipping.meli_original_price || shipping.meli_price || 0) || null;
   const buyerPrice = Number(shipping.meli_promo_price || shipping.meli_price || 0) || null;
   const sellerDiscount = Number(shipping.meli_promo_seller_amount || 0) || null;
-  const meliContribution = Number(shipping.meli_promo_meli_amount || 0) || null;
+  const meliContribution = Number(shipping.meli_promo_meli_amount_override || shipping.meli_promo_meli_amount || 0) || null;
 
   if (listPrice && sellerDiscount) return listPrice - sellerDiscount;
   if (buyerPrice && meliContribution) return buyerPrice + meliContribution;
@@ -271,6 +272,56 @@ export default function RentabilidadMeliPage() {
     else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
   }
 
+  async function saveMeliContribution(row: ProfitRow) {
+    if (!row.shipping.id) {
+      setError("No se puede actualizar esta publicacion porque no tiene ID interno.");
+      return;
+    }
+
+    const current = row.meliContributionAmount ?? 0;
+    const value = window.prompt(
+      `Aporte MercadoLibre para ${row.shipping.meli_item_id || row.product.sku}`,
+      current ? String(current) : "",
+    );
+    if (value === null) return;
+
+    const normalized = value.replace(/\./g, "").replace(",", ".");
+    const amount = Number(normalized);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setError("El aporte MercadoLibre debe ser un numero mayor o igual a 0.");
+      return;
+    }
+
+    const receiveValue = window.prompt(
+      "Recibis ML opcional. Dejalo vacio si no queres cargarlo.",
+      row.receiveAmount ? String(row.receiveAmount) : "",
+    );
+    const receiveNormalized = receiveValue?.trim()
+      ? Number(receiveValue.replace(/\./g, "").replace(",", "."))
+      : null;
+
+    if (receiveValue?.trim() && (!Number.isFinite(receiveNormalized) || Number(receiveNormalized) < 0)) {
+      setError("El importe Recibis ML debe ser mayor o igual a 0.");
+      return;
+    }
+
+    const { error: saveError } = await supabase
+      .from("mercadolibre_shipping_costs")
+      .update({
+        meli_promo_meli_amount_override: amount,
+        meli_promo_receive_amount_override: receiveNormalized,
+        meli_promo_override_notes: "Cargado manualmente desde Rentabilidad Meli",
+      })
+      .eq("id", row.shipping.id);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    await loadData();
+  }
+
   useEffect(() => {
     checkSession();
     loadData();
@@ -330,9 +381,14 @@ export default function RentabilidadMeliPage() {
           ? Number(shipping.meli_promo_price || shipping.meli_price)
           : null;
         const sellerEffectivePrice = effectiveMeliSalePrice(shipping);
-        const sellerDiscountAmount = Number(shipping.meli_promo_seller_amount || 0) || null;
-        const meliContributionAmount = Number(shipping.meli_promo_meli_amount || 0) || null;
-        const receiveAmount = Number(shipping.meli_promo_receive_amount || 0) || null;
+        const meliContributionAmount = Number(shipping.meli_promo_meli_amount_override || shipping.meli_promo_meli_amount || 0) || null;
+        const meliContributionManual = Boolean(shipping.meli_promo_meli_amount_override);
+        const receiveAmount = Number(shipping.meli_promo_receive_amount_override || shipping.meli_promo_receive_amount || 0) || null;
+        const sellerDiscountAmount =
+          Number(shipping.meli_promo_seller_amount || 0) ||
+          (listPrice && buyerPrice && meliContributionAmount
+            ? Math.max(listPrice - buyerPrice - meliContributionAmount, 0)
+            : null);
 
         const commonTarget = {
           structureAmount: Number(setting?.structure_amount || 0),
@@ -423,6 +479,7 @@ export default function RentabilidadMeliPage() {
           sellerEffectivePrice,
           sellerDiscountAmount,
           meliContributionAmount,
+          meliContributionManual,
           receiveAmount,
           promoName: shipping.meli_promo_name || null,
           suggestedPrice,
@@ -738,8 +795,18 @@ export default function RentabilidadMeliPage() {
                                           <>
                                             <strong>{row.promoName || "Promocion activa"}</strong>
                                             <span>Tu cargo {row.sellerDiscountAmount ? moneyWithCents(row.sellerDiscountAmount) : "-"}</span>
-                                            <span>Aporte ML {row.meliContributionAmount ? moneyWithCents(row.meliContributionAmount) : "-"}</span>
+                                            <span>
+                                              Aporte ML {row.meliContributionAmount ? moneyWithCents(row.meliContributionAmount) : "-"}
+                                              {row.meliContributionManual ? " (manual)" : ""}
+                                            </span>
                                             <span>Recibis ML {row.receiveAmount ? moneyWithCents(row.receiveAmount) : "-"}</span>
+                                            <button
+                                              className="button ghost small-button rentabilidad-inline-button"
+                                              type="button"
+                                              onClick={() => saveMeliContribution(row)}
+                                            >
+                                              Cargar aporte ML
+                                            </button>
                                           </>
                                         ) : (
                                           <span className="small">Sin promo detectada</span>

@@ -4261,6 +4261,11 @@ td strong {
   margin-bottom: 2px;
 }
 
+.rentabilidad-inline-button {
+  margin-top: 8px;
+  width: fit-content;
+}
+
 .rentabilidad-promo-cell span:nth-child(3) {
   color: #047857;
   font-weight: 750;
