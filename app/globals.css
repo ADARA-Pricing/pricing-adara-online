@@ -3956,3 +3956,58 @@ td strong {
     flex: 1;
   }
 }
+
+
+/* v7.46 - productos sin naranja y editor plegable */
+.products-primary-button {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.14) !important;
+}
+
+.products-primary-button:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%) !important;
+}
+
+.products-secondary-button {
+  border-color: #dbe4f0 !important;
+}
+
+.product-editor-card {
+  border-radius: 20px;
+}
+
+.product-editor-header {
+  border-bottom: 1px solid #e6eef8;
+  padding-bottom: 14px;
+}
+
+.products-toolbar-actions .button,
+.product-editor-controls .button {
+  min-width: 148px;
+}
+
+@media (max-width: 1100px) {
+  .products-toolbar-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .products-toolbar-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .product-editor-controls {
+    width: 100%;
+    flex-wrap: wrap !important;
+  }
+
+  .product-editor-controls .button,
+  .products-toolbar-actions .button {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+}

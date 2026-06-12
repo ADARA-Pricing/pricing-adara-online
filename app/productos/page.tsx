@@ -217,6 +217,7 @@ export default function ProductsPage() {
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [activeProductTab, setActiveProductTab] = useState<"manual" | "excel">("manual");
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const costWithVatPreview = useMemo(() => {
     const cost = Number(form.cost_without_vat || 0);
@@ -275,6 +276,7 @@ export default function ProductsPage() {
 
   function editProduct(product: Product) {
     setActiveProductTab("manual");
+    setEditorOpen(true);
     setForm({ ...emptyProduct, ...product });
     setMessage(`Editando SKU ${product.sku}. Al guardar se actualiza el producto.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -282,6 +284,7 @@ export default function ProductsPage() {
 
   function duplicateProduct(product: Product) {
     setActiveProductTab("manual");
+    setEditorOpen(true);
     setForm({
       ...emptyProduct,
       ...product,
@@ -369,6 +372,7 @@ export default function ProductsPage() {
 
     setMessage(existing ? `Producto actualizado: ${cleanSku}` : `Producto creado: ${cleanSku}`);
     setForm(emptyProduct);
+    setEditorOpen(false);
     await loadProducts();
   }
 
@@ -561,10 +565,10 @@ export default function ProductsPage() {
             </select>
           </div>
           <div className="products-toolbar-actions">
-            <button className="button" type="button" onClick={() => setActiveProductTab("manual")}>
-              Nuevo producto
+            <button className="button products-primary-button" type="button" onClick={() => { setActiveProductTab("manual"); setEditorOpen(true); setForm(emptyProduct); }}>
+              + Nuevo producto
             </button>
-            <button className="button ghost" type="button" onClick={() => setActiveProductTab("excel")}>
+            <button className="button ghost products-secondary-button" type="button" onClick={() => { setActiveProductTab("excel"); setEditorOpen(true); }}>
               Importar Excel
             </button>
           </div>
@@ -606,8 +610,9 @@ export default function ProductsPage() {
         </div>
       </section>
 
+      {editorOpen && (
       <section className="card product-editor-card">
-        <div className="header" style={{ alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
+        <div className="header product-editor-header" style={{ alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
           <div>
             <h2 style={{ marginTop: 0, marginBottom: 8 }}>
               {activeProductTab === "manual" ? "Nuevo / actualizar producto" : "Carga masiva con Excel"}
@@ -618,12 +623,15 @@ export default function ProductsPage() {
                 : "Descargá la plantilla, completala en Excel y subila. Si el SKU ya existe, se actualiza; si no existe, se crea."}
             </p>
           </div>
-          <div className="actions" style={{ alignItems: "center", flexWrap: "nowrap" }}>
-            <button className={activeProductTab === "manual" ? "button" : "button ghost"} type="button" onClick={() => setActiveProductTab("manual")}>
+          <div className="actions product-editor-controls" style={{ alignItems: "center", flexWrap: "nowrap" }}>
+            <button className={activeProductTab === "manual" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("manual")}>
               Carga manual
             </button>
-            <button className={activeProductTab === "excel" ? "button" : "button ghost"} type="button" onClick={() => setActiveProductTab("excel")}>
+            <button className={activeProductTab === "excel" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("excel")}>
               Carga masiva Excel
+            </button>
+            <button className="button ghost products-secondary-button" type="button" onClick={() => setEditorOpen(false)}>
+              Cerrar
             </button>
           </div>
         </div>
@@ -663,8 +671,8 @@ export default function ProductsPage() {
             </div>
 
             <div className="actions" style={{ marginTop: 16 }}>
-              <button className="button" disabled={saving} type="submit">{saving ? "Guardando..." : "Guardar producto"}</button>
-              <button className="button ghost" type="button" onClick={() => setForm(emptyProduct)}>Limpiar</button>
+              <button className="button products-primary-button" disabled={saving} type="submit">{saving ? "Guardando..." : "Guardar producto"}</button>
+              <button className="button ghost products-secondary-button" type="button" onClick={() => setForm(emptyProduct)}>Limpiar</button>
             </div>
           </form>
         ) : (
@@ -674,8 +682,8 @@ export default function ProductsPage() {
                 Columnas obligatorias: <strong>SKU</strong>, <strong>Nombre</strong>, <strong>Costo sin IVA</strong> e <strong>IVA %</strong>.
               </p>
               <div className="actions">
-                <button className="button ghost" type="button" onClick={downloadTemplate}>Descargar plantilla</button>
-                <label className="button ghost" style={{ cursor: "pointer" }}>
+                <button className="button ghost products-secondary-button" type="button" onClick={downloadTemplate}>Descargar plantilla</button>
+                <label className="button products-primary-button" style={{ cursor: "pointer" }}>
                   Subir Excel
                   <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} style={{ display: "none" }} />
                 </label>
@@ -697,8 +705,8 @@ export default function ProductsPage() {
                     <p className="small" style={{ margin: "4px 0 0" }}>Vista previa de los primeros productos del archivo.</p>
                   </div>
                   <div className="actions">
-                    <button className="button" type="button" disabled={importing || saving} onClick={importProducts}>{importing ? "Importando..." : "Importar productos"}</button>
-                    <button className="button ghost" type="button" disabled={importing} onClick={() => setImportRows([])}>Cancelar</button>
+                    <button className="button products-primary-button" type="button" disabled={importing || saving} onClick={importProducts}>{importing ? "Importando..." : "Importar productos"}</button>
+                    <button className="button ghost products-secondary-button" type="button" disabled={importing} onClick={() => setImportRows([])}>Cancelar</button>
                   </div>
                 </div>
 
@@ -724,6 +732,7 @@ export default function ProductsPage() {
           </div>
         )}
       </section>
+      )}
 
       <section className="products-list-section">
         <div className="products-list-header">
