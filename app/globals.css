@@ -4098,7 +4098,7 @@ td strong {
 
 .rentabilidad-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 16px;
 }
@@ -4182,8 +4182,10 @@ td strong {
 }
 
 .rentabilidad-table {
-  min-width: 1240px;
+  min-width: 1180px;
   font-size: 13px;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .rentabilidad-table th {
@@ -4193,14 +4195,17 @@ td strong {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   white-space: nowrap;
+  padding: 12px 14px;
 }
 
 .rentabilidad-table td {
   vertical-align: middle;
+  padding: 14px;
+  line-height: 1.35;
 }
 
 .rentabilidad-product-cell {
-  min-width: 320px;
+  min-width: 300px;
 }
 
 .rentabilidad-product-cell strong,
@@ -4212,7 +4217,8 @@ td strong {
 .rentabilidad-product-cell span {
   color: #475569;
   font-size: 12px;
-  margin-top: 4px;
+  margin-top: 5px;
+  line-height: 1.35;
 }
 
 .rentabilidad-product-cell a {
@@ -4242,11 +4248,12 @@ td strong {
 .rentabilidad-promo-cell span {
   color: #64748b;
   font-size: 12px;
-  margin-top: 4px;
+  margin-top: 5px;
+  line-height: 1.35;
 }
 
 .rentabilidad-promo-cell {
-  min-width: 190px;
+  min-width: 210px;
 }
 
 .rentabilidad-promo-cell strong {
@@ -4312,19 +4319,22 @@ td strong {
 
 .rentabilidad-detail-row td {
   background: #fbfdff;
-  padding: 0 12px 16px;
+  padding: 0 14px 18px;
 }
 
 .rentabilidad-detail-panel {
   border: 1px solid #dfe7f3;
-  border-radius: 14px;
+  border-radius: 16px;
   overflow-x: auto;
   background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
 }
 
 .rentabilidad-detail-table {
-  min-width: 1180px;
-  font-size: 12px;
+  min-width: 1280px;
+  font-size: 13px;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .rentabilidad-detail-table th {
@@ -4334,11 +4344,26 @@ td strong {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   white-space: nowrap;
+  padding: 12px 14px;
 }
 
 .rentabilidad-detail-table td {
   background: #ffffff;
   vertical-align: top;
+  padding: 14px;
+  line-height: 1.35;
+}
+
+.rentabilidad-detail-table tbody tr + tr td {
+  border-top: 1px solid #edf2f7;
+}
+
+.rentabilidad-detail-table .rentabilidad-product-cell {
+  min-width: 340px;
+}
+
+.rentabilidad-detail-table .rentabilidad-price-cell {
+  min-width: 150px;
 }
 
 @media (max-width: 1260px) {

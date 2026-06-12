@@ -420,6 +420,18 @@ async function getPromotionSummaryForItem(item: MeliItem, account: any) {
   return endpointSummary;
 }
 
+async function getDetailedItemForPricing(item: MeliItem, account: any) {
+  try {
+    const data = await meliFetch(`/items/${item.id}`, account);
+    return {
+      ...item,
+      ...(data || {}),
+    } as MeliItem;
+  } catch {
+    return item;
+  }
+}
+
 async function getListingTypeNames(account: any) {
   const map = new Map<string, string>();
   try {
@@ -489,6 +501,7 @@ export async function POST() {
 
     const shippingCostsByItem = new Map<string, { cost: number; source: string | null }>();
     const promotionsByItem = new Map<string, PromotionSummary>();
+    const detailedItemsByItem = new Map<string, MeliItem>();
 
     async function shippingCostForMatchedItem(item: MeliItem) {
       const cached = shippingCostsByItem.get(item.id);
@@ -503,7 +516,9 @@ export async function POST() {
       const cached = promotionsByItem.get(item.id);
       if (cached) return cached;
 
-      const result = await getPromotionSummaryForItem(item, account);
+      const detailedItem = detailedItemsByItem.get(item.id) || await getDetailedItemForPricing(item, account);
+      detailedItemsByItem.set(item.id, detailedItem);
+      const result = await getPromotionSummaryForItem(detailedItem, account);
       promotionsByItem.set(item.id, result);
       return result;
     }
@@ -569,8 +584,8 @@ export async function POST() {
           meli_item_id: item.id,
           meli_title: item.title || null,
           meli_permalink: item.permalink || null,
-          meli_price: Number(item.price ?? 0) || null,
-          meli_currency_id: item.currency_id || null,
+          meli_price: Number((detailedItemsByItem.get(item.id) || item).price ?? 0) || null,
+          meli_currency_id: (detailedItemsByItem.get(item.id) || item).currency_id || null,
           meli_original_price: promotionResult.originalPrice,
           meli_promo_price: promotionResult.promoPrice,
           meli_promo_name: promotionResult.name,
