@@ -1,0 +1,3 @@
+-- v7.60 no requiere SQL nuevo.
+-- Productos: ordena publicaciones ML de 1 a 12 cuotas.
+-- Si MercadoLibre informa "Premium / cuotas", se completa como 6/9/12 según el orden de precios del mismo SKU.

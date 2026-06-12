@@ -199,8 +199,8 @@ function productInitial(product: Product) {
   return value.slice(0, 2).toUpperCase();
 }
 
-function installmentLabel(shipping?: MercadoLibreShippingCost | null) {
-  if (!shipping) return "Sin info";
+function rawInstallmentLabel(shipping?: MercadoLibreShippingCost | null) {
+  if (!shipping) return "Sin dato ML";
   if (shipping.meli_installments_text) return shipping.meli_installments_text;
 
   const saleTerms = Array.isArray(shipping.meli_sale_terms) ? shipping.meli_sale_terms : [];
@@ -220,6 +220,63 @@ function installmentLabel(shipping?: MercadoLibreShippingCost | null) {
   if (searchable.includes("gold_special") || searchable.includes("clásica") || searchable.includes("clasica")) return "Clásica / 1 pago";
   return "Sin dato ML";
 }
+
+function installmentNumberFromLabel(label: string) {
+  const normalized = label.toLowerCase();
+  const match = normalized.match(/(\d{1,2})\s*cuotas?/i);
+  if (match?.[1]) return Number(match[1]);
+  if (normalized.includes("1 pago") || normalized.includes("clásica") || normalized.includes("clasica")) return 1;
+  return null;
+}
+
+function sortedDistinctPrices(shippings: MercadoLibreShippingCost[]) {
+  return Array.from(
+    new Set(
+      shippings
+        .map((item) => Math.round(Number(item.meli_price || 0)))
+        .filter((price) => price > 0),
+    ),
+  ).sort((a, b) => a - b);
+}
+
+function inferredInstallmentNumber(shipping: MercadoLibreShippingCost, shippings: MercadoLibreShippingCost[]) {
+  const rawLabel = rawInstallmentLabel(shipping);
+  const explicit = installmentNumberFromLabel(rawLabel);
+  if (explicit) return explicit;
+
+  const price = Math.round(Number(shipping.meli_price || 0));
+  if (!price) return null;
+
+  const prices = sortedDistinctPrices(shippings);
+  const index = prices.findIndex((item) => item === price);
+  const inferredByOrder = [1, 3, 6, 9, 12];
+  return index >= 0 ? inferredByOrder[index] || null : null;
+}
+
+function installmentLabel(shipping: MercadoLibreShippingCost, shippings: MercadoLibreShippingCost[]) {
+  const rawLabel = rawInstallmentLabel(shipping);
+  if (rawLabel !== "Premium / cuotas" && rawLabel !== "Sin dato ML") return rawLabel;
+
+  const inferred = inferredInstallmentNumber(shipping, shippings);
+  if (inferred) return `${inferred === 1 ? "Clásica / 1 pago" : `${inferred} cuotas`}`;
+
+  return rawLabel;
+}
+
+function sortPublicationsByInstallments(shippings: MercadoLibreShippingCost[]) {
+  return [...shippings].sort((a, b) => {
+    const aInstallments = inferredInstallmentNumber(a, shippings) || 999;
+    const bInstallments = inferredInstallmentNumber(b, shippings) || 999;
+    if (aInstallments !== bInstallments) return aInstallments - bInstallments;
+
+    const aPrice = Number(a.meli_price || 0);
+    const bPrice = Number(b.meli_price || 0);
+    if (aPrice !== bPrice) return aPrice - bPrice;
+
+    return (a.meli_title || "").localeCompare(b.meli_title || "", "es");
+  });
+}
+
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -898,7 +955,7 @@ export default function ProductsPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {shippings.map((shipping) => {
+                              {sortPublicationsByInstallments(shippings).map((shipping) => {
                                 return (
                                   <tr key={shipping.id || `${product.sku}-${shipping.meli_item_id}`}>
                                     <td>
@@ -908,7 +965,7 @@ export default function ProductsPage() {
                                     </td>
                                     <td><span className={`badge meli-status-${shipping.meli_status || "none"}`}>{meliStatusLabel(shipping.meli_status)}</span></td>
                                     <td><strong>{shipping.meli_price ? money(shipping.meli_price) : "-"}</strong></td>
-                                    <td><span className="badge">{installmentLabel(shipping)}</span></td>
+                                    <td><span className="badge">{installmentLabel(shipping, shippings)}</span></td>
                                     <td>{shipping.meli_stock ?? "-"}</td>
                                     <td>{formatDateTime(shipping.meli_last_sync_at || shipping.updated_at)}</td>
                                     <td>{shipping.meli_permalink ? <a className="button ghost small-button" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir</a> : null}</td>
