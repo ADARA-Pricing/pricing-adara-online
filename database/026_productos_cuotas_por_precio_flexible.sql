@@ -1,0 +1,3 @@
+-- v7.56 no requiere SQL nuevo.
+-- Ajuste visual/lógico: la columna Cuotas usa la condición de precio configurada más cercana.
+-- Se muestra con ≈ porque MercadoLibre no devuelve siempre la cantidad de cuotas de forma directa.

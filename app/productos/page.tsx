@@ -711,12 +711,7 @@ export default function ProductsPage() {
       }>;
 
     const best = matches.sort((a, b) => a.diff - b.diff)[0];
-    if (!best) return null;
-
-    const tolerance = Math.max(250, publicationPrice * 0.015);
-    if (best.diff > tolerance) return null;
-
-    return best;
+    return best || null;
   }
 
   const categories = useMemo(() => {
@@ -1072,7 +1067,7 @@ export default function ProductsPage() {
                           <p>Activas: {activePublications}</p>
                           <p>Pausadas: {pausedPublications}</p>
                           <p className="small">No se suma el stock porque las publicaciones comparten el mismo inventario.</p>
-                          <p className="small">Las cuotas se detectan cruzando el precio publicado con las condiciones configuradas en Precios.</p>
+                          <p className="small">Las cuotas se estiman cruzando cada precio publicado con la condición más cercana configurada en Precios.</p>
                         </div>
                         <div>
                           <h4>Notas</h4>
@@ -1110,8 +1105,8 @@ export default function ProductsPage() {
                                       {(() => {
                                         const channel = estimatedChannelForPublication(product, shipping);
                                         return (
-                                          <span className="badge" title={channel ? `Detectado por precio: ${money(channel.calculatedPrice)}` : "No se pudo cruzar con una condición de precio"}>
-                                            {channel ? channelInstallmentLabel(channel.option) : installmentLabel(shipping.meli_title)}
+                                          <span className="badge" title={channel ? `Condición más cercana por precio configurado: ${money(channel.calculatedPrice)}` : "No se pudo cruzar con una condición de precio"}>
+                                            {channel ? `≈ ${channelInstallmentLabel(channel.option)}` : installmentLabel(shipping.meli_title)}
                                           </span>
                                         );
                                       })()}
