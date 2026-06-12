@@ -4305,6 +4305,42 @@ td strong {
   color: currentColor;
 }
 
+.rentabilidad-group-row.expanded td {
+  background: #f8fbff;
+  border-bottom-color: #dbeafe;
+}
+
+.rentabilidad-detail-row td {
+  background: #fbfdff;
+  padding: 0 12px 16px;
+}
+
+.rentabilidad-detail-panel {
+  border: 1px solid #dfe7f3;
+  border-radius: 14px;
+  overflow-x: auto;
+  background: #ffffff;
+}
+
+.rentabilidad-detail-table {
+  min-width: 1180px;
+  font-size: 12px;
+}
+
+.rentabilidad-detail-table th {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.rentabilidad-detail-table td {
+  background: #ffffff;
+  vertical-align: top;
+}
+
 @media (max-width: 1260px) {
   .rentabilidad-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -9,6 +9,13 @@ type MeliItem = {
   permalink?: string | null;
   seller_custom_field?: string | null;
   price?: number;
+  sale_price?: {
+    amount?: number | null;
+    regular_amount?: number | null;
+    currency_id?: string | null;
+    metadata?: Record<string, unknown> | null;
+  } | null;
+  original_price?: number | null;
   currency_id?: string | null;
   listing_type_id?: string | null;
   sale_terms?: Array<{ id?: string; name?: string; value_name?: string; value_id?: string }>;
@@ -342,7 +349,37 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null):
   };
 }
 
+function summarizeItemSalePrice(item: MeliItem): PromotionSummary | null {
+  const salePrice = item.sale_price;
+  const promoPrice = numberFromValue(salePrice?.amount);
+  const originalPrice =
+    numberFromValue(salePrice?.regular_amount) ||
+    numberFromValue(item.original_price) ||
+    numberFromValue(item.price);
+
+  if (!promoPrice || !originalPrice || promoPrice >= originalPrice) return null;
+
+  const discountAmount = originalPrice - promoPrice;
+  const metadata = salePrice?.metadata || {};
+
+  return {
+    originalPrice,
+    promoPrice,
+    name: pickString(metadata, ["campaign_name", "promotion_name", "promotion_type", "campaign_id", "promotion_id"]) || "Promo activa",
+    status: "active",
+    discountAmount,
+    discountRate: (discountAmount / originalPrice) * 100,
+    sellerAmount: pickNumber(metadata, ["seller_discount_amount", "seller_amount", "seller_funded_amount", "discount_seller_amount"]),
+    sellerRate: pickNumber(metadata, ["seller_percentage", "seller_percent", "seller_discount_rate"]),
+    meliAmount: pickNumber(metadata, ["meli_discount_amount", "marketplace_discount_amount", "meli_amount", "funding_amount"]),
+    meliRate: pickNumber(metadata, ["meli_percentage", "marketplace_percentage", "meli_discount_rate"]),
+    receiveAmount: pickNumber(metadata, ["receive_amount", "seller_receives_amount", "seller_receive_amount", "net_amount"]),
+    raw: [{ endpoint: "item.sale_price", data: salePrice }],
+  };
+}
+
 async function getPromotionSummaryForItem(item: MeliItem, account: any) {
+  const salePriceSummary = summarizeItemSalePrice(item);
   const endpoints = [
     `/items/${item.id}/prices`,
     `/seller-promotions/items/${item.id}?app_version=v2`,
@@ -359,7 +396,28 @@ async function getPromotionSummaryForItem(item: MeliItem, account: any) {
     }
   }
 
-  return summarizePromotion(rawResponses, item.price);
+  const endpointSummary = summarizePromotion(rawResponses, item.price);
+  if (salePriceSummary && !endpointSummary.promoPrice) return {
+    ...salePriceSummary,
+    raw: [...salePriceSummary.raw, ...rawResponses],
+  };
+  if (salePriceSummary && endpointSummary.promoPrice) return {
+    ...endpointSummary,
+    originalPrice: endpointSummary.originalPrice || salePriceSummary.originalPrice,
+    promoPrice: endpointSummary.promoPrice || salePriceSummary.promoPrice,
+    name: endpointSummary.name || salePriceSummary.name,
+    status: endpointSummary.status || salePriceSummary.status,
+    discountAmount: endpointSummary.discountAmount || salePriceSummary.discountAmount,
+    discountRate: endpointSummary.discountRate || salePriceSummary.discountRate,
+    sellerAmount: endpointSummary.sellerAmount || salePriceSummary.sellerAmount,
+    sellerRate: endpointSummary.sellerRate || salePriceSummary.sellerRate,
+    meliAmount: endpointSummary.meliAmount || salePriceSummary.meliAmount,
+    meliRate: endpointSummary.meliRate || salePriceSummary.meliRate,
+    receiveAmount: endpointSummary.receiveAmount || salePriceSummary.receiveAmount,
+    raw: [...salePriceSummary.raw, ...rawResponses],
+  };
+
+  return endpointSummary;
 }
 
 async function getListingTypeNames(account: any) {

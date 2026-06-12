@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
@@ -47,6 +47,19 @@ type ProfitRow = {
   status: ProfitStatus;
   action: string;
   issue: string | null;
+};
+
+type ProfitGroup = {
+  key: string;
+  product: Product;
+  rows: ProfitRow[];
+  status: ProfitStatus;
+  action: string;
+  bestMargin: number | null;
+  worstMargin: number | null;
+  totalNetProfit: number;
+  totalPotential: number;
+  promoCount: number;
 };
 
 function rawInstallmentLabel(shipping?: MercadoLibreShippingCost | null) {
@@ -208,6 +221,7 @@ export default function RentabilidadMeliPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
+  const [expandedSkus, setExpandedSkus] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -453,6 +467,50 @@ export default function RentabilidadMeliPage() {
     });
   }, [rows, query, statusFilter, actionFilter]);
 
+  const groupedRows = useMemo<ProfitGroup[]>(() => {
+    const order: Record<ProfitStatus, number> = { danger: 4, missing: 3, warning: 2, ok: 1 };
+    const map = new Map<string, ProfitGroup>();
+
+    filteredRows.forEach((row) => {
+      const key = row.product.sku || row.product.id || row.key;
+      const current = map.get(key);
+      if (!current) {
+        map.set(key, {
+          key,
+          product: row.product,
+          rows: [row],
+          status: row.status,
+          action: row.action,
+          bestMargin: row.currentMargin,
+          worstMargin: row.currentMargin,
+          totalNetProfit: row.netProfit || 0,
+          totalPotential: row.differenceAmount && row.differenceAmount > 0 ? row.differenceAmount : 0,
+          promoCount: row.shipping.meli_promo_price ? 1 : 0,
+        });
+        return;
+      }
+
+      current.rows.push(row);
+      if (order[row.status] > order[current.status]) {
+        current.status = row.status;
+        current.action = row.action;
+      }
+      if (row.currentMargin !== null) {
+        current.bestMargin = current.bestMargin === null ? row.currentMargin : Math.max(current.bestMargin, row.currentMargin);
+        current.worstMargin = current.worstMargin === null ? row.currentMargin : Math.min(current.worstMargin, row.currentMargin);
+      }
+      current.totalNetProfit += row.netProfit || 0;
+      current.totalPotential += row.differenceAmount && row.differenceAmount > 0 ? row.differenceAmount : 0;
+      current.promoCount += row.shipping.meli_promo_price ? 1 : 0;
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      const byStatus = order[b.status] - order[a.status];
+      if (byStatus) return byStatus;
+      return a.product.sku.localeCompare(b.product.sku, "es");
+    });
+  }, [filteredRows]);
+
   const metrics = useMemo(() => {
       const total = rows.length;
       const danger = rows.filter((row) => row.status === "danger").length;
@@ -468,6 +526,10 @@ export default function RentabilidadMeliPage() {
   }, [rows]);
 
   const actions = useMemo(() => Array.from(new Set(rows.map((row) => row.action))).sort(), [rows]);
+
+  function toggleSku(key: string) {
+    setExpandedSkus((current) => ({ ...current, [key]: !current[key] }));
+  }
 
   return (
     <main className="container wide rentabilidad-meli-page">
@@ -549,7 +611,7 @@ export default function RentabilidadMeliPage() {
         <div className="rentabilidad-table-header">
           <div>
             <h2>Revision de publicaciones</h2>
-            <p className="small">Mostrando {filteredRows.length} de {rows.length} publicaciones sincronizadas.</p>
+            <p className="small">Mostrando {groupedRows.length} SKUs y {filteredRows.length} publicaciones sincronizadas.</p>
           </div>
           <span className="badge">{metrics.ok} OK</span>
         </div>
@@ -562,97 +624,155 @@ export default function RentabilidadMeliPage() {
               <thead>
                 <tr>
                   <th>Estado</th>
-                  <th>Producto / publicacion</th>
-                  <th>Canal detectado</th>
-                  <th>Precio ML / promo</th>
-                  <th>Precio sugerido</th>
-                  <th>Diferencia</th>
-                  <th>Promo compartida</th>
+                  <th>SKU / producto</th>
+                  <th>Publicaciones</th>
+                  <th>Promos</th>
                   <th>Margen real</th>
                   <th>Ganancia real</th>
+                  <th>Oportunidad</th>
                   <th>Accion</th>
                   <th>Sync</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => (
-                  <tr key={row.key}>
-                    <td>
-                      <span className={`rentabilidad-status rentabilidad-status-${row.status}`}>
-                        {statusLabel(row.status)}
-                      </span>
-                    </td>
-                    <td className="rentabilidad-product-cell">
-                      <strong>{row.product.name}</strong>
-                      <span>{row.product.sku} · {row.product.category || "Sin categoria"}</span>
-                      <span>
-                        {row.shipping.meli_item_id || "-"} · {meliStatusLabel(row.shipping.meli_status)}
-                        {row.shipping.meli_permalink ? (
-                          <>
-                            {" · "}
-                            <a href={row.shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir ML</a>
-                          </>
-                        ) : null}
-                      </span>
-                      {row.issue && <em>{row.issue}</em>}
-                    </td>
-                    <td>
-                      <strong>{row.option.code}</strong>
-                      <br />
-                      <span className="small">{installmentLabel(row.shipping, shippingCosts)}</span>
-                    </td>
-                    <td className="rentabilidad-price-cell">
-                      <strong>{row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</strong>
-                      <span>Lista {row.listPrice ? moneyWithCents(row.listPrice) : "-"}</span>
-                      {row.buyerPrice && row.buyerPrice !== row.listPrice ? (
-                        <span>Comprador {moneyWithCents(row.buyerPrice)}</span>
-                      ) : null}
-                    </td>
-                    <td>{row.suggestedPrice ? moneyWithCents(row.suggestedPrice) : "-"}</td>
-                    <td>
-                      {row.differenceAmount !== null ? (
-                        <span className={row.differenceAmount > 0 ? "rentabilidad-gap-up" : "rentabilidad-gap-down"}>
-                          {moneyWithCents(row.differenceAmount)}
+                {groupedRows.map((group) => {
+                  const expanded = Boolean(expandedSkus[group.key]);
+                  const latestSync = group.rows
+                    .map((row) => row.shipping.meli_last_sync_at || row.shipping.updated_at)
+                    .filter(Boolean)
+                    .sort()
+                    .reverse()[0];
+
+                  return (
+                    <Fragment key={group.key}>
+                      <tr className={expanded ? "rentabilidad-group-row expanded" : "rentabilidad-group-row"}>
+                        <td>
+                          <span className={`rentabilidad-status rentabilidad-status-${group.status}`}>
+                            {statusLabel(group.status)}
+                          </span>
+                        </td>
+                        <td className="rentabilidad-product-cell">
+                          <strong>{group.product.name}</strong>
+                          <span>{group.product.sku} - {group.product.category || "Sin categoria"}</span>
+                        </td>
+                        <td><strong>{group.rows.length}</strong></td>
+                        <td>
+                          <strong>{group.promoCount}</strong>
                           <br />
-                          <small>{percent(row.differenceRate)}</small>
-                        </span>
-                      ) : "-"}
-                    </td>
-                    <td className="rentabilidad-promo-cell">
-                      {row.promoName || row.shipping.meli_promo_price ? (
-                        <>
-                          <strong>{row.promoName || "Promocion activa"}</strong>
-                          <span>Tu cargo {row.sellerDiscountAmount ? moneyWithCents(row.sellerDiscountAmount) : "-"}</span>
-                          <span>Aporte ML {row.meliContributionAmount ? moneyWithCents(row.meliContributionAmount) : "-"}</span>
-                          <span>Recibis ML {row.receiveAmount ? moneyWithCents(row.receiveAmount) : "-"}</span>
-                        </>
-                      ) : (
-                        <span className="small">Sin promo detectada</span>
+                          <span className="small">detectadas</span>
+                        </td>
+                        <td>
+                          <strong>{group.worstMargin !== null ? percent(group.worstMargin) : "-"}</strong>
+                          <br />
+                          <span className="small">Mejor {group.bestMargin !== null ? percent(group.bestMargin) : "-"}</span>
+                        </td>
+                        <td>{moneyWithCents(group.totalNetProfit)}</td>
+                        <td>{moneyWithCents(group.totalPotential)}</td>
+                        <td><span className="badge">{group.action}</span></td>
+                        <td><span className="small">{formatDateTime(latestSync)}</span></td>
+                        <td>
+                          <button className="button ghost small-button" type="button" onClick={() => toggleSku(group.key)}>
+                            {expanded ? "Ocultar" : "Ver publicaciones"}
+                          </button>
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr className="rentabilidad-detail-row">
+                          <td colSpan={10}>
+                            <div className="rentabilidad-detail-panel">
+                              <table className="rentabilidad-detail-table">
+                                <thead>
+                                  <tr>
+                                    <th>Publicacion</th>
+                                    <th>Canal</th>
+                                    <th>Precio ML / promo</th>
+                                    <th>Precio sugerido</th>
+                                    <th>Diferencia</th>
+                                    <th>Promo compartida</th>
+                                    <th>Margen</th>
+                                    <th>Ganancia</th>
+                                    <th>Accion</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {group.rows.map((row) => (
+                                    <tr key={row.key}>
+                                      <td className="rentabilidad-product-cell">
+                                        <strong>{row.shipping.meli_title || row.product.name}</strong>
+                                        <span>
+                                          {row.shipping.meli_item_id || "-"} - {meliStatusLabel(row.shipping.meli_status)}
+                                          {row.shipping.meli_permalink ? (
+                                            <>
+                                              {" - "}
+                                              <a href={row.shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir ML</a>
+                                            </>
+                                          ) : null}
+                                        </span>
+                                        {row.issue && <em>{row.issue}</em>}
+                                      </td>
+                                      <td>
+                                        <strong>{row.option.code}</strong>
+                                        <br />
+                                        <span className="small">{installmentLabel(row.shipping, shippingCosts)}</span>
+                                      </td>
+                                      <td className="rentabilidad-price-cell">
+                                        <strong>{row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</strong>
+                                        <span>Lista {row.listPrice ? moneyWithCents(row.listPrice) : "-"}</span>
+                                        {row.buyerPrice && row.buyerPrice !== row.listPrice ? (
+                                          <span>Comprador {moneyWithCents(row.buyerPrice)}</span>
+                                        ) : null}
+                                      </td>
+                                      <td>{row.suggestedPrice ? moneyWithCents(row.suggestedPrice) : "-"}</td>
+                                      <td>
+                                        {row.differenceAmount !== null ? (
+                                          <span className={row.differenceAmount > 0 ? "rentabilidad-gap-up" : "rentabilidad-gap-down"}>
+                                            {moneyWithCents(row.differenceAmount)}
+                                            <br />
+                                            <small>{percent(row.differenceRate)}</small>
+                                          </span>
+                                        ) : "-"}
+                                      </td>
+                                      <td className="rentabilidad-promo-cell">
+                                        {row.promoName || row.shipping.meli_promo_price ? (
+                                          <>
+                                            <strong>{row.promoName || "Promocion activa"}</strong>
+                                            <span>Tu cargo {row.sellerDiscountAmount ? moneyWithCents(row.sellerDiscountAmount) : "-"}</span>
+                                            <span>Aporte ML {row.meliContributionAmount ? moneyWithCents(row.meliContributionAmount) : "-"}</span>
+                                            <span>Recibis ML {row.receiveAmount ? moneyWithCents(row.receiveAmount) : "-"}</span>
+                                          </>
+                                        ) : (
+                                          <span className="small">Sin promo detectada</span>
+                                        )}
+                                      </td>
+                                      <td>
+                                        <strong>{row.currentMargin !== null ? percent(row.currentMargin) : "-"}</strong>
+                                        <br />
+                                        <span className="small">Objetivo {percent(row.targetMargin)}</span>
+                                      </td>
+                                      <td>
+                                        {row.netProfit !== null ? moneyWithCents(row.netProfit) : "-"}
+                                        {row.suggestedNetProfit !== null ? (
+                                          <>
+                                            <br />
+                                            <span className="small">Sug. {moneyWithCents(row.suggestedNetProfit)}</span>
+                                          </>
+                                        ) : null}
+                                      </td>
+                                      <td><span className="badge">{row.action}</span></td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td>
-                      <strong>{row.currentMargin !== null ? percent(row.currentMargin) : "-"}</strong>
-                      <br />
-                      <span className="small">Objetivo {percent(row.targetMargin)}</span>
-                    </td>
-                    <td>
-                      {row.netProfit !== null ? moneyWithCents(row.netProfit) : "-"}
-                      {row.suggestedNetProfit !== null ? (
-                        <>
-                          <br />
-                          <span className="small">Sug. {moneyWithCents(row.suggestedNetProfit)}</span>
-                        </>
-                      ) : null}
-                    </td>
-                    <td><span className="badge">{row.action}</span></td>
-                    <td>
-                      <span className="small">{formatDateTime(row.shipping.meli_last_sync_at || row.shipping.updated_at)}</span>
-                    </td>
-                  </tr>
-                ))}
-                {filteredRows.length === 0 && (
+                    </Fragment>
+                  );
+                })}                {groupedRows.length === 0 && (
                   <tr>
-                    <td colSpan={11}>No hay publicaciones para mostrar con esos filtros.</td>
+                    <td colSpan={10}>No hay publicaciones para mostrar con esos filtros.</td>
                   </tr>
                 )}
               </tbody>
