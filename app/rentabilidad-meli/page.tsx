@@ -25,6 +25,8 @@ import type {
 
 type ProfitStatus = "ok" | "warning" | "danger" | "missing";
 
+const DEFAULT_MELI_PROMO_COFUNDING_RATE = 3.5;
+
 type ProfitRow = {
   key: string;
   product: Product;
@@ -198,7 +200,18 @@ function meliStatusLabel(status?: string | null) {
 
 function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost) {
   const buyerPrice = Number(shipping.meli_promo_price || shipping.meli_price || 0) || null;
-  return buyerPrice;
+  const listPrice = Number(shipping.meli_original_price || shipping.meli_price || 0) || null;
+  if (!buyerPrice) return null;
+  if (!shipping.meli_promo_price || !listPrice || buyerPrice >= listPrice) return buyerPrice;
+
+  const meliFundedAmount = Number(shipping.meli_promo_meli_amount || 0);
+  if (meliFundedAmount > 0) return buyerPrice + meliFundedAmount;
+
+  const meliFundedRate = Number(shipping.meli_promo_meli_rate || 0);
+  if (meliFundedRate > 0) return buyerPrice + (listPrice * meliFundedRate) / 100;
+
+  // ML calcula comisiones sobre el precio promo al comprador mas su aporte cofinanciado.
+  return buyerPrice * (1 + DEFAULT_MELI_PROMO_COFUNDING_RATE / 100);
 }
 
 export default function RentabilidadMeliPage() {
@@ -325,7 +338,7 @@ export default function RentabilidadMeliPage() {
         const sellerDiscountAmount =
           Number(shipping.meli_promo_seller_amount || 0) ||
           (listPrice && buyerPrice && buyerPrice < listPrice
-            ? Math.max(listPrice - buyerPrice, 0)
+            ? Math.max(listPrice - (sellerEffectivePrice || buyerPrice), 0)
             : null);
 
         const commonTarget = {
