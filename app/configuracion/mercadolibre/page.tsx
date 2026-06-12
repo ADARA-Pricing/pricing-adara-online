@@ -65,9 +65,15 @@ export default function MercadoLibreConfigPage() {
     setLastSync(null);
 
     try {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 120000);
+
       const response = await fetch("/api/mercadolibre/sync-shipping", {
         method: "POST",
+        signal: controller.signal,
       });
+      window.clearTimeout(timeout);
+
       const data = await response.json();
 
       if (!response.ok) {
@@ -76,10 +82,14 @@ export default function MercadoLibreConfigPage() {
       }
 
       setLastSync(data);
-      setMessage(`MercadoLibre sincronizado. Con costo actualizado: ${data.updated || 0}. Sin costo ML: ${data.no_shipping_cost || 0}.`);
+      setMessage(`MercadoLibre sincronizado en ${Math.round((data.duration_ms || 0) / 1000)}s. Con costo actualizado: ${data.updated || 0}. Sin costo ML: ${data.no_shipping_cost || 0}.`);
       await loadStatus();
     } catch (error) {
-      setError(error instanceof Error ? error.message : "No se pudo sincronizar MercadoLibre.");
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setError("La sincronización tardó demasiado y se cortó. Probá de nuevo o sincronizá menos publicaciones.");
+      } else {
+        setError(error instanceof Error ? error.message : "No se pudo sincronizar MercadoLibre.");
+      }
     } finally {
       setSyncing(false);
     }

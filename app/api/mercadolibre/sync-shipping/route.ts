@@ -151,6 +151,7 @@ async function getShippingCostsByItemIds(items: MeliItem[], account: any) {
 
 export async function POST() {
   const supabase = createAdminClient();
+  const startedAt = Date.now();
 
   try {
     const account = await getConnectedMeliAccount();
@@ -200,7 +201,16 @@ export async function POST() {
       });
     }
 
-    const shippingCosts = await getShippingCostsByItemIds(items, account);
+    const shippingCostsByItem = new Map<string, { cost: number; source: string | null }>();
+
+    async function shippingCostForMatchedItem(item: MeliItem) {
+      const cached = shippingCostsByItem.get(item.id);
+      if (cached) return cached;
+
+      const result = await getShippingCostForItem(item, account);
+      shippingCostsByItem.set(item.id, result);
+      return result;
+    }
 
     const logs: any[] = [];
     let updated = 0;
@@ -245,7 +255,7 @@ export async function POST() {
           continue;
         }
 
-        const shippingResult = shippingCosts.get(item.id);
+        const shippingResult = await shippingCostForMatchedItem(item);
         const newShippingCost = Number(shippingResult?.cost || 0);
         const shippingSource = shippingResult?.source || null;
         const { data: current } = await supabase
@@ -318,6 +328,8 @@ export async function POST() {
       not_found: notFound,
       without_sku: withoutSku,
       no_shipping_cost: noShippingCost,
+      duration_ms: Date.now() - startedAt,
+      shipping_queries: shippingCostsByItem.size,
       logs: logs.slice(0, 50),
     });
   } catch (error) {

@@ -3372,3 +3372,18 @@ td strong {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* v7.41 - fixes sync MercadoLibre */
+.config-ml-page .ml-actions-panel .button:not(.ghost),
+.config-ml-page .ml-actions-panel .button:not(.ghost):disabled {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.config-ml-page .ml-actions-panel .button:not(.ghost):disabled {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+}

@@ -1,0 +1,2 @@
+-- v7.41 no requiere SQL nuevo.
+-- Optimiza la sincronización para consultar costos de envío solo de publicaciones con SKU encontrado.
