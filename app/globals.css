@@ -4076,3 +4076,10 @@ td strong {
     flex: 1 1 100%;
   }
 }
+
+
+/* v7.53 - stock ML compartido por SKU */
+.product-detail-grid .small {
+  display: block;
+  margin-top: 6px;
+}

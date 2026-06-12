@@ -782,7 +782,9 @@ export default function ProductsPage() {
               const publicationCount = shippings.length;
               const activePublications = shippings.filter((item) => item.meli_status === "active").length;
               const pausedPublications = shippings.filter((item) => item.meli_status === "paused").length;
-              const totalMlStock = shippings.reduce((acc, item) => acc + Number(item.meli_stock || 0), 0);
+              const sharedMlStock = shippings.length
+                ? Math.max(...shippings.map((item) => Number(item.meli_stock || 0)))
+                : 0;
               const latestSync = shippings
                 .map((item) => item.meli_last_sync_at || item.updated_at)
                 .filter(Boolean)
@@ -826,8 +828,8 @@ export default function ProductsPage() {
                       </strong>
                     </div>
                     <div className="product-row-stat">
-                      <span>Stock ML total</span>
-                      <strong>{publicationCount ? totalMlStock : "-"}</strong>
+                      <span>Stock ML</span>
+                      <strong>{publicationCount ? sharedMlStock : "-"}</strong>
                     </div>
                     <div className="product-row-stat">
                       <span>Envío ML</span>
@@ -861,9 +863,10 @@ export default function ProductsPage() {
                         <div>
                           <h4>MercadoLibre</h4>
                           <p>Publicaciones vinculadas: {publicationCount || 0}</p>
-                          <p>Stock total: {publicationCount ? totalMlStock : "-"}</p>
+                          <p>Stock compartido: {publicationCount ? sharedMlStock : "-"}</p>
                           <p>Activas: {activePublications}</p>
                           <p>Pausadas: {pausedPublications}</p>
+                          <p className="small">No se suma el stock porque las publicaciones comparten el mismo inventario.</p>
                         </div>
                         <div>
                           <h4>Notas</h4>
@@ -880,7 +883,7 @@ export default function ProductsPage() {
                                 <th>Estado</th>
                                 <th>Precio venta</th>
                                 <th>Cuotas</th>
-                                <th>Stock</th>
+                                <th>Stock publicado</th>
                                 <th>Envío</th>
                                 <th>Fijo</th>
                                 <th>Total</th>

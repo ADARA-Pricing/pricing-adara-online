@@ -1,0 +1,3 @@
+-- v7.53 no requiere SQL nuevo.
+-- Ajuste visual/lógico: en Productos el stock de MercadoLibre se muestra como stock compartido por SKU.
+-- No se suma el stock de publicaciones duplicadas, porque todas bajan del mismo inventario.
