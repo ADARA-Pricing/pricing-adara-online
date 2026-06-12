@@ -4013,23 +4013,44 @@ td strong {
 }
 
 
-/* v7.47 - multiples publicaciones ML en productos */
-.product-publications-table {
-  margin-top: 18px;
+/* v7.48 - productos con popup para alta/importacion */
+.product-editor-modal {
+  width: min(1280px, 100%);
+  border-radius: 22px;
+  padding: 24px;
 }
 
-.product-publications-table table {
-  width: 100%;
+.product-editor-modal .product-editor-header {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
 }
 
-.product-publications-table th,
-.product-publications-table td {
-  vertical-align: top;
-  font-size: 13px;
+.products-advanced-page .products-primary-button,
+.product-editor-modal .products-primary-button {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.14) !important;
 }
 
-.small-button {
-  min-height: 34px !important;
-  padding: 8px 12px !important;
-  font-size: 12px !important;
+.products-advanced-page .products-primary-button:hover,
+.product-editor-modal .products-primary-button:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%) !important;
+}
+
+@media (max-width: 900px) {
+  .product-editor-modal {
+    padding: 18px;
+  }
+
+  .product-editor-modal .product-editor-controls {
+    width: 100%;
+    flex-wrap: wrap !important;
+  }
+
+  .product-editor-modal .product-editor-controls .button {
+    flex: 1 1 100%;
+  }
 }

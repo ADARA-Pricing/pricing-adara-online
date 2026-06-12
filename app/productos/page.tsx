@@ -4,7 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import type { MercadoLibreShippingCost, Product } from "@/lib/types";
+import type { Product } from "@/lib/types";
 import { money, toNumber } from "@/lib/pricing";
 import { PageHero } from "@/components/PageHero";
 
@@ -203,7 +203,7 @@ export default function ProductsPage() {
   const router = useRouter();
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>([]);
-  const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
+  const [shippingCosts, setShippingCosts] = useState<any[]>([]);
   const [form, setForm] = useState<Product>(emptyProduct);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -252,7 +252,7 @@ export default function ProductsPage() {
     }
 
     setProducts((productsResponse.data || []) as Product[]);
-    setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
+    setShippingCosts((shippingResponse.data || []) as any[]);
   }
 
   useEffect(() => {
@@ -270,15 +270,8 @@ export default function ProductsPage() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function shippingsForProduct(product: Product) {
-    return shippingCosts
-      .filter((item) => item.product_id === product.id || item.sku === product.sku)
-      .sort((a, b) => {
-        const aActive = a.meli_status === "active" ? 1 : 0;
-        const bActive = b.meli_status === "active" ? 1 : 0;
-        if (aActive !== bActive) return bActive - aActive;
-        return String(b.updated_at || b.meli_last_sync_at || "").localeCompare(String(a.updated_at || a.meli_last_sync_at || ""));
-      });
+  function shippingForProduct(product: Product) {
+    return shippingCosts.find((item) => item.product_id === product.id || item.sku === product.sku) || null;
   }
 
   function editProduct(product: Product) {
@@ -301,6 +294,25 @@ export default function ProductsPage() {
     });
     setMessage(`Duplicando SKU ${product.sku}. Revisá el nuevo SKU antes de guardar.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openNewProductModal() {
+    setForm(emptyProduct);
+    setActiveProductTab("manual");
+    setEditorOpen(true);
+    setMessage(null);
+    setError(null);
+  }
+
+  function openImportModal() {
+    setActiveProductTab("excel");
+    setEditorOpen(true);
+    setMessage(null);
+    setError(null);
+  }
+
+  function closeEditorModal() {
+    setEditorOpen(false);
   }
 
   async function deleteProduct(product: Product) {
@@ -489,15 +501,15 @@ export default function ProductsPage() {
 
   const enriched = useMemo(() => {
     return products.map((product) => {
-      const shippings = shippingsForProduct(product);
-      return { product, shippings };
+      const shipping = shippingForProduct(product);
+      return { product, shipping };
     });
   }, [products, shippingCosts]);
 
   const filtered = useMemo(() => {
     const normalized = query.toLowerCase().trim();
 
-    return enriched.filter(({ product, shippings }) => {
+    return enriched.filter(({ product, shipping }) => {
       const text = [
         product.sku,
         product.ean,
@@ -505,7 +517,8 @@ export default function ProductsPage() {
         product.brand,
         product.model,
         product.category,
-        ...shippings.flatMap((shipping) => [shipping?.meli_item_id, shipping?.meli_title]),
+        shipping?.meli_item_id,
+        shipping?.meli_title,
       ]
         .filter(Boolean)
         .join(" ")
@@ -513,22 +526,21 @@ export default function ProductsPage() {
 
       const matchesQuery = !normalized || text.includes(normalized);
       const matchesCategory = !categoryFilter || product.category === categoryFilter;
-      const matchesMlStatus = !meliStatusFilter || (meliStatusFilter === "none" ? shippings.length === 0 : shippings.some((shipping) => shipping?.meli_status === meliStatusFilter));
+      const mlStatus = shipping?.meli_status || "none";
+      const matchesMlStatus = !meliStatusFilter || mlStatus === meliStatusFilter;
       return matchesQuery && matchesCategory && matchesMlStatus;
     });
   }, [enriched, query, categoryFilter, meliStatusFilter]);
 
   const metrics = useMemo(() => {
     const total = products.length;
-    const withMl = enriched.filter(({ shippings }) => shippings.some((shipping) => Boolean(shipping?.meli_item_id))).length;
+    const withMl = enriched.filter(({ shipping }) => Boolean(shipping?.meli_item_id)).length;
     const withoutMl = Math.max(total - withMl, 0);
-    const syncedToday = enriched.filter(({ shippings }) => {
+    const syncedToday = enriched.filter(({ shipping }) => {
+      if (!shipping?.meli_last_sync_at) return false;
+      const date = new Date(shipping.meli_last_sync_at);
       const now = new Date();
-      return shippings.some((shipping) => {
-        if (!shipping?.meli_last_sync_at) return false;
-        const date = new Date(shipping.meli_last_sync_at);
-        return date.toDateString() === now.toDateString();
-      });
+      return date.toDateString() === now.toDateString();
     }).length;
 
     return { total, withMl, withoutMl, syncedToday };
@@ -572,10 +584,10 @@ export default function ProductsPage() {
             </select>
           </div>
           <div className="products-toolbar-actions">
-            <button className="button products-primary-button" type="button" onClick={() => { setActiveProductTab("manual"); setEditorOpen(true); setForm(emptyProduct); }}>
+            <button className="button products-primary-button" type="button" onClick={openNewProductModal}>
               + Nuevo producto
             </button>
-            <button className="button ghost products-secondary-button" type="button" onClick={() => { setActiveProductTab("excel"); setEditorOpen(true); }}>
+            <button className="button ghost products-secondary-button" type="button" onClick={openImportModal}>
               Importar Excel
             </button>
           </div>
@@ -617,130 +629,6 @@ export default function ProductsPage() {
         </div>
       </section>
 
-      {editorOpen && (
-      <section className="card product-editor-card">
-        <div className="header product-editor-header" style={{ alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
-          <div>
-            <h2 style={{ marginTop: 0, marginBottom: 8 }}>
-              {activeProductTab === "manual" ? "Nuevo / actualizar producto" : "Carga masiva con Excel"}
-            </h2>
-            <p className="small" style={{ margin: 0 }}>
-              {activeProductTab === "manual"
-                ? "Si el SKU ya existe, la app actualiza el producto. Si no existe, lo crea."
-                : "Descargá la plantilla, completala en Excel y subila. Si el SKU ya existe, se actualiza; si no existe, se crea."}
-            </p>
-          </div>
-          <div className="actions product-editor-controls" style={{ alignItems: "center", flexWrap: "nowrap" }}>
-            <button className={activeProductTab === "manual" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("manual")}>
-              Carga manual
-            </button>
-            <button className={activeProductTab === "excel" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("excel")}>
-              Carga masiva Excel
-            </button>
-            <button className="button ghost products-secondary-button" type="button" onClick={() => setEditorOpen(false)}>
-              Cerrar
-            </button>
-          </div>
-        </div>
-
-        {activeProductTab === "manual" ? (
-          <form onSubmit={saveProduct}>
-            <div className="grid">
-              <div className="field"><label>SKU *</label><input value={form.sku} onChange={(e) => update("sku", e.target.value)} placeholder="TVEN043GTV01" required /></div>
-              <div className="field"><label>EAN</label><input value={form.ean || ""} onChange={(e) => update("ean", e.target.value)} placeholder="779..." /></div>
-              <div className="field"><label>Nombre *</label><input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="Smart TV Enova 43 Google TV" required /></div>
-              <div className="field"><label>Estado</label><select value={form.status} onChange={(e) => update("status", e.target.value as Product["status"])}><option value="active">Activo</option><option value="paused">Pausado</option><option value="discontinued">Discontinuado</option></select></div>
-            </div>
-
-            <div className="grid" style={{ marginTop: 12 }}>
-              <div className="field"><label>Marca</label><input value={form.brand || ""} onChange={(e) => update("brand", e.target.value)} placeholder="Enova" /></div>
-              <div className="field"><label>Modelo</label><input value={form.model || ""} onChange={(e) => update("model", e.target.value)} placeholder="43GTV" /></div>
-              <div className="field"><label>Categoría</label><input value={form.category || ""} onChange={(e) => update("category", e.target.value)} placeholder="TV" /></div>
-              <div className="field"><label>Proveedor</label><input value={form.supplier || ""} onChange={(e) => update("supplier", e.target.value)} placeholder="Radio Victoria" /></div>
-            </div>
-
-            <div className="grid" style={{ marginTop: 12 }}>
-              <div className="field"><label>Costo sin IVA *</label><input type="number" step="0.01" min="0" value={form.cost_without_vat} onChange={(e) => update("cost_without_vat", Number(e.target.value))} required /></div>
-              <div className="field"><label>IVA % *</label><select value={form.vat_rate} onChange={(e) => update("vat_rate", Number(e.target.value) as 21 | 10.5)}><option value={21}>21%</option><option value={10.5}>10,5%</option></select></div>
-              <div className="field"><label>Costo con IVA automático</label><input value={money(costWithVatPreview)} disabled /></div>
-            </div>
-
-            <div className="grid" style={{ marginTop: 12 }}>
-              <div className="field"><label>Peso kg</label><input type="number" step="0.001" value={form.weight_kg ?? ""} onChange={(e) => update("weight_kg", toNumber(e.target.value))} /></div>
-              <div className="field"><label>Alto cm</label><input type="number" step="0.01" value={form.height_cm ?? ""} onChange={(e) => update("height_cm", toNumber(e.target.value))} /></div>
-              <div className="field"><label>Ancho cm</label><input type="number" step="0.01" value={form.width_cm ?? ""} onChange={(e) => update("width_cm", toNumber(e.target.value))} /></div>
-              <div className="field"><label>Profundidad cm</label><input type="number" step="0.01" value={form.depth_cm ?? ""} onChange={(e) => update("depth_cm", toNumber(e.target.value))} /></div>
-            </div>
-
-            <div className="grid-2" style={{ marginTop: 12 }}>
-              <div className="field"><label>Garantía meses</label><input type="number" min="0" value={form.warranty_months ?? ""} onChange={(e) => update("warranty_months", toNumber(e.target.value))} /></div>
-              <div className="field"><label>Descripción</label><textarea value={form.description || ""} onChange={(e) => update("description", e.target.value)} placeholder="Descripción interna o comercial" /></div>
-            </div>
-
-            <div className="actions" style={{ marginTop: 16 }}>
-              <button className="button products-primary-button" disabled={saving} type="submit">{saving ? "Guardando..." : "Guardar producto"}</button>
-              <button className="button ghost products-secondary-button" type="button" onClick={() => setForm(emptyProduct)}>Limpiar</button>
-            </div>
-          </form>
-        ) : (
-          <div>
-            <div className="header" style={{ alignItems: "flex-start", gap: 16 }}>
-              <p className="small" style={{ marginTop: 0 }}>
-                Columnas obligatorias: <strong>SKU</strong>, <strong>Nombre</strong>, <strong>Costo sin IVA</strong> e <strong>IVA %</strong>.
-              </p>
-              <div className="actions">
-                <button className="button ghost products-secondary-button" type="button" onClick={downloadTemplate}>Descargar plantilla</button>
-                <label className="button products-primary-button" style={{ cursor: "pointer" }}>
-                  Subir Excel
-                  <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} style={{ display: "none" }} />
-                </label>
-              </div>
-            </div>
-
-            {importErrors.length > 0 && (
-              <div className="message error" style={{ marginTop: 12 }}>
-                {importErrors.slice(0, 8).map((item) => <div key={item}>{item}</div>)}
-                {importErrors.length > 8 && <div>Y {importErrors.length - 8} errores más.</div>}
-              </div>
-            )}
-
-            {importRows.length > 0 && (
-              <div style={{ marginTop: 14 }}>
-                <div className="header" style={{ marginBottom: 10 }}>
-                  <div>
-                    <strong>{importRows.length} productos listos para importar</strong>
-                    <p className="small" style={{ margin: "4px 0 0" }}>Vista previa de los primeros productos del archivo.</p>
-                  </div>
-                  <div className="actions">
-                    <button className="button products-primary-button" type="button" disabled={importing || saving} onClick={importProducts}>{importing ? "Importando..." : "Importar productos"}</button>
-                    <button className="button ghost products-secondary-button" type="button" disabled={importing} onClick={() => setImportRows([])}>Cancelar</button>
-                  </div>
-                </div>
-
-                <div className="table-wrap">
-                  <table>
-                    <thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Costo s/IVA</th><th>IVA</th><th>Estado</th></tr></thead>
-                    <tbody>
-                      {importRows.slice(0, 8).map((row) => (
-                        <tr key={`${row.rowNumber}-${row.payload.sku}`}>
-                          <td>{row.payload.sku}</td>
-                          <td><strong>{row.payload.name}</strong><br /><span className="small">{row.payload.brand || ""} {row.payload.model || ""}</span></td>
-                          <td>{row.payload.category || "-"}</td>
-                          <td>{money(row.payload.cost_without_vat)}</td>
-                          <td>{row.payload.vat_rate}%</td>
-                          <td><span className="badge">{row.payload.status}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-      )}
-
       <section className="products-list-section">
         <div className="products-list-header">
           <div>
@@ -753,17 +641,9 @@ export default function ProductsPage() {
           <section className="card"><p>Cargando productos...</p></section>
         ) : (
           <div className="products-advanced-list">
-            {filtered.map(({ product, shippings }) => {
+            {filtered.map(({ product, shipping }) => {
               const expanded = expandedSku === product.sku;
-              const publicationCount = shippings.length;
-              const activePublications = shippings.filter((item) => item.meli_status === "active").length;
-              const pausedPublications = shippings.filter((item) => item.meli_status === "paused").length;
-              const totalMlStock = shippings.reduce((acc, item) => acc + Number(item.meli_stock || 0), 0);
-              const latestSync = shippings
-                .map((item) => item.meli_last_sync_at || item.updated_at)
-                .filter(Boolean)
-                .sort()
-                .reverse()[0];
+              const totalShipping = Number(shipping?.fixed_fee_amount || 0) + Number(shipping?.shipping_cost_amount || 0);
               return (
                 <article key={product.id || product.sku} className={`product-row-card ${expanded ? "expanded" : ""}`}>
                   <div className="product-row-main">
@@ -788,30 +668,28 @@ export default function ProductsPage() {
                       <strong>{product.vat_rate}%</strong>
                     </div>
                     <div className="product-row-stat">
-                      <span>Publicaciones ML</span>
-                      <strong>{publicationCount || "-"}</strong>
+                      <span>ML Item ID</span>
+                      <strong>{shipping?.meli_item_id || "-"}</strong>
                     </div>
                     <div className="product-row-stat">
                       <span>Estado ML</span>
                       <strong>
-                        {publicationCount ? (
-                          <span className="badge">{activePublications} activas{pausedPublications ? ` · ${pausedPublications} pausadas` : ""}</span>
-                        ) : (
-                          <span className="badge meli-status-none">Sin publicar</span>
-                        )}
+                        <span className={`badge meli-status-${shipping?.meli_status || "none"}`}>
+                          {meliStatusLabel(shipping?.meli_status)}
+                        </span>
                       </strong>
                     </div>
                     <div className="product-row-stat">
-                      <span>Stock ML total</span>
-                      <strong>{publicationCount ? totalMlStock : "-"}</strong>
+                      <span>Stock ML</span>
+                      <strong>{shipping?.meli_stock ?? "-"}</strong>
                     </div>
                     <div className="product-row-stat">
                       <span>Envío ML</span>
-                      <strong>{publicationCount ? money(Math.max(...shippings.map((item) => Number(item.shipping_cost_amount || 0)))) : "-"}</strong>
+                      <strong>{shipping ? money(shipping.shipping_cost_amount || 0) : "-"}</strong>
                     </div>
                     <div className="product-row-stat">
                       <span>Última sync</span>
-                      <strong>{formatDateTime(latestSync)}</strong>
+                      <strong>{formatDateTime(shipping?.meli_last_sync_at || shipping?.updated_at)}</strong>
                     </div>
 
                     <button className="product-expand-button" type="button" onClick={() => setExpandedSku(expanded ? null : product.sku)}>
@@ -836,64 +714,24 @@ export default function ProductsPage() {
                         </div>
                         <div>
                           <h4>MercadoLibre</h4>
-                          <p>Publicaciones vinculadas: {publicationCount || 0}</p>
-                          <p>Stock total: {publicationCount ? totalMlStock : "-"}</p>
-                          <p>Activas: {activePublications}</p>
+                          <p>Envío gratis: {shipping?.meli_free_shipping ? "Sí" : "No"}</p>
+                          <p>Modo: {shipping?.meli_shipping_mode || "-"}</p>
+                          <p>Tipo logístico: {shipping?.meli_logistic_type || shipping?.shipping_method || "-"}</p>
+                          <p>Costo total fijo: {money(totalShipping)}</p>
                         </div>
                         <div>
                           <h4>Notas</h4>
-                          <p>{product.description || shippings[0]?.notes || "-"}</p>
+                          <p>{product.description || shipping?.notes || "-"}</p>
                         </div>
                       </div>
-
-                      {publicationCount > 0 && (
-                        <div className="table-wrap product-publications-table">
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>Publicación ML</th>
-                                <th>Título</th>
-                                <th>Estado</th>
-                                <th>Precio venta</th>
-                                <th>Stock</th>
-                                <th>Envío</th>
-                                <th>Fijo</th>
-                                <th>Total</th>
-                                <th>Última sync</th>
-                                <th></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {shippings.map((shipping) => {
-                                const totalShipping = Number(shipping.fixed_fee_amount || 0) + Number(shipping.shipping_cost_amount || 0);
-                                return (
-                                  <tr key={shipping.id || `${product.sku}-${shipping.meli_item_id}`}>
-                                    <td><strong>{shipping.meli_item_id || "-"}</strong></td>
-                                    <td>
-                                      <strong>{shipping.meli_title || product.name}</strong>
-                                      <br />
-                                      <span className="small">{shipping.meli_logistic_type || shipping.shipping_method || "-"}</span>
-                                    </td>
-                                    <td><span className={`badge meli-status-${shipping.meli_status || "none"}`}>{meliStatusLabel(shipping.meli_status)}</span></td>
-                                    <td><strong>{shipping.meli_price ? money(shipping.meli_price) : "-"}</strong></td>
-                                    <td>{shipping.meli_stock ?? "-"}</td>
-                                    <td>{money(shipping.shipping_cost_amount || 0)}</td>
-                                    <td>{money(shipping.fixed_fee_amount || 0)}</td>
-                                    <td><strong>{money(totalShipping)}</strong></td>
-                                    <td>{formatDateTime(shipping.meli_last_sync_at || shipping.updated_at)}</td>
-                                    <td>{shipping.meli_permalink ? <a className="button ghost small-button" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir</a> : null}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
 
                       <div className="product-row-actions">
                         <button className="button ghost" onClick={() => editProduct(product)}>Editar</button>
                         <button className="button ghost" onClick={() => duplicateProduct(product)}>Duplicar</button>
                         <a className="button ghost" href={`/precios?sku=${encodeURIComponent(product.sku)}`}>Ver precios</a>
+                        {shipping?.meli_permalink && (
+                          <a className="button ghost" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir en ML</a>
+                        )}
                         <button className="button danger" onClick={() => deleteProduct(product)}>Eliminar</button>
                       </div>
                     </div>
@@ -908,6 +746,132 @@ export default function ProductsPage() {
           </div>
         )}
       </section>
+      {editorOpen && (
+        <div className="modal-backdrop" onClick={closeEditorModal}>
+          <section className="modal-card product-editor-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="header product-editor-header" style={{ alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
+              <div>
+                <h2 style={{ marginTop: 0, marginBottom: 8 }}>
+                  {activeProductTab === "manual" ? "Nuevo / actualizar producto" : "Carga masiva con Excel"}
+                </h2>
+                <p className="small" style={{ margin: 0 }}>
+                  {activeProductTab === "manual"
+                    ? "Si el SKU ya existe, la app actualiza el producto. Si no existe, lo crea."
+                    : "Descargá la plantilla, completala en Excel y subila. Si el SKU ya existe, se actualiza; si no existe, se crea."}
+                </p>
+              </div>
+              <div className="actions product-editor-controls" style={{ alignItems: "center", flexWrap: "nowrap" }}>
+                <button className={activeProductTab === "manual" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("manual")}>
+                  Carga manual
+                </button>
+                <button className={activeProductTab === "excel" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("excel")}>
+                  Carga masiva Excel
+                </button>
+                <button className="button ghost products-secondary-button" type="button" onClick={closeEditorModal}>
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
+            {activeProductTab === "manual" ? (
+              <form onSubmit={saveProduct}>
+                <div className="grid">
+                  <div className="field"><label>SKU *</label><input value={form.sku} onChange={(e) => update("sku", e.target.value)} placeholder="TVEN043GTV01" required /></div>
+                  <div className="field"><label>EAN</label><input value={form.ean || ""} onChange={(e) => update("ean", e.target.value)} placeholder="779..." /></div>
+                  <div className="field"><label>Nombre *</label><input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="Smart TV Enova 43 Google TV" required /></div>
+                  <div className="field"><label>Estado</label><select value={form.status} onChange={(e) => update("status", e.target.value as Product["status"])}><option value="active">Activo</option><option value="paused">Pausado</option><option value="discontinued">Discontinuado</option></select></div>
+                </div>
+
+                <div className="grid" style={{ marginTop: 12 }}>
+                  <div className="field"><label>Marca</label><input value={form.brand || ""} onChange={(e) => update("brand", e.target.value)} placeholder="Enova" /></div>
+                  <div className="field"><label>Modelo</label><input value={form.model || ""} onChange={(e) => update("model", e.target.value)} placeholder="43GTV" /></div>
+                  <div className="field"><label>Categoría</label><input value={form.category || ""} onChange={(e) => update("category", e.target.value)} placeholder="TV" /></div>
+                  <div className="field"><label>Proveedor</label><input value={form.supplier || ""} onChange={(e) => update("supplier", e.target.value)} placeholder="Radio Victoria" /></div>
+                </div>
+
+                <div className="grid" style={{ marginTop: 12 }}>
+                  <div className="field"><label>Costo sin IVA *</label><input type="number" step="0.01" min="0" value={form.cost_without_vat} onChange={(e) => update("cost_without_vat", Number(e.target.value))} required /></div>
+                  <div className="field"><label>IVA % *</label><select value={form.vat_rate} onChange={(e) => update("vat_rate", Number(e.target.value) as 21 | 10.5)}><option value={21}>21%</option><option value={10.5}>10,5%</option></select></div>
+                  <div className="field"><label>Costo con IVA automático</label><input value={money(costWithVatPreview)} disabled /></div>
+                </div>
+
+                <div className="grid" style={{ marginTop: 12 }}>
+                  <div className="field"><label>Peso kg</label><input type="number" step="0.001" value={form.weight_kg ?? ""} onChange={(e) => update("weight_kg", toNumber(e.target.value))} /></div>
+                  <div className="field"><label>Alto cm</label><input type="number" step="0.01" value={form.height_cm ?? ""} onChange={(e) => update("height_cm", toNumber(e.target.value))} /></div>
+                  <div className="field"><label>Ancho cm</label><input type="number" step="0.01" value={form.width_cm ?? ""} onChange={(e) => update("width_cm", toNumber(e.target.value))} /></div>
+                  <div className="field"><label>Profundidad cm</label><input type="number" step="0.01" value={form.depth_cm ?? ""} onChange={(e) => update("depth_cm", toNumber(e.target.value))} /></div>
+                </div>
+
+                <div className="grid-2" style={{ marginTop: 12 }}>
+                  <div className="field"><label>Garantía meses</label><input type="number" min="0" value={form.warranty_months ?? ""} onChange={(e) => update("warranty_months", toNumber(e.target.value))} /></div>
+                  <div className="field"><label>Descripción</label><textarea value={form.description || ""} onChange={(e) => update("description", e.target.value)} placeholder="Descripción interna o comercial" /></div>
+                </div>
+
+                <div className="actions" style={{ marginTop: 16 }}>
+                  <button className="button products-primary-button" disabled={saving} type="submit">{saving ? "Guardando..." : "Guardar producto"}</button>
+                  <button className="button ghost products-secondary-button" type="button" onClick={() => setForm(emptyProduct)}>Limpiar</button>
+                </div>
+              </form>
+            ) : (
+              <div>
+                <div className="header" style={{ alignItems: "flex-start", gap: 16 }}>
+                  <p className="small" style={{ marginTop: 0 }}>
+                    Columnas obligatorias: <strong>SKU</strong>, <strong>Nombre</strong>, <strong>Costo sin IVA</strong> e <strong>IVA %</strong>.
+                  </p>
+                  <div className="actions">
+                    <button className="button ghost products-secondary-button" type="button" onClick={downloadTemplate}>Descargar plantilla</button>
+                    <label className="button products-primary-button" style={{ cursor: "pointer" }}>
+                      Subir Excel
+                      <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} style={{ display: "none" }} />
+                    </label>
+                  </div>
+                </div>
+
+                {importErrors.length > 0 && (
+                  <div className="message error" style={{ marginTop: 12 }}>
+                    {importErrors.slice(0, 8).map((item) => <div key={item}>{item}</div>)}
+                    {importErrors.length > 8 && <div>Y {importErrors.length - 8} errores más.</div>}
+                  </div>
+                )}
+
+                {importRows.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <div className="header" style={{ marginBottom: 10 }}>
+                      <div>
+                        <strong>{importRows.length} productos listos para importar</strong>
+                        <p className="small" style={{ margin: "4px 0 0" }}>Vista previa de los primeros productos del archivo.</p>
+                      </div>
+                      <div className="actions">
+                        <button className="button products-primary-button" type="button" disabled={importing || saving} onClick={importProducts}>{importing ? "Importando..." : "Importar productos"}</button>
+                        <button className="button ghost products-secondary-button" type="button" disabled={importing} onClick={() => setImportRows([])}>Cancelar</button>
+                      </div>
+                    </div>
+
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Costo s/IVA</th><th>IVA</th><th>Estado</th></tr></thead>
+                        <tbody>
+                          {importRows.slice(0, 8).map((row) => (
+                            <tr key={`${row.rowNumber}-${row.payload.sku}`}>
+                              <td>{row.payload.sku}</td>
+                              <td><strong>{row.payload.name}</strong><br /><span className="small">{row.payload.brand || ""} {row.payload.model || ""}</span></td>
+                              <td>{row.payload.category || "-"}</td>
+                              <td>{money(row.payload.cost_without_vat)}</td>
+                              <td>{row.payload.vat_rate}%</td>
+                              <td><span className="badge">{row.payload.status}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
     </main>
   );
 }

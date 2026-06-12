@@ -263,7 +263,6 @@ export async function POST() {
           .from("mercadolibre_shipping_costs")
           .select("*")
           .eq("product_id", product.id)
-          .eq("meli_item_id", item.id)
           .maybeSingle();
 
         const oldShippingCost = Number(current?.shipping_cost_amount || 0);
@@ -273,8 +272,6 @@ export async function POST() {
           meli_item_id: item.id,
           meli_title: item.title || null,
           meli_permalink: item.permalink || null,
-          meli_price: Number(item.price ?? 0) || null,
-          meli_currency_id: item.currency_id || null,
           meli_status: item.status || null,
           meli_stock: Number(item.available_quantity ?? 0),
           meli_free_shipping: Boolean(item.shipping?.free_shipping),
@@ -300,7 +297,7 @@ export async function POST() {
               ...metadataPayload,
               updated_at: now,
             },
-            { onConflict: "product_id,meli_item_id" },
+            { onConflict: "product_id" },
           );
 
           if (upsertError) throw new Error(upsertError.message);
