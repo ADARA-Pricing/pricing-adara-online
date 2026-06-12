@@ -1,0 +1,2 @@
+-- v7.55 no requiere SQL nuevo.
+-- Productos: la columna Cuotas se estima cruzando el precio de cada publicación ML con los canales/precios configurados.

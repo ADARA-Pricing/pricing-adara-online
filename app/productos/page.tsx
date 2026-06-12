@@ -4,8 +4,24 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import type { MercadoLibreShippingCost, Product } from "@/lib/types";
-import { money, toNumber } from "@/lib/pricing";
+import type {
+  MercadoLibreCategoryFee,
+  MercadoLibreInstallmentFee,
+  MercadoLibrePriceOption,
+  MercadoLibreShippingCost,
+  Product,
+  ProductChannelMargin,
+  TaxSettings,
+} from "@/lib/types";
+import {
+  calculatePriceSummary,
+  defaultTaxSettings,
+  mercadoLibreClassicOption,
+  money,
+  normalizeOption,
+  promoListPrice,
+  toNumber,
+} from "@/lib/pricing";
 import { PageHero } from "@/components/PageHero";
 
 
@@ -208,11 +224,41 @@ function installmentLabel(title?: string | null) {
   return "Sin info";
 }
 
+function sortPricingOptions(options: MercadoLibrePriceOption[]) {
+  const fixedOrder: Record<string, number> = {
+    MC: 0,
+    MP3: 1,
+    MP6: 2,
+    MP9: 3,
+    MP12: 4,
+    EF: 99,
+  };
+
+  return [...options].sort((a, b) => {
+    const aOrder = fixedOrder[a.code] ?? 50;
+    const bOrder = fixedOrder[b.code] ?? 50;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return a.code.localeCompare(b.code, "es");
+  });
+}
+
+function channelInstallmentLabel(option?: MercadoLibrePriceOption | null) {
+  if (!option) return "Sin info";
+  const count = Number(option.installment_count || 0);
+  if (count > 1) return `${option.code} · ${count} cuotas`;
+  if (option.code === "MC") return "MC · clásica";
+  return `${option.code} · ${option.name}`;
+}
+
 export default function ProductsPage() {
   const router = useRouter();
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>([]);
   const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
+  const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
+  const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
+  const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
+  const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
   const [form, setForm] = useState<Product>(emptyProduct);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -243,9 +289,20 @@ export default function ProductsPage() {
     setLoading(true);
     setError(null);
 
-    const [productsResponse, shippingResponse] = await Promise.all([
+    const [
+      productsResponse,
+      shippingResponse,
+      installmentsResponse,
+      categoryFeesResponse,
+      taxesResponse,
+      marginsResponse,
+    ] = await Promise.all([
       supabase.from("products").select("*").order("updated_at", { ascending: false }),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
+      supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
+      supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
+      supabase.from("tax_settings").select("*").eq("key", "default").single(),
+      supabase.from("product_channel_margins").select("*"),
     ]);
 
     setLoading(false);
@@ -260,8 +317,32 @@ export default function ProductsPage() {
       return;
     }
 
+    if (installmentsResponse.error) {
+      setError(installmentsResponse.error.message);
+      return;
+    }
+
+    if (categoryFeesResponse.error) {
+      setError(categoryFeesResponse.error.message);
+      return;
+    }
+
+    if (taxesResponse.error) {
+      setTaxes(defaultTaxSettings());
+    } else {
+      setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
+    }
+
+    if (marginsResponse.error) {
+      setError(marginsResponse.error.message);
+      return;
+    }
+
     setProducts((productsResponse.data || []) as Product[]);
     setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
+    setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
+    setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
+    setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
   }
 
   useEffect(() => {
@@ -508,6 +589,134 @@ export default function ProductsPage() {
     setImportRows([]);
     setImportErrors([]);
     await loadProducts();
+  }
+
+  const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
+    const options = [
+      mercadoLibreClassicOption(),
+      ...installments.map((item) =>
+        normalizeOption({
+          code: item.code,
+          name: item.name,
+          channel_type: item.channel_type,
+          installment_count: item.installment_count,
+          financing_fee_rate: item.financing_fee_rate,
+          applies_marketplace_fee: item.applies_marketplace_fee,
+          applies_shipping: item.applies_shipping,
+          applies_iibb: item.applies_iibb,
+          applies_idc: item.applies_idc,
+          applies_iigg: item.applies_iigg,
+          applies_structure: item.applies_structure,
+          applies_vat: item.applies_vat,
+          active: item.active,
+        }),
+      ),
+    ];
+
+    return sortPricingOptions(options);
+  }, [installments]);
+
+  function getChannelSetting(productId: string | undefined, channelCode: string) {
+    return marginSettings.find((item) => item.product_id === productId && item.channel_code === channelCode);
+  }
+
+  function getMargin(productId: string | undefined, channelCode: string) {
+    const setting = getChannelSetting(productId, channelCode);
+    return Number(setting?.desired_margin_rate ?? 5);
+  }
+
+  function getNetProfit(productId: string | undefined, channelCode: string) {
+    const setting = getChannelSetting(productId, channelCode);
+    return setting?.desired_net_profit ?? null;
+  }
+
+  function getPromoDiscount(productId: string | undefined, channelCode: string) {
+    const setting = getChannelSetting(productId, channelCode);
+    return Number(setting?.promo_discount_rate || 0);
+  }
+
+  function allowsExtraSalesCommission(option?: MercadoLibrePriceOption | null) {
+    if (!option) return false;
+    return !normalizeOption(option).applies_marketplace_fee;
+  }
+
+  function isMercadoLibreChannel(option?: MercadoLibrePriceOption | null) {
+    if (!option) return false;
+    const normalized = normalizeOption(option);
+    return (
+      normalized.channel_type === "mercadolibre" ||
+      normalized.code === "MC" ||
+      normalized.code?.startsWith("MP")
+    );
+  }
+
+  function estimatedChannelForPublication(product: Product, shipping: MercadoLibreShippingCost) {
+    const publicationPrice = Number(shipping.meli_price || 0);
+    if (!publicationPrice || pricingOptions.length === 0) return null;
+
+    const categoryFee = categoryFees.find(
+      (item) => item.category?.toLowerCase() === (product.category || "").toLowerCase(),
+    );
+
+    const matches = pricingOptions
+      .filter(isMercadoLibreChannel)
+      .map((option) => {
+        const normalizedOption = normalizeOption(option);
+        const setting = getChannelSetting(product.id, normalizedOption.code);
+        const result = calculatePriceSummary(
+          product,
+          normalizedOption,
+          normalizedOption.applies_marketplace_fee ? categoryFee : null,
+          taxes,
+          normalizedOption.applies_shipping ? shipping : null,
+          {
+            desiredMarginRate: getMargin(product.id, normalizedOption.code),
+            desiredNetProfit: getNetProfit(product.id, normalizedOption.code),
+            structureAmount: Number(setting?.structure_amount || 0),
+            manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
+            salesCommissionRate: allowsExtraSalesCommission(normalizedOption)
+              ? Number(setting?.sales_commission_rate || 0)
+              : 0,
+            saleAppliesVat: setting?.sale_applies_vat ?? Boolean(normalizedOption.applies_vat),
+            costVatRate: Number(setting?.cost_vat_rate || 0),
+            roundTo: 100,
+            roundingMode: "nearest",
+          },
+        ) as any;
+
+        if (!result.valid) return null;
+
+        const promoDiscountRate = isMercadoLibreChannel(normalizedOption)
+          ? getPromoDiscount(product.id, normalizedOption.code)
+          : 0;
+        const calculatedPrice = Number(result.roundedPrice || 0);
+        const promoPrice = promoDiscountRate ? promoListPrice(calculatedPrice, promoDiscountRate) : null;
+        const targetPrice = promoPrice || calculatedPrice;
+        const diff = Math.abs(targetPrice - publicationPrice);
+
+        return {
+          option: normalizedOption,
+          diff,
+          calculatedPrice,
+          promoDiscountRate,
+          promoPrice,
+        };
+      })
+      .filter(Boolean) as Array<{
+        option: MercadoLibrePriceOption;
+        diff: number;
+        calculatedPrice: number;
+        promoDiscountRate: number;
+        promoPrice: number | null;
+      }>;
+
+    const best = matches.sort((a, b) => a.diff - b.diff)[0];
+    if (!best) return null;
+
+    const tolerance = Math.max(250, publicationPrice * 0.015);
+    if (best.diff > tolerance) return null;
+
+    return best;
   }
 
   const categories = useMemo(() => {
@@ -863,6 +1072,7 @@ export default function ProductsPage() {
                           <p>Activas: {activePublications}</p>
                           <p>Pausadas: {pausedPublications}</p>
                           <p className="small">No se suma el stock porque las publicaciones comparten el mismo inventario.</p>
+                          <p className="small">Las cuotas se detectan cruzando el precio publicado con las condiciones configuradas en Precios.</p>
                         </div>
                         <div>
                           <h4>Notas</h4>
@@ -879,6 +1089,7 @@ export default function ProductsPage() {
                                 <th>Estado</th>
                                 <th>Precio venta</th>
                                 <th>Cuotas</th>
+                                <th>Promo</th>
                                 <th>Stock publicado</th>
                                 <th>Última sync</th>
                                 <th></th>
@@ -895,7 +1106,22 @@ export default function ProductsPage() {
                                     </td>
                                     <td><span className={`badge meli-status-${shipping.meli_status || "none"}`}>{meliStatusLabel(shipping.meli_status)}</span></td>
                                     <td><strong>{shipping.meli_price ? money(shipping.meli_price) : "-"}</strong></td>
-                                    <td><span className="badge">{installmentLabel(shipping.meli_title)}</span></td>
+                                    <td>
+                                      {(() => {
+                                        const channel = estimatedChannelForPublication(product, shipping);
+                                        return (
+                                          <span className="badge" title={channel ? `Detectado por precio: ${money(channel.calculatedPrice)}` : "No se pudo cruzar con una condición de precio"}>
+                                            {channel ? channelInstallmentLabel(channel.option) : installmentLabel(shipping.meli_title)}
+                                          </span>
+                                        );
+                                      })()}
+                                    </td>
+                                    <td>
+                                      {(() => {
+                                        const channel = estimatedChannelForPublication(product, shipping);
+                                        return channel?.promoDiscountRate ? `${channel.promoDiscountRate}%` : "-";
+                                      })()}
+                                    </td>
                                     <td>{shipping.meli_stock ?? "-"}</td>
                                     <td>{formatDateTime(shipping.meli_last_sync_at || shipping.updated_at)}</td>
                                     <td>{shipping.meli_permalink ? <a className="button ghost small-button" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir</a> : null}</td>

@@ -4083,3 +4083,8 @@ td strong {
   display: block;
   margin-top: 6px;
 }
+
+/* v7.55 - cuotas detectadas por precio */
+.product-publications-table .badge {
+  white-space: nowrap;
+}
