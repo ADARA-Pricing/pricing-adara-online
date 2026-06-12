@@ -2997,8 +2997,13 @@ td strong {
   align-items: center;
   justify-content: center;
   color: currentColor;
-  font-size: 21px;
   flex: 0 0 auto;
+}
+
+.sidebar-icon-svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .sidebar-section {
@@ -3387,3 +3392,6 @@ td strong {
   background: #1d4ed8 !important;
   border-color: #1d4ed8 !important;
 }
+
+/* v7.42 - sidebar cleanup and refined icons */
+.sidebar-link span:last-child, .sidebar-sublink span:last-child { line-height: 1.2; }
