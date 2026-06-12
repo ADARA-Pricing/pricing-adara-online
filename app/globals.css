@@ -3395,3 +3395,52 @@ td strong {
 
 /* v7.42 - sidebar cleanup and refined icons */
 .sidebar-link span:last-child, .sidebar-sublink span:last-child { line-height: 1.2; }
+
+
+/* v7.43 - datos ML en envíos */
+.meli-publication-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.meli-publication-cell a {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.meli-publication-cell a:hover {
+  text-decoration: underline;
+}
+
+.badge.meli-status-active {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.badge.meli-status-paused {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge.meli-status-closed {
+  background: #fee2e2;
+  color: #be123c;
+}
+
+.envios-list-card table th,
+.envios-list-card table td {
+  white-space: nowrap;
+}
+
+.envios-list-card table td:nth-child(2),
+.envios-list-card table th:nth-child(2) {
+  min-width: 260px;
+  white-space: normal;
+}
+
+.shipping-modal-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}

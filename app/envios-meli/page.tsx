@@ -21,6 +21,39 @@ function numberValue(value?: number | null) {
   return value === null || value === undefined ? "" : String(value);
 }
 
+function meliStatusLabel(status?: string | null) {
+  if (!status) return "-";
+  const labels: Record<string, string> = {
+    active: "Activa",
+    paused: "Pausada",
+    closed: "Cerrada",
+    under_review: "En revisión",
+  };
+  return labels[status] || status;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "-";
+  try {
+    return new Intl.DateTimeFormat("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return "-";
+  }
+}
+
+function shippingStatusLabel(shipping?: MercadoLibreShippingCost) {
+  if (!shipping) return "sin cargar";
+  const total = Number(shipping.fixed_fee_amount || 0) + Number(shipping.shipping_cost_amount || 0);
+  if (total > 0) return "configurado";
+  if (shipping.meli_item_id) return "sync ML";
+  return "sin cargar";
+}
+
 export default function EnviosMeliPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -123,7 +156,17 @@ export default function EnviosMeliPage() {
       free_shipping: Boolean(form.free_shipping),
       shipping_method: form.shipping_method || "mercado_envios",
       notes: form.notes?.trim() || null,
-      active: Boolean(form.active)
+      active: Boolean(form.active),
+      meli_item_id: form.meli_item_id || null,
+      meli_title: form.meli_title || null,
+      meli_permalink: form.meli_permalink || null,
+      meli_status: form.meli_status || null,
+      meli_stock: form.meli_stock ?? null,
+      meli_free_shipping: form.meli_free_shipping ?? null,
+      meli_shipping_mode: form.meli_shipping_mode || null,
+      meli_logistic_type: form.meli_logistic_type || null,
+      meli_cost_source: form.meli_cost_source || null,
+      meli_last_sync_at: form.meli_last_sync_at || null
     };
 
     const { error } = await supabase.from("mercadolibre_shipping_costs").upsert(payload, { onConflict: "product_id" });
@@ -168,7 +211,7 @@ export default function EnviosMeliPage() {
         {loading ? <p>Cargando...</p> : (
           <div className="table-wrap">
             <table>
-              <thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Costo fijo</th><th>Envío</th><th>Total fijo</th><th>Tipo</th><th>Modalidad</th><th>Estado</th><th></th></tr></thead>
+              <thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Publicación ML</th><th>Estado ML</th><th>Stock ML</th><th>Costo fijo</th><th>Envío ML</th><th>Total fijo</th><th>Modalidad</th><th>Sync</th><th></th></tr></thead>
               <tbody>
                 {rows.map(({ product, shipping }) => {
                   const total = Number(shipping?.fixed_fee_amount || 0) + Number(shipping?.shipping_cost_amount || 0);
@@ -177,17 +220,40 @@ export default function EnviosMeliPage() {
                       <td>{product.sku}</td>
                       <td><strong>{product.name}</strong><br /><span className="small">{product.brand || ""} {product.model || ""}</span></td>
                       <td>{product.category || "-"}</td>
+                      <td>
+                        {shipping?.meli_item_id ? (
+                          <div className="meli-publication-cell">
+                            <strong>{shipping.meli_item_id}</strong>
+                            {shipping.meli_permalink && (
+                              <a href={shipping.meli_permalink} target="_blank" rel="noreferrer">Ver ML</a>
+                            )}
+                          </div>
+                        ) : "-"}
+                      </td>
+                      <td>
+                        {shipping?.meli_status ? (
+                          <span className={`badge meli-status-${shipping.meli_status}`}>{meliStatusLabel(shipping.meli_status)}</span>
+                        ) : "-"}
+                      </td>
+                      <td>{shipping?.meli_stock ?? "-"}</td>
                       <td>{money(shipping?.fixed_fee_amount || 0)}</td>
                       <td>{money(shipping?.shipping_cost_amount || 0)}</td>
                       <td><strong>{money(total)}</strong></td>
-                      <td>{shipping?.free_shipping ? "Gratis / vendedor" : "Comprador"}</td>
-                      <td>{shipping?.shipping_method || "-"}</td>
-                      <td>{shipping ? <span className="badge">configurado</span> : <span className="badge">sin cargar</span>}</td>
+                      <td>
+                        <strong>{shipping?.meli_logistic_type || shipping?.shipping_method || "-"}</strong>
+                        <br />
+                        <span className="small">{shipping?.meli_shipping_mode || ""}</span>
+                      </td>
+                      <td>
+                        <span className="badge">{shippingStatusLabel(shipping)}</span>
+                        <br />
+                        <span className="small">{formatDateTime(shipping?.meli_last_sync_at || shipping?.updated_at)}</span>
+                      </td>
                       <td><button className="button ghost" onClick={() => edit(product, shipping)}>Editar</button></td>
                     </tr>
                   );
                 })}
-                {rows.length === 0 && <tr><td colSpan={10}>No hay productos para mostrar.</td></tr>}
+                {rows.length === 0 && <tr><td colSpan={12}>No hay productos para mostrar.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -222,6 +288,18 @@ export default function EnviosMeliPage() {
                 <div>
                   <span>Categoría</span>
                   <strong>{selectedProduct?.category || "-"}</strong>
+                </div>
+                <div>
+                  <span>ML Item ID</span>
+                  <strong>{form.meli_item_id || "-"}</strong>
+                </div>
+                <div>
+                  <span>Estado ML</span>
+                  <strong>{meliStatusLabel(form.meli_status)}</strong>
+                </div>
+                <div>
+                  <span>Stock ML</span>
+                  <strong>{form.meli_stock ?? "-"}</strong>
                 </div>
               </div>
 

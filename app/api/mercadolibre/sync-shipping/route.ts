@@ -6,6 +6,7 @@ import type { Product } from "@/lib/types";
 type MeliItem = {
   id: string;
   title?: string;
+  permalink?: string | null;
   seller_custom_field?: string | null;
   price?: number;
   status?: string;
@@ -267,8 +268,40 @@ export async function POST() {
         const oldShippingCost = Number(current?.shipping_cost_amount || 0);
         matched += 1;
 
+        const metadataPayload = {
+          meli_item_id: item.id,
+          meli_title: item.title || null,
+          meli_permalink: item.permalink || null,
+          meli_status: item.status || null,
+          meli_stock: Number(item.available_quantity ?? 0),
+          meli_free_shipping: Boolean(item.shipping?.free_shipping),
+          meli_shipping_mode: item.shipping?.mode || null,
+          meli_logistic_type: item.shipping?.logistic_type || null,
+          meli_cost_source: shippingSource || null,
+          meli_last_sync_at: now,
+        };
+
         if (!newShippingCost) {
           noShippingCost += 1;
+
+          const { error: upsertError } = await supabase.from("mercadolibre_shipping_costs").upsert(
+            {
+              product_id: product.id,
+              sku: product.sku,
+              fixed_fee_amount: Number(current?.fixed_fee_amount || 0),
+              shipping_cost_amount: oldShippingCost,
+              free_shipping: Boolean(current?.free_shipping ?? item.shipping?.free_shipping ?? true),
+              shipping_method: current?.shipping_method || item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
+              notes: current?.notes || `Sincronizado desde MercadoLibre ${item.id} · sin costo devuelto`,
+              active: Boolean(current?.active ?? true),
+              ...metadataPayload,
+              updated_at: now,
+            },
+            { onConflict: "product_id" },
+          );
+
+          if (upsertError) throw new Error(upsertError.message);
+
           logs.push({
             sku: product.sku,
             meli_item_id: item.id,
@@ -289,10 +322,11 @@ export async function POST() {
             sku: product.sku,
             fixed_fee_amount: Number(current?.fixed_fee_amount || 0),
             shipping_cost_amount: newShippingCost,
-            free_shipping: true,
+            free_shipping: Boolean(item.shipping?.free_shipping ?? true),
             shipping_method: item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
             notes: `Sincronizado desde MercadoLibre ${item.id} · ${shippingSource || "endpoint compatible"}`,
             active: true,
+            ...metadataPayload,
             updated_at: now,
           },
           { onConflict: "product_id" },
