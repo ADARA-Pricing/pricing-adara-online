@@ -196,6 +196,40 @@ function meliStatusLabel(status?: string | null) {
   return labels[status] || status;
 }
 
+function catalogStatus(shipping: MercadoLibreShippingCost) {
+  const isCatalog = Boolean(shipping.meli_catalog_listing || shipping.meli_catalog_product_id);
+  if (!isCatalog) {
+    return {
+      label: "No catalogo",
+      detail: null,
+      className: "rentabilidad-catalog-neutral",
+    };
+  }
+
+  const status = (shipping.meli_catalog_status || "").toLowerCase();
+  if (status === "winning" || status === "winner" || status === "sharing_first_place") {
+    return {
+      label: "Catalogo ganando",
+      detail: shipping.meli_catalog_price_to_win ? `PTW ${moneyWithCents(shipping.meli_catalog_price_to_win)}` : null,
+      className: "rentabilidad-catalog-win",
+    };
+  }
+
+  if (status === "not_listed") {
+    return {
+      label: "Catalogo no compite",
+      detail: Array.isArray(shipping.meli_catalog_reason) ? shipping.meli_catalog_reason.join(", ") : null,
+      className: "rentabilidad-catalog-warning",
+    };
+  }
+
+  return {
+    label: "Catalogo no gana",
+    detail: shipping.meli_catalog_price_to_win ? `PTW ${moneyWithCents(shipping.meli_catalog_price_to_win)}` : (shipping.meli_catalog_status || null),
+    className: "rentabilidad-catalog-danger",
+  };
+}
+
 function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost) {
   const buyerPrice = Number(shipping.meli_promo_price || shipping.meli_price || 0) || null;
   const listPrice = Number(shipping.meli_original_price || shipping.meli_price || 0) || null;
@@ -711,6 +745,15 @@ export default function RentabilidadMeliPage() {
                                             </>
                                           ) : null}
                                         </span>
+                                        {(() => {
+                                          const status = catalogStatus(row.shipping);
+                                          return (
+                                            <span className={`rentabilidad-catalog-badge ${status.className}`}>
+                                              {status.label}
+                                              {status.detail ? ` · ${status.detail}` : ""}
+                                            </span>
+                                          );
+                                        })()}
                                         {row.issue && <em>{row.issue}</em>}
                                       </td>
                                       <td>

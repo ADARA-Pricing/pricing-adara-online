@@ -4285,6 +4285,37 @@ td strong {
   margin-top: 6px;
 }
 
+.rentabilidad-catalog-badge {
+  display: inline-flex !important;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px !important;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.rentabilidad-catalog-neutral {
+  background: #f1f5f9;
+  color: #475569 !important;
+}
+
+.rentabilidad-catalog-win {
+  background: #dcfce7;
+  color: #047857 !important;
+}
+
+.rentabilidad-catalog-warning {
+  background: #fef3c7;
+  color: #b45309 !important;
+}
+
+.rentabilidad-catalog-danger {
+  background: #fee2e2;
+  color: #be123c !important;
+}
+
 .rentabilidad-price-cell strong,
 .rentabilidad-price-cell span,
 .rentabilidad-promo-cell strong,

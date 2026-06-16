@@ -111,6 +111,16 @@ export type MercadoLibreShippingCost = {
   meli_sale_terms?: unknown[] | null;
   meli_tags?: string[] | null;
   meli_installments_text?: string | null;
+  meli_catalog_listing?: boolean | null;
+  meli_catalog_product_id?: string | null;
+  meli_domain_id?: string | null;
+  meli_catalog_status?: string | null;
+  meli_catalog_price_to_win?: number | null;
+  meli_catalog_current_price?: number | null;
+  meli_catalog_consistent?: boolean | null;
+  meli_catalog_visit_share?: string | null;
+  meli_catalog_competitors_sharing_first_place?: number | null;
+  meli_catalog_reason?: string[] | null;
   meli_status?: string | null;
   meli_stock?: number | null;
   meli_free_shipping?: boolean | null;

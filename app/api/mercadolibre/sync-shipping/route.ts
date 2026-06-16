@@ -18,6 +18,9 @@ type MeliItem = {
   original_price?: number | null;
   currency_id?: string | null;
   listing_type_id?: string | null;
+  catalog_listing?: boolean | null;
+  catalog_product_id?: string | null;
+  domain_id?: string | null;
   sale_terms?: Array<{ id?: string; name?: string; value_name?: string; value_id?: string }>;
   tags?: string[];
   status?: string;
@@ -34,6 +37,19 @@ type MeliItem = {
     attributes?: Array<{ id?: string; name?: string; value_name?: string }>;
     attribute_combinations?: Array<{ id?: string; name?: string; value_name?: string }>;
   }>;
+};
+
+type MeliPriceToWin = {
+  item_id?: string;
+  current_price?: number | null;
+  currency_id?: string | null;
+  price_to_win?: number | null;
+  status?: string | null;
+  consistent?: boolean | null;
+  visit_share?: string | number | null;
+  competitors_sharing_first_place?: number | null;
+  reason?: string[] | null;
+  catalog_product_id?: string | null;
 };
 
 type PromotionSummary = {
@@ -779,6 +795,14 @@ async function getDetailedItemForPricing(item: MeliItem, account: any) {
   }
 }
 
+async function getPriceToWinForItem(item: MeliItem, account: any): Promise<MeliPriceToWin | null> {
+  try {
+    return await meliFetch(`/items/${item.id}/price_to_win`, account) as MeliPriceToWin;
+  } catch {
+    return null;
+  }
+}
+
 async function getListingTypeNames(account: any) {
   const map = new Map<string, string>();
   try {
@@ -849,6 +873,7 @@ export async function POST() {
     const shippingCostsByItem = new Map<string, { cost: number; source: string | null }>();
     const promotionsByItem = new Map<string, PromotionSummary>();
     const detailedItemsByItem = new Map<string, MeliItem>();
+    const priceToWinByItem = new Map<string, MeliPriceToWin | null>();
 
     async function shippingCostForMatchedItem(item: MeliItem) {
       const cached = shippingCostsByItem.get(item.id);
@@ -867,6 +892,14 @@ export async function POST() {
       detailedItemsByItem.set(item.id, detailedItem);
       const result = await getPromotionSummaryForItem(detailedItem, account);
       promotionsByItem.set(item.id, result);
+      return result;
+    }
+
+    async function priceToWinForMatchedItem(item: MeliItem) {
+      if (priceToWinByItem.has(item.id)) return priceToWinByItem.get(item.id) || null;
+
+      const result = await getPriceToWinForItem(item, account);
+      priceToWinByItem.set(item.id, result);
       return result;
     }
 
@@ -915,6 +948,8 @@ export async function POST() {
 
         const shippingResult = await shippingCostForMatchedItem(item);
         const promotionResult = await promotionForMatchedItem(item);
+        const detailedItem = detailedItemsByItem.get(item.id) || item;
+        const priceToWinResult = await priceToWinForMatchedItem(item);
         const newShippingCost = Number(shippingResult?.cost || 0);
         const shippingSource = shippingResult?.source || null;
         const { data: current } = await supabase
@@ -929,10 +964,10 @@ export async function POST() {
 
         const metadataPayload = {
           meli_item_id: item.id,
-          meli_title: item.title || null,
-          meli_permalink: item.permalink || null,
-          meli_price: Number((detailedItemsByItem.get(item.id) || item).price ?? 0) || null,
-          meli_currency_id: (detailedItemsByItem.get(item.id) || item).currency_id || null,
+          meli_title: detailedItem.title || null,
+          meli_permalink: detailedItem.permalink || null,
+          meli_price: Number(detailedItem.price ?? 0) || null,
+          meli_currency_id: detailedItem.currency_id || null,
           meli_original_price: promotionResult.originalPrice,
           meli_promo_price: promotionResult.promoPrice,
           meli_promo_name: promotionResult.name,
@@ -945,16 +980,28 @@ export async function POST() {
           meli_promo_meli_rate: promotionResult.meliRate,
           meli_promo_receive_amount: promotionResult.receiveAmount,
           meli_promotions: promotionResult.raw,
-          meli_listing_type_id: item.listing_type_id || null,
-          meli_listing_type_name: item.listing_type_id ? listingTypeNames.get(item.listing_type_id) || item.listing_type_id : null,
-          meli_sale_terms: item.sale_terms || [],
-          meli_tags: item.tags || [],
-          meli_installments_text: detectInstallmentsText(item, item.listing_type_id ? listingTypeNames.get(item.listing_type_id) || item.listing_type_id : null),
-          meli_status: item.status || null,
-          meli_stock: Number(item.available_quantity ?? 0),
-          meli_free_shipping: Boolean(item.shipping?.free_shipping),
-          meli_shipping_mode: item.shipping?.mode || null,
-          meli_logistic_type: item.shipping?.logistic_type || null,
+          meli_listing_type_id: detailedItem.listing_type_id || null,
+          meli_listing_type_name: detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null,
+          meli_sale_terms: detailedItem.sale_terms || [],
+          meli_tags: detailedItem.tags || [],
+          meli_installments_text: detectInstallmentsText(detailedItem, detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null),
+          meli_status: detailedItem.status || null,
+          meli_stock: Number(detailedItem.available_quantity ?? 0),
+          meli_free_shipping: Boolean(detailedItem.shipping?.free_shipping),
+          meli_shipping_mode: detailedItem.shipping?.mode || null,
+          meli_logistic_type: detailedItem.shipping?.logistic_type || null,
+          meli_catalog_listing: Boolean(detailedItem.catalog_listing),
+          meli_catalog_product_id: detailedItem.catalog_product_id || priceToWinResult?.catalog_product_id || null,
+          meli_domain_id: detailedItem.domain_id || null,
+          meli_catalog_status: priceToWinResult?.status || null,
+          meli_catalog_price_to_win: Number(priceToWinResult?.price_to_win || 0) || null,
+          meli_catalog_current_price: Number(priceToWinResult?.current_price || 0) || null,
+          meli_catalog_consistent: priceToWinResult?.consistent ?? null,
+          meli_catalog_visit_share: priceToWinResult?.visit_share !== undefined && priceToWinResult?.visit_share !== null
+            ? String(priceToWinResult.visit_share)
+            : null,
+          meli_catalog_competitors_sharing_first_place: priceToWinResult?.competitors_sharing_first_place ?? null,
+          meli_catalog_reason: priceToWinResult?.reason || [],
           meli_cost_source: shippingSource || null,
           meli_last_sync_at: now,
         };
