@@ -377,10 +377,71 @@ function isExpiredPromotion(value: any) {
   return Boolean(endDate && endDate.getTime() < Date.now());
 }
 
+const PROMO_PRICE_KEYS = [
+  "promo_price",
+  "promotion_price",
+  "discounted_price",
+  "final_price",
+  "deal_price",
+  "price",
+  "amount",
+];
+
+const ORIGINAL_PRICE_KEYS = ["original_price", "regular_price", "standard_price", "list_price", "base_price"];
+
+const SELLER_AMOUNT_KEYS = [
+  "seller_discount_amount",
+  "seller_amount",
+  "seller_funded_amount",
+  "discount_seller_amount",
+  "seller_contribution",
+  "seller_contribution_amount",
+  "seller_funding_amount",
+];
+
+const MELI_AMOUNT_KEYS = [
+  "meli_discount_amount",
+  "marketplace_discount_amount",
+  "marketplace_amount",
+  "meli_amount",
+  "meli_funded_amount",
+  "funding_amount",
+  "meli_contribution_amount",
+  "marketplace_contribution_amount",
+  "cofunded_amount",
+  "co_funded_amount",
+];
+
+function candidateOriginalPrice(value: any, itemPrice?: number | null) {
+  return pickNumber(value, ORIGINAL_PRICE_KEYS) || Number(itemPrice || 0) || null;
+}
+
+function candidateSellerAmount(value: any) {
+  return pickNumber(value, SELLER_AMOUNT_KEYS) || pickNumberDeep(value, SELLER_AMOUNT_KEYS);
+}
+
+function candidateMeliAmount(value: any) {
+  return pickNumber(value, MELI_AMOUNT_KEYS) || pickNumberDeep(value, MELI_AMOUNT_KEYS) || pickNumberByKeyPattern(value, (key) =>
+    /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
+    /(amount|discount|fund|funded|contribution|benefit)/.test(key)
+  );
+}
+
+function candidatePromoPrice(value: any, itemPrice?: number | null) {
+  const directPrice = pickNumber(value, PROMO_PRICE_KEYS);
+  if (directPrice !== null) return directPrice;
+
+  const originalPrice = candidateOriginalPrice(value, itemPrice);
+  const sellerAmount = candidateSellerAmount(value);
+  if (!originalPrice || !sellerAmount) return null;
+
+  return Math.max(originalPrice - sellerAmount - Number(candidateMeliAmount(value) || 0), 0);
+}
+
 function promotionScore(value: any) {
   const status = String(value?.status || value?.state || "").toLowerCase();
-  const hasPrice = pickNumber(value, ["promo_price", "promotion_price", "discounted_price", "final_price", "price", "amount"]) !== null;
-  const hasSellerDiscount = pickNumber(value, ["seller_discount_amount", "seller_amount", "discount_seller_amount", "seller_funded_amount"]) !== null;
+  const hasPrice = candidatePromoPrice(value) !== null;
+  const hasSellerDiscount = candidateSellerAmount(value) !== null;
   let score = 0;
   if (status.includes("active") || status.includes("started") || status.includes("activa")) score += 4;
   if (hasPrice) score += 3;
@@ -389,69 +450,26 @@ function promotionScore(value: any) {
   return score;
 }
 
-function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null): PromotionSummary {
+function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null, targetPromoPrice?: number | null): PromotionSummary {
   const allCandidates = collectPromotionCandidates(rawResponses)
     .filter((candidate) => promotionScore(candidate) > 0)
     .sort((a, b) => promotionScore(b) - promotionScore(a));
   const activeCandidates = allCandidates.filter((candidate) => !isScheduledPromotion(candidate) && !isExpiredPromotion(candidate));
-  const candidates = activeCandidates.sort((a, b) => {
-    const priceA = pickNumber(a, ["promo_price", "promotion_price", "discounted_price", "final_price", "deal_price", "price", "amount"]) || Number.MAX_SAFE_INTEGER;
-    const priceB = pickNumber(b, ["promo_price", "promotion_price", "discounted_price", "final_price", "deal_price", "price", "amount"]) || Number.MAX_SAFE_INTEGER;
+  const matchingCandidates = targetPromoPrice
+    ? activeCandidates.filter((candidate) => sameMoney(candidatePromoPrice(candidate, itemPrice), targetPromoPrice))
+    : [];
+  const candidates = (matchingCandidates.length > 0 ? matchingCandidates : activeCandidates).sort((a, b) => {
+    const priceA = candidatePromoPrice(a, itemPrice) || Number.MAX_SAFE_INTEGER;
+    const priceB = candidatePromoPrice(b, itemPrice) || Number.MAX_SAFE_INTEGER;
     if (priceA !== priceB) return priceA - priceB;
     return promotionScore(b) - promotionScore(a);
   });
   const best = candidates[0] || {};
   const originalPrice =
-    pickNumber(best, ["original_price", "regular_price", "standard_price", "list_price", "base_price"]) ||
-    Number(itemPrice || 0) ||
-    null;
-  const promoPrice = pickNumber(best, [
-    "promo_price",
-    "promotion_price",
-    "discounted_price",
-    "final_price",
-    "deal_price",
-    "price",
-    "amount",
-  ]);
-  const sellerAmount = pickNumber(best, [
-    "seller_discount_amount",
-    "seller_amount",
-    "seller_funded_amount",
-    "discount_seller_amount",
-    "seller_contribution",
-    "seller_contribution_amount",
-    "seller_funding_amount",
-  ]) || pickNumberDeep(best, [
-    "seller_discount_amount",
-    "seller_funded_amount",
-    "discount_seller_amount",
-    "seller_contribution_amount",
-    "seller_funding_amount",
-  ]);
-  const meliAmount = pickNumber(best, [
-    "meli_discount_amount",
-    "marketplace_discount_amount",
-    "marketplace_amount",
-    "meli_amount",
-    "meli_funded_amount",
-    "funding_amount",
-    "meli_contribution_amount",
-    "marketplace_contribution_amount",
-    "cofunded_amount",
-    "co_funded_amount",
-  ]) || pickNumberDeep(best, [
-    "meli_discount_amount",
-    "marketplace_discount_amount",
-    "meli_funded_amount",
-    "meli_contribution_amount",
-    "marketplace_contribution_amount",
-    "cofunded_amount",
-    "co_funded_amount",
-  ]) || pickNumberByKeyPattern(best, (key) =>
-    /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
-    /(amount|discount|fund|funded|contribution|benefit)/.test(key)
-  );
+    candidateOriginalPrice(best, itemPrice);
+  const promoPrice = candidatePromoPrice(best, itemPrice);
+  const sellerAmount = candidateSellerAmount(best);
+  const meliAmount = candidateMeliAmount(best);
   const receiveAmount = pickNumber(best, [
     "receive_amount",
     "seller_receives_amount",
@@ -547,7 +565,7 @@ async function getPromotionSummaryForItem(item: MeliItem, account: any) {
     }
   }
 
-  const endpointSummary = summarizePromotion(rawResponses, item.price);
+  const endpointSummary = summarizePromotion(rawResponses, item.price, salePriceSummary?.promoPrice || null);
   if (salePriceSummary && !endpointSummary.promoPrice) return {
     ...salePriceSummary,
     raw: [...salePriceSummary.raw, ...rawResponses],
