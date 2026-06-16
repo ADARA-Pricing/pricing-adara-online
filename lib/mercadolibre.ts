@@ -138,7 +138,9 @@ export async function meliFetch(path: string, account: MercadoLibreAccount, init
 
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(data?.message || data?.error || `Error MercadoLibre ${response.status}`);
+    const code = data?.code || data?.error;
+    const message = data?.message || data?.error_description || data?.error || `Error MercadoLibre ${response.status}`;
+    throw new Error(`${response.status}${code ? ` ${code}` : ""}: ${message}`);
   }
 
   return data;

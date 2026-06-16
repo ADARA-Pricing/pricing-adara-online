@@ -718,8 +718,11 @@ async function getPromotionSummaryForItem(item: MeliItem, account: any) {
     try {
       const data = await meliFetch(endpoint, account);
       rawResponses.push({ endpoint, data });
-    } catch {
-      // Algunas cuentas o publicaciones no tienen acceso a todos los endpoints de promociones.
+    } catch (error) {
+      rawResponses.push({
+        endpoint,
+        error: error instanceof Error ? error.message : "No se pudo consultar este endpoint de promociones.",
+      });
     }
   }
 
