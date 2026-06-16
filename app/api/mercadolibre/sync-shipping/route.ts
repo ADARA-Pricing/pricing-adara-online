@@ -387,6 +387,17 @@ const PROMO_PRICE_KEYS = [
 ];
 
 const ORIGINAL_PRICE_KEYS = ["original_price", "regular_price", "standard_price", "list_price", "base_price"];
+const COMMISSION_BASE_PRICE_KEYS = [
+  "commission_base_price",
+  "commission_base_amount",
+  "base_commission_price",
+  "base_commission_amount",
+  "seller_price",
+  "seller_amount_to_charge",
+  "seller_charge_amount",
+  "effective_price",
+  "effective_amount",
+];
 
 const SELLER_AMOUNT_KEYS = [
   "seller_discount_amount",
@@ -421,14 +432,29 @@ function candidateOriginalPrice(value: any, itemPrice?: number | null) {
   return pickNumber(value, ORIGINAL_PRICE_KEYS) || Number(itemPrice || 0) || null;
 }
 
+function candidateCommissionBasePrice(value: any) {
+  return pickNumber(value, COMMISSION_BASE_PRICE_KEYS) ||
+    pickNumberDeep(value, COMMISSION_BASE_PRICE_KEYS) ||
+    pickNumberByKeyPattern(value, (key) =>
+      /(commission|base|seller|effective)/.test(key) &&
+      /(price|amount|charge)/.test(key)
+    );
+}
+
 function candidateSellerAmount(value: any) {
-  return pickNumber(value, SELLER_AMOUNT_KEYS) || pickNumberDeep(value, SELLER_AMOUNT_KEYS) || pickSellerAmountFromTaggedObject(value);
+  return pickNumber(value, SELLER_AMOUNT_KEYS) ||
+    pickNumberDeep(value, SELLER_AMOUNT_KEYS) ||
+    pickNumberByKeyPattern(value, (key) =>
+      /(seller|vendor|merchant|provider|owner)/.test(key) &&
+      /(amount|discount|fund|funded|funding|contribution|benefit|value)/.test(key)
+    ) ||
+    pickSellerAmountFromTaggedObject(value);
 }
 
 function candidateMeliAmount(value: any) {
   return pickNumber(value, MELI_AMOUNT_KEYS) || pickNumberDeep(value, MELI_AMOUNT_KEYS) || pickNumberByKeyPattern(value, (key) =>
     /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
-    /(amount|discount|fund|funded|contribution|benefit)/.test(key)
+    /(amount|discount|fund|funded|funding|contribution|benefit|value)/.test(key)
   ) || pickMeliAmountFromTaggedObject(value);
 }
 
@@ -569,11 +595,19 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null, 
   const promoPrice = candidatePromoPrice(best, itemPrice);
   const sellerAmount = candidateSellerAmount(best);
   const rawMeliAmount = candidateMeliAmount(best);
+  const commissionBasePrice = candidateCommissionBasePrice(best);
   const derivedMeliAmount =
     !rawMeliAmount && originalPrice && promoPrice && sellerAmount
       ? Math.max(originalPrice - promoPrice - sellerAmount, 0)
       : null;
-  const meliAmount = rawMeliAmount || (derivedMeliAmount && derivedMeliAmount > 0.5 ? derivedMeliAmount : null);
+  const derivedMeliAmountFromBase =
+    !rawMeliAmount && promoPrice && commissionBasePrice && commissionBasePrice > promoPrice
+      ? commissionBasePrice - promoPrice
+      : null;
+  const meliAmount =
+    rawMeliAmount ||
+    (derivedMeliAmount && derivedMeliAmount > 0.5 ? derivedMeliAmount : null) ||
+    (derivedMeliAmountFromBase && derivedMeliAmountFromBase > 0.5 ? derivedMeliAmountFromBase : null);
   const receiveAmount = pickNumber(best, [
     "receive_amount",
     "seller_receives_amount",

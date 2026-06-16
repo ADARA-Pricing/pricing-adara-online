@@ -740,6 +740,9 @@ export default function RentabilidadMeliPage() {
                                           <>
                                             <strong>{row.promoName || "Promocion activa"}</strong>
                                             <span>Precio publico {row.buyerPrice ? moneyWithCents(row.buyerPrice) : "-"}</span>
+                                            {Number(row.shipping.meli_promo_meli_amount || 0) > 0 ? (
+                                              <span>Aporte ML {moneyWithCents(Number(row.shipping.meli_promo_meli_amount || 0))}</span>
+                                            ) : null}
                                             <span>Base comision {row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</span>
                                             <span>Descuento total {row.sellerDiscountAmount ? moneyWithCents(row.sellerDiscountAmount) : "-"}</span>
                                           </>
