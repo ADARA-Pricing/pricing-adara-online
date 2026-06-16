@@ -169,11 +169,17 @@ export default function EnviosMeliPage() {
       meli_last_sync_at: form.meli_last_sync_at || null
     };
 
-    const { error } = await supabase.from("mercadolibre_shipping_costs").upsert(payload, { onConflict: "product_id" });
+    const existingManualShipping = shippingCosts.find(
+      (item) => item.product_id === selectedProduct.id && !item.meli_item_id,
+    );
+    const existingId = form.id || existingManualShipping?.id;
+    const response = existingId
+      ? await supabase.from("mercadolibre_shipping_costs").update(payload).eq("id", existingId)
+      : await supabase.from("mercadolibre_shipping_costs").insert(payload);
     setSaving(false);
 
-    if (error) {
-      setError(error.message);
+    if (response.error) {
+      setError(response.error.message);
       return;
     }
 
