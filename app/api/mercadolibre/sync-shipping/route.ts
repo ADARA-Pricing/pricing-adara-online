@@ -596,37 +596,7 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null, 
   const sellerAmount = candidateSellerAmount(best);
   const rawMeliAmount = candidateMeliAmount(best);
   const commissionBasePrice = candidateCommissionBasePrice(best);
-  const derivedMeliAmount =
-    !rawMeliAmount && originalPrice && promoPrice && sellerAmount
-      ? Math.max(originalPrice - promoPrice - sellerAmount, 0)
-      : null;
-  const derivedMeliAmountFromBase =
-    !rawMeliAmount && promoPrice && commissionBasePrice && commissionBasePrice > promoPrice
-      ? commissionBasePrice - promoPrice
-      : null;
-  const meliAmount =
-    rawMeliAmount ||
-    (derivedMeliAmount && derivedMeliAmount > 0.5 ? derivedMeliAmount : null) ||
-    (derivedMeliAmountFromBase && derivedMeliAmountFromBase > 0.5 ? derivedMeliAmountFromBase : null);
-  const receiveAmount = pickNumber(best, [
-    "receive_amount",
-    "seller_receives_amount",
-    "seller_receive_amount",
-    "net_amount",
-    "net_received_amount",
-    "payout_amount",
-  ]);
-  const discountAmount =
-    pickNumber(best, ["discount_amount", "total_discount_amount"]) ||
-    (originalPrice && promoPrice ? originalPrice - promoPrice : null);
-  const discountRate =
-    pickNumber(best, ["discount_rate", "discount_percentage", "discount_percent"]) ||
-    (originalPrice && discountAmount ? (discountAmount / originalPrice) * 100 : null);
-  const sellerRate =
-    pickNumber(best, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
-    pickNumberDeep(best, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
-    (originalPrice && sellerAmount ? (sellerAmount / originalPrice) * 100 : null);
-  const meliRate =
+  const rawMeliRate =
     pickNumber(best, [
       "meli_discount_rate",
       "meli_percentage",
@@ -652,7 +622,44 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null, 
     pickNumberByKeyPattern(best, (key) =>
       /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
       /(rate|percent|percentage)/.test(key)
-    ) ||
+    );
+  const derivedMeliAmount =
+    !rawMeliAmount && originalPrice && promoPrice && sellerAmount
+      ? Math.max(originalPrice - promoPrice - sellerAmount, 0)
+      : null;
+  const derivedMeliAmountFromBase =
+    !rawMeliAmount && promoPrice && commissionBasePrice && commissionBasePrice > promoPrice
+      ? commissionBasePrice - promoPrice
+      : null;
+  const derivedMeliAmountFromRate =
+    !rawMeliAmount && originalPrice && rawMeliRate
+      ? (originalPrice * rawMeliRate) / 100
+      : null;
+  const meliAmount =
+    rawMeliAmount ||
+    (derivedMeliAmount && derivedMeliAmount > 0.5 ? derivedMeliAmount : null) ||
+    (derivedMeliAmountFromBase && derivedMeliAmountFromBase > 0.5 ? derivedMeliAmountFromBase : null) ||
+    (derivedMeliAmountFromRate && derivedMeliAmountFromRate > 0.5 ? derivedMeliAmountFromRate : null);
+  const receiveAmount = pickNumber(best, [
+    "receive_amount",
+    "seller_receives_amount",
+    "seller_receive_amount",
+    "net_amount",
+    "net_received_amount",
+    "payout_amount",
+  ]);
+  const discountAmount =
+    pickNumber(best, ["discount_amount", "total_discount_amount"]) ||
+    (originalPrice && promoPrice ? originalPrice - promoPrice : null);
+  const discountRate =
+    pickNumber(best, ["discount_rate", "discount_percentage", "discount_percent"]) ||
+    (originalPrice && discountAmount ? (discountAmount / originalPrice) * 100 : null);
+  const sellerRate =
+    pickNumber(best, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
+    pickNumberDeep(best, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
+    (originalPrice && sellerAmount ? (sellerAmount / originalPrice) * 100 : null);
+  const meliRate =
+    rawMeliRate ||
     (originalPrice && meliAmount ? (meliAmount / originalPrice) * 100 : null);
 
   return {
