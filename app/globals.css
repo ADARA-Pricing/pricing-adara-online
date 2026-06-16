@@ -2903,11 +2903,12 @@ td strong {
   background: rgba(255, 255, 255, 0.96);
   border-right: 1px solid #dfe7f3;
   box-shadow: 12px 0 40px rgba(15, 23, 42, 0.05);
-  padding: 28px 18px 22px;
+  padding: 24px 18px 18px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 16px;
   z-index: 20;
+  overflow: hidden;
 }
 
 .sidebar-logo-row {
@@ -2915,7 +2916,8 @@ td strong {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  padding: 4px 8px 20px;
+  padding: 2px 8px 12px;
+  flex: 0 0 auto;
 }
 
 .adara-logo {
@@ -2957,6 +2959,11 @@ td strong {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 2px 12px 0;
+  scrollbar-width: thin;
 }
 
 .sidebar-link,
@@ -3049,11 +3056,12 @@ td strong {
 .sidebar-bottom {
   margin-top: auto;
   border-top: 1px solid #e6edf6;
-  padding-top: 18px;
+  padding-top: 12px;
+  flex: 0 0 auto;
 }
 
 .sidebar-logout {
-  margin-bottom: 18px;
+  margin-bottom: 10px;
   text-align: left;
 }
 
@@ -3062,7 +3070,7 @@ td strong {
   grid-template-columns: 46px 1fr auto;
   align-items: center;
   gap: 12px;
-  padding: 12px 10px;
+  padding: 10px;
   border-radius: 16px;
   color: #0f172a;
 }
@@ -3395,6 +3403,50 @@ td strong {
 
 /* v7.42 - sidebar cleanup and refined icons */
 .sidebar-link span:last-child, .sidebar-sublink span:last-child { line-height: 1.2; }
+
+@media (max-height: 760px) and (min-width: 821px) {
+  .sidebar {
+    padding-top: 18px;
+    padding-bottom: 14px;
+    gap: 10px;
+  }
+
+  .sidebar-logo-row {
+    padding-bottom: 8px;
+  }
+
+  .adara-logo-main {
+    font-size: 28px;
+  }
+
+  .adara-logo-sub {
+    margin-left: 34px;
+    margin-top: 4px;
+    font-size: 11px;
+  }
+
+  .sidebar-link,
+  .sidebar-sublink {
+    min-height: 39px;
+  }
+
+  .sidebar-section {
+    margin-top: 4px;
+  }
+
+  .sidebar-submenu {
+    gap: 2px;
+  }
+
+  .sidebar-sublink {
+    min-height: 34px;
+  }
+
+  .sidebar-avatar {
+    width: 38px;
+    height: 38px;
+  }
+}
 
 
 /* v7.43 - datos ML en envíos */
