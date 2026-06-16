@@ -327,11 +327,32 @@ function dateFromPromotion(value: any, keys: string[]) {
   return null;
 }
 
+function dateFromPromotionDeep(value: unknown, keys: string[]): Date | null {
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = dateFromPromotionDeep(item, keys);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const direct = dateFromPromotion(value, keys);
+  if (direct) return direct;
+
+  for (const nested of Object.values(value as Record<string, unknown>)) {
+    const found = dateFromPromotionDeep(nested, keys);
+    if (found) return found;
+  }
+
+  return null;
+}
+
 function isScheduledPromotion(value: any) {
   const status = String(value?.status || value?.state || value?.sub_status || "").toLowerCase();
   if (/program|scheduled|pending|candidate|suggested|available|eligible/.test(status)) return true;
 
-  const startDate = dateFromPromotion(value, [
+  const startDate = dateFromPromotionDeep(value, [
     "start_date",
     "date_from",
     "starts_at",
@@ -341,6 +362,19 @@ function isScheduledPromotion(value: any) {
   ]);
 
   return Boolean(startDate && startDate.getTime() > Date.now());
+}
+
+function isExpiredPromotion(value: any) {
+  const endDate = dateFromPromotionDeep(value, [
+    "end_date",
+    "date_to",
+    "ends_at",
+    "valid_to",
+    "finish_date",
+    "end_time",
+  ]);
+
+  return Boolean(endDate && endDate.getTime() < Date.now());
 }
 
 function promotionScore(value: any) {
@@ -359,8 +393,13 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null):
   const allCandidates = collectPromotionCandidates(rawResponses)
     .filter((candidate) => promotionScore(candidate) > 0)
     .sort((a, b) => promotionScore(b) - promotionScore(a));
-  const activeCandidates = allCandidates.filter((candidate) => !isScheduledPromotion(candidate));
-  const candidates = activeCandidates.length > 0 ? activeCandidates : [];
+  const activeCandidates = allCandidates.filter((candidate) => !isScheduledPromotion(candidate) && !isExpiredPromotion(candidate));
+  const candidates = activeCandidates.sort((a, b) => {
+    const priceA = pickNumber(a, ["promo_price", "promotion_price", "discounted_price", "final_price", "deal_price", "price", "amount"]) || Number.MAX_SAFE_INTEGER;
+    const priceB = pickNumber(b, ["promo_price", "promotion_price", "discounted_price", "final_price", "deal_price", "price", "amount"]) || Number.MAX_SAFE_INTEGER;
+    if (priceA !== priceB) return priceA - priceB;
+    return promotionScore(b) - promotionScore(a);
+  });
   const best = candidates[0] || {};
   const originalPrice =
     pickNumber(best, ["original_price", "regular_price", "standard_price", "list_price", "base_price"]) ||
@@ -485,6 +524,11 @@ function summarizeItemSalePrice(item: MeliItem): PromotionSummary | null {
   };
 }
 
+function sameMoney(left?: number | null, right?: number | null) {
+  if (!left || !right) return false;
+  return Math.abs(Number(left) - Number(right)) < 1;
+}
+
 async function getPromotionSummaryForItem(item: MeliItem, account: any) {
   const salePriceSummary = summarizeItemSalePrice(item);
   const endpoints = [
@@ -509,18 +553,28 @@ async function getPromotionSummaryForItem(item: MeliItem, account: any) {
     raw: [...salePriceSummary.raw, ...rawResponses],
   };
   if (salePriceSummary && endpointSummary.promoPrice) return {
-    ...endpointSummary,
-    originalPrice: endpointSummary.originalPrice || salePriceSummary.originalPrice,
-    promoPrice: endpointSummary.promoPrice || salePriceSummary.promoPrice,
-    name: endpointSummary.name || salePriceSummary.name,
-    status: endpointSummary.status || salePriceSummary.status,
-    discountAmount: endpointSummary.discountAmount || salePriceSummary.discountAmount,
-    discountRate: endpointSummary.discountRate || salePriceSummary.discountRate,
-    sellerAmount: endpointSummary.sellerAmount || salePriceSummary.sellerAmount,
-    sellerRate: endpointSummary.sellerRate || salePriceSummary.sellerRate,
-    meliAmount: endpointSummary.meliAmount || salePriceSummary.meliAmount,
-    meliRate: endpointSummary.meliRate || salePriceSummary.meliRate,
-    receiveAmount: endpointSummary.receiveAmount || salePriceSummary.receiveAmount,
+    ...salePriceSummary,
+    name: sameMoney(endpointSummary.promoPrice, salePriceSummary.promoPrice)
+      ? endpointSummary.name || salePriceSummary.name
+      : salePriceSummary.name,
+    status: sameMoney(endpointSummary.promoPrice, salePriceSummary.promoPrice)
+      ? endpointSummary.status || salePriceSummary.status
+      : salePriceSummary.status,
+    sellerAmount: sameMoney(endpointSummary.promoPrice, salePriceSummary.promoPrice)
+      ? endpointSummary.sellerAmount || salePriceSummary.sellerAmount
+      : salePriceSummary.sellerAmount,
+    sellerRate: sameMoney(endpointSummary.promoPrice, salePriceSummary.promoPrice)
+      ? endpointSummary.sellerRate || salePriceSummary.sellerRate
+      : salePriceSummary.sellerRate,
+    meliAmount: sameMoney(endpointSummary.promoPrice, salePriceSummary.promoPrice)
+      ? endpointSummary.meliAmount || salePriceSummary.meliAmount
+      : salePriceSummary.meliAmount,
+    meliRate: sameMoney(endpointSummary.promoPrice, salePriceSummary.promoPrice)
+      ? endpointSummary.meliRate || salePriceSummary.meliRate
+      : salePriceSummary.meliRate,
+    receiveAmount: sameMoney(endpointSummary.promoPrice, salePriceSummary.promoPrice)
+      ? endpointSummary.receiveAmount || salePriceSummary.receiveAmount
+      : salePriceSummary.receiveAmount,
     raw: [...salePriceSummary.raw, ...rawResponses],
   };
 
