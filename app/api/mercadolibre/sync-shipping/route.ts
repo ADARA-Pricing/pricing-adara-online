@@ -422,7 +422,7 @@ function candidateOriginalPrice(value: any, itemPrice?: number | null) {
 }
 
 function candidateSellerAmount(value: any) {
-  return pickNumber(value, SELLER_AMOUNT_KEYS) || pickNumberDeep(value, SELLER_AMOUNT_KEYS);
+  return pickNumber(value, SELLER_AMOUNT_KEYS) || pickNumberDeep(value, SELLER_AMOUNT_KEYS) || pickSellerAmountFromTaggedObject(value);
 }
 
 function candidateMeliAmount(value: any) {
@@ -457,6 +457,37 @@ function pickMeliAmountFromTaggedObject(source: unknown): number | null {
 
   for (const nested of Object.values(item)) {
     const found = pickMeliAmountFromTaggedObject(nested);
+    if (found !== null) return found;
+  }
+
+  return null;
+}
+
+function pickSellerAmountFromTaggedObject(source: unknown): number | null {
+  if (!source || typeof source !== "object") return null;
+  if (Array.isArray(source)) {
+    for (const item of source) {
+      const found = pickSellerAmountFromTaggedObject(item);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  const item = source as Record<string, unknown>;
+  const text = Object.values(item)
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  const looksLikeSeller = /(seller|vendedor|a tu cargo|tu cargo|merchant)/.test(text);
+  if (looksLikeSeller) {
+    const taggedAmount =
+      pickNumber(item, ["amount", "discount_amount", "funded_amount", "funding_amount", "contribution_amount", "benefit_amount"]) ||
+      pickNumber(item, ["value"]);
+    if (taggedAmount !== null && taggedAmount > 10) return taggedAmount;
+  }
+
+  for (const nested of Object.values(item)) {
+    const found = pickSellerAmountFromTaggedObject(nested);
     if (found !== null) return found;
   }
 
@@ -537,7 +568,12 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null, 
     candidateOriginalPrice(best, itemPrice);
   const promoPrice = candidatePromoPrice(best, itemPrice);
   const sellerAmount = candidateSellerAmount(best);
-  const meliAmount = candidateMeliAmount(best);
+  const rawMeliAmount = candidateMeliAmount(best);
+  const derivedMeliAmount =
+    !rawMeliAmount && originalPrice && promoPrice && sellerAmount
+      ? Math.max(originalPrice - promoPrice - sellerAmount, 0)
+      : null;
+  const meliAmount = rawMeliAmount || (derivedMeliAmount && derivedMeliAmount > 0.5 ? derivedMeliAmount : null);
   const receiveAmount = pickNumber(best, [
     "receive_amount",
     "seller_receives_amount",
