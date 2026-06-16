@@ -384,7 +384,6 @@ const PROMO_PRICE_KEYS = [
   "final_price",
   "deal_price",
   "price",
-  "amount",
 ];
 
 const ORIGINAL_PRICE_KEYS = ["original_price", "regular_price", "standard_price", "list_price", "base_price"];
@@ -410,6 +409,12 @@ const MELI_AMOUNT_KEYS = [
   "marketplace_contribution_amount",
   "cofunded_amount",
   "co_funded_amount",
+  "discount_meli_amount",
+  "discount_marketplace_amount",
+  "marketplace_funded_amount",
+  "platform_discount_amount",
+  "platform_funded_amount",
+  "platform_contribution_amount",
 ];
 
 function candidateOriginalPrice(value: any, itemPrice?: number | null) {
@@ -424,7 +429,38 @@ function candidateMeliAmount(value: any) {
   return pickNumber(value, MELI_AMOUNT_KEYS) || pickNumberDeep(value, MELI_AMOUNT_KEYS) || pickNumberByKeyPattern(value, (key) =>
     /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
     /(amount|discount|fund|funded|contribution|benefit)/.test(key)
-  );
+  ) || pickMeliAmountFromTaggedObject(value);
+}
+
+function pickMeliAmountFromTaggedObject(source: unknown): number | null {
+  if (!source || typeof source !== "object") return null;
+  if (Array.isArray(source)) {
+    for (const item of source) {
+      const found = pickMeliAmountFromTaggedObject(item);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  const item = source as Record<string, unknown>;
+  const text = Object.values(item)
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  const looksLikeMeli = /(meli|mercado libre|mercado_libre|mercadolibre|marketplace|platform)/.test(text);
+  if (looksLikeMeli) {
+    const taggedAmount =
+      pickNumber(item, ["amount", "discount_amount", "funded_amount", "funding_amount", "contribution_amount", "benefit_amount"]) ||
+      pickNumber(item, ["value"]);
+    if (taggedAmount !== null && taggedAmount > 10) return taggedAmount;
+  }
+
+  for (const nested of Object.values(item)) {
+    const found = pickMeliAmountFromTaggedObject(nested);
+    if (found !== null) return found;
+  }
+
+  return null;
 }
 
 function candidatePromoPrice(value: any, itemPrice?: number | null) {
@@ -435,7 +471,13 @@ function candidatePromoPrice(value: any, itemPrice?: number | null) {
   const sellerAmount = candidateSellerAmount(value);
   if (!originalPrice || !sellerAmount) return null;
 
-  return Math.max(originalPrice - sellerAmount - Number(candidateMeliAmount(value) || 0), 0);
+  const derivedPrice = Math.max(originalPrice - sellerAmount - Number(candidateMeliAmount(value) || 0), 0);
+  if (derivedPrice > 0 && derivedPrice < originalPrice) return derivedPrice;
+
+  const genericAmount = pickNumber(value, ["amount"]);
+  if (genericAmount !== null && genericAmount > 0 && genericAmount < originalPrice) return genericAmount;
+
+  return null;
 }
 
 function promotionScore(value: any) {
@@ -489,8 +531,28 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null, 
     pickNumberDeep(best, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
     (originalPrice && sellerAmount ? (sellerAmount / originalPrice) * 100 : null);
   const meliRate =
-    pickNumber(best, ["meli_discount_rate", "meli_percentage", "marketplace_percentage", "meli_percent", "marketplace_percent"]) ||
-    pickNumberDeep(best, ["meli_discount_rate", "meli_percentage", "marketplace_percentage", "meli_percent", "marketplace_percent"]) ||
+    pickNumber(best, [
+      "meli_discount_rate",
+      "meli_percentage",
+      "marketplace_percentage",
+      "meli_percent",
+      "marketplace_percent",
+      "platform_percentage",
+      "platform_percent",
+      "marketplace_contribution_percentage",
+      "meli_contribution_percentage",
+    ]) ||
+    pickNumberDeep(best, [
+      "meli_discount_rate",
+      "meli_percentage",
+      "marketplace_percentage",
+      "meli_percent",
+      "marketplace_percent",
+      "platform_percentage",
+      "platform_percent",
+      "marketplace_contribution_percentage",
+      "meli_contribution_percentage",
+    ]) ||
     pickNumberByKeyPattern(best, (key) =>
       /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
       /(rate|percent|percentage)/.test(key)
