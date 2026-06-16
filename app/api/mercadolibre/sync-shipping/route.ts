@@ -463,19 +463,45 @@ function pickMeliAmountFromTaggedObject(source: unknown): number | null {
   return null;
 }
 
+function genericAmountLooksLikePrice(value: any) {
+  if (!value || typeof value !== "object") return false;
+  const text = [
+    value.type,
+    value.price_type,
+    value.promotion_type,
+    value.currency_id,
+    value.regular_amount !== undefined ? "regular_amount" : null,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (/(discount|seller|fund|funded|contribution|benefit)/.test(text)) return false;
+  return /(price|promotion|deal|campaign|regular_amount|ars|usd)/.test(text);
+}
+
 function candidatePromoPrice(value: any, itemPrice?: number | null) {
   const directPrice = pickNumber(value, PROMO_PRICE_KEYS);
   if (directPrice !== null) return directPrice;
 
   const originalPrice = candidateOriginalPrice(value, itemPrice);
   const sellerAmount = candidateSellerAmount(value);
+  const genericAmount = pickNumber(value, ["amount"]);
+  if (
+    originalPrice &&
+    genericAmount !== null &&
+    genericAmount > 0 &&
+    genericAmount < originalPrice &&
+    !sellerAmount &&
+    genericAmountLooksLikePrice(value)
+  ) {
+    return genericAmount;
+  }
+
   if (!originalPrice || !sellerAmount) return null;
 
   const derivedPrice = Math.max(originalPrice - sellerAmount - Number(candidateMeliAmount(value) || 0), 0);
   if (derivedPrice > 0 && derivedPrice < originalPrice) return derivedPrice;
-
-  const genericAmount = pickNumber(value, ["amount"]);
-  if (genericAmount !== null && genericAmount > 0 && genericAmount < originalPrice) return genericAmount;
 
   return null;
 }
@@ -562,8 +588,8 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null, 
   return {
     originalPrice,
     promoPrice,
-    name: pickString(best, ["name", "promotion_name", "campaign_name", "type", "promotion_type"]),
-    status: pickString(best, ["status", "state"]),
+    name: promoPrice ? pickString(best, ["name", "promotion_name", "campaign_name", "type", "promotion_type"]) : null,
+    status: promoPrice ? pickString(best, ["status", "state"]) : null,
     discountAmount,
     discountRate,
     sellerAmount,
