@@ -317,6 +317,32 @@ function collectPromotionCandidates(value: unknown, result: any[] = []) {
   return result;
 }
 
+function dateFromPromotion(value: any, keys: string[]) {
+  for (const key of keys) {
+    const raw = value?.[key];
+    if (typeof raw !== "string" || !raw.trim()) continue;
+    const date = new Date(raw);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return null;
+}
+
+function isScheduledPromotion(value: any) {
+  const status = String(value?.status || value?.state || value?.sub_status || "").toLowerCase();
+  if (/program|scheduled|pending|candidate|suggested|available|eligible/.test(status)) return true;
+
+  const startDate = dateFromPromotion(value, [
+    "start_date",
+    "date_from",
+    "starts_at",
+    "valid_from",
+    "begin_date",
+    "start_time",
+  ]);
+
+  return Boolean(startDate && startDate.getTime() > Date.now());
+}
+
 function promotionScore(value: any) {
   const status = String(value?.status || value?.state || "").toLowerCase();
   const hasPrice = pickNumber(value, ["promo_price", "promotion_price", "discounted_price", "final_price", "price", "amount"]) !== null;
@@ -330,9 +356,11 @@ function promotionScore(value: any) {
 }
 
 function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null): PromotionSummary {
-  const candidates = collectPromotionCandidates(rawResponses)
+  const allCandidates = collectPromotionCandidates(rawResponses)
     .filter((candidate) => promotionScore(candidate) > 0)
     .sort((a, b) => promotionScore(b) - promotionScore(a));
+  const activeCandidates = allCandidates.filter((candidate) => !isScheduledPromotion(candidate));
+  const candidates = activeCandidates.length > 0 ? activeCandidates : [];
   const best = candidates[0] || {};
   const originalPrice =
     pickNumber(best, ["original_price", "regular_price", "standard_price", "list_price", "base_price"]) ||
@@ -361,12 +389,6 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null):
     "discount_seller_amount",
     "seller_contribution_amount",
     "seller_funding_amount",
-  ]) || pickNumberDeep(rawResponses, [
-    "seller_discount_amount",
-    "seller_funded_amount",
-    "discount_seller_amount",
-    "seller_contribution_amount",
-    "seller_funding_amount",
   ]);
   const meliAmount = pickNumber(best, [
     "meli_discount_amount",
@@ -387,18 +409,7 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null):
     "marketplace_contribution_amount",
     "cofunded_amount",
     "co_funded_amount",
-  ]) || pickNumberDeep(rawResponses, [
-    "meli_discount_amount",
-    "marketplace_discount_amount",
-    "meli_funded_amount",
-    "meli_contribution_amount",
-    "marketplace_contribution_amount",
-    "cofunded_amount",
-    "co_funded_amount",
   ]) || pickNumberByKeyPattern(best, (key) =>
-    /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
-    /(amount|discount|fund|funded|contribution|benefit)/.test(key)
-  ) || pickNumberByKeyPattern(rawResponses, (key) =>
     /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
     /(amount|discount|fund|funded|contribution|benefit)/.test(key)
   );
@@ -419,17 +430,11 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null):
   const sellerRate =
     pickNumber(best, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
     pickNumberDeep(best, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
-    pickNumberDeep(rawResponses, ["seller_discount_rate", "seller_percentage", "seller_percent", "seller_contribution_percentage"]) ||
     (originalPrice && sellerAmount ? (sellerAmount / originalPrice) * 100 : null);
   const meliRate =
     pickNumber(best, ["meli_discount_rate", "meli_percentage", "marketplace_percentage", "meli_percent", "marketplace_percent"]) ||
     pickNumberDeep(best, ["meli_discount_rate", "meli_percentage", "marketplace_percentage", "meli_percent", "marketplace_percent"]) ||
-    pickNumberDeep(rawResponses, ["meli_discount_rate", "meli_percentage", "marketplace_percentage", "meli_percent", "marketplace_percent"]) ||
     pickNumberByKeyPattern(best, (key) =>
-      /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
-      /(rate|percent|percentage)/.test(key)
-    ) ||
-    pickNumberByKeyPattern(rawResponses, (key) =>
       /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
       /(rate|percent|percentage)/.test(key)
     ) ||

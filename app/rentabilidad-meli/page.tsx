@@ -25,11 +25,6 @@ import type {
 
 type ProfitStatus = "ok" | "warning" | "danger" | "missing";
 
-const FALLBACK_MELI_PROMO_COFUNDING_RATES_BY_CHANNEL: Record<string, number> = {
-  MP3: 3.562529,
-  MP9: 2.363429,
-};
-
 type ProfitRow = {
   key: string;
   product: Product;
@@ -201,11 +196,7 @@ function meliStatusLabel(status?: string | null) {
   return labels[status] || status;
 }
 
-function fallbackMeliFundedRate(option: MercadoLibrePriceOption) {
-  return FALLBACK_MELI_PROMO_COFUNDING_RATES_BY_CHANNEL[option.code] || 0;
-}
-
-function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost, option: MercadoLibrePriceOption) {
+function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost) {
   const buyerPrice = Number(shipping.meli_promo_price || shipping.meli_price || 0) || null;
   const listPrice = Number(shipping.meli_original_price || shipping.meli_price || 0) || null;
   if (!buyerPrice) return null;
@@ -216,9 +207,6 @@ function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost, option: Merc
 
   const meliFundedRate = Number(shipping.meli_promo_meli_rate || 0);
   if (meliFundedRate > 0) return buyerPrice + (listPrice * meliFundedRate) / 100;
-
-  const fallbackRate = fallbackMeliFundedRate(option);
-  if (fallbackRate > 0) return buyerPrice + (listPrice * fallbackRate) / 100;
 
   return buyerPrice;
 }
@@ -343,7 +331,7 @@ export default function RentabilidadMeliPage() {
         const buyerPrice = Number(shipping.meli_promo_price || shipping.meli_price || 0) > 0
           ? Number(shipping.meli_promo_price || shipping.meli_price)
           : null;
-        const sellerEffectivePrice = effectiveMeliSalePrice(shipping, option);
+        const sellerEffectivePrice = effectiveMeliSalePrice(shipping);
         const sellerDiscountAmount =
           Number(shipping.meli_promo_seller_amount || 0) ||
           (listPrice && buyerPrice && buyerPrice < listPrice
