@@ -95,6 +95,10 @@ function formatPercentInput(value?: number | null) {
   });
 }
 
+function vatConditionFromProduct(product: Product): VatCondition {
+  return Number(product.vat_rate || 21) === 10.5 ? "iva_105" : "iva_21";
+}
+
 export default function SimulatorPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -227,6 +231,42 @@ export default function SimulatorPage() {
           ? String(Math.round(averageShipping))
           : current.shippingGross,
     }));
+  }
+
+  function shippingForProduct(product: Product) {
+    const values = shippingCosts
+      .filter((shipping) => {
+        const matchesId = product.id && shipping.product_id === product.id;
+        const matchesSku = product.sku && shipping.sku === product.sku;
+        return matchesId || matchesSku;
+      })
+      .map((shipping) => Number(shipping.fixed_fee_amount || 0) + Number(shipping.shipping_cost_amount || 0))
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  }
+
+  function loadProductBase(productId: string) {
+    if (!productId) return;
+    const product = products.find((item) => item.id === productId);
+    if (!product) return;
+
+    const productShipping = shippingForProduct(product);
+    const categoryShipping = averageShippingForCategory(product.category || "");
+    const shippingGross = productShipping ?? categoryShipping ?? Number(toNumber(form.shippingGross) || 0);
+
+    setForm((current) => ({
+      ...current,
+      productName: product.name || current.productName,
+      category: product.category || current.category,
+      costWithoutVat: String(Math.round(Number(product.cost_without_vat || 0))),
+      vatCondition: vatConditionFromProduct(product),
+      shippingGross: String(Math.round(shippingGross)),
+    }));
+    setLastEdited("price");
+    setMessage(`Base cargada desde ${product.sku} - ${product.name}.`);
+    setError(null);
   }
 
   function updateSalePrice(value: string) {
@@ -517,6 +557,24 @@ export default function SimulatorPage() {
               <h2>Simulación rápida</h2>
               <p className="small">Cargá los datos mínimos para obtener resultados automáticos.</p>
             </div>
+          </div>
+
+          <div className="field simulator-product-base-field">
+            <label>Usar producto guardado como base</label>
+            <select defaultValue="" onChange={(event) => loadProductBase(event.target.value)}>
+              <option value="">Elegir producto guardado...</option>
+              {products
+                .slice()
+                .sort((a, b) => `${a.category || ""} ${a.name}`.localeCompare(`${b.category || ""} ${b.name}`, "es"))
+                .map((product) => (
+                  <option key={product.id || product.sku} value={product.id}>
+                    {product.sku} - {product.name} · {product.category || "Sin categoría"} · Costo {moneyWithCents(product.cost_without_vat || 0)}
+                  </option>
+                ))}
+            </select>
+            <span className="small">
+              Completa categoría, costo sin IVA, condición de IVA y envío. Después podés ajustar cualquier campo a mano.
+            </span>
           </div>
 
           <div className="simulator-form-grid simulator-form-grid-three">

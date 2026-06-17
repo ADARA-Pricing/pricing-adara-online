@@ -2862,6 +2862,18 @@ td strong {
   white-space: nowrap;
 }
 
+.simulator-product-base-field {
+  margin: 18px 0 18px;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.simulator-product-base-field select {
+  max-width: 100%;
+}
+
 .button.danger,
 .button.danger.ghost {
   border-color: #fecdd3;
