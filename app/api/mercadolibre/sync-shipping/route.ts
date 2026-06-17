@@ -304,6 +304,21 @@ function installmentCountFromText(text?: string | null) {
   return null;
 }
 
+function financingFeeRateForInstallments(count: number | null) {
+  switch (count) {
+    case 3:
+      return 8.4;
+    case 6:
+      return 12.3;
+    case 9:
+      return 15.7;
+    case 12:
+      return 19.2;
+    default:
+      return null;
+  }
+}
+
 function numberFromValue(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "string") {
@@ -1283,7 +1298,8 @@ export async function POST() {
           detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null,
         );
         const detectedInstallments = installmentCountFromText(detectedInstallmentsText);
-        const detectedFinancingFeeRate = financingFeeRate(listingPriceResult);
+        const detectedFinancingFeeRate =
+          financingFeeRateForInstallments(detectedInstallments) ?? financingFeeRate(listingPriceResult);
         const optionCode =
           detectedInstallments
             ? optionCodeForInstallments(detectedInstallments)
