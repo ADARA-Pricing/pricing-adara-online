@@ -8,7 +8,6 @@ import {
   calculatePriceSummary,
   defaultTaxSettings,
   mercadoLibreClassicOption,
-  money,
   moneyWithCents,
   normalizeOption,
   percent,
@@ -55,9 +54,7 @@ type ProfitGroup = {
   action: string;
   bestMargin: number | null;
   worstMargin: number | null;
-  totalNetProfit: number;
   totalPotential: number;
-  promoCount: number;
 };
 
 function rawInstallmentLabel(shipping?: MercadoLibreShippingCost | null) {
@@ -196,6 +193,34 @@ function sortProfitRows(rows: ProfitRow[]) {
     if (byTitle) return byTitle;
     return rankA.itemId.localeCompare(rankB.itemId, "es");
   });
+}
+
+function latestSyncForRows(rows: ProfitRow[]) {
+  return rows
+    .map((row) => row.shipping.meli_last_sync_at || row.shipping.updated_at)
+    .filter(Boolean)
+    .sort()
+    .reverse()[0] || null;
+}
+
+function groupProblemSummary(rows: ProfitRow[]) {
+  const danger = rows.filter((row) => row.status === "danger").length;
+  const missing = rows.filter((row) => row.status === "missing").length;
+  const warning = rows.filter((row) => row.status === "warning").length;
+  const catalogDanger = rows.filter((row) => catalogStatus(row.shipping).className.includes("danger")).length;
+  const catalogWarning = rows.filter((row) => catalogStatus(row.shipping).className.includes("warning")).length;
+  const withoutShipping = rows.filter((row) => row.issue?.toLowerCase().includes("envio")).length;
+
+  const problems = [
+    danger ? `${danger} perdida${danger > 1 ? "s" : ""}` : null,
+    missing ? `${missing} datos faltantes` : null,
+    catalogDanger ? `${catalogDanger} catalogo no gana` : null,
+    catalogWarning ? `${catalogWarning} catalogo no compite` : null,
+    withoutShipping ? `${withoutShipping} sin envio` : null,
+    warning && !danger && !missing ? `${warning} revisar` : null,
+  ].filter(Boolean);
+
+  return problems.length ? problems.slice(0, 3).join(" · ") : "Sin alertas";
 }
 
 function findOptionForPublication(
@@ -574,9 +599,7 @@ export default function RentabilidadMeliPage() {
           action: row.action,
           bestMargin: row.currentMargin,
           worstMargin: row.currentMargin,
-          totalNetProfit: row.netProfit || 0,
           totalPotential: row.differenceAmount && row.differenceAmount > 0 ? row.differenceAmount : 0,
-          promoCount: row.shipping.meli_promo_price ? 1 : 0,
         });
         return;
       }
@@ -590,9 +613,7 @@ export default function RentabilidadMeliPage() {
         current.bestMargin = current.bestMargin === null ? row.currentMargin : Math.max(current.bestMargin, row.currentMargin);
         current.worstMargin = current.worstMargin === null ? row.currentMargin : Math.min(current.worstMargin, row.currentMargin);
       }
-      current.totalNetProfit += row.netProfit || 0;
       current.totalPotential += row.differenceAmount && row.differenceAmount > 0 ? row.differenceAmount : 0;
-      current.promoCount += row.shipping.meli_promo_price ? 1 : 0;
     });
 
     return Array.from(map.values()).map((group) => ({
@@ -607,16 +628,13 @@ export default function RentabilidadMeliPage() {
 
   const metrics = useMemo(() => {
       const total = rows.length;
+      const skus = new Set(rows.map((row) => row.product.sku || row.product.id || row.key)).size;
       const danger = rows.filter((row) => row.status === "danger").length;
       const warning = rows.filter((row) => row.status === "warning").length;
       const missing = rows.filter((row) => row.status === "missing").length;
       const ok = rows.filter((row) => row.status === "ok").length;
-      const promos = rows.filter((row) => Boolean(row.shipping.meli_promo_price)).length;
-      const potential = rows.reduce((sum, row) => {
-      if (row.differenceAmount === null || row.differenceAmount <= 0) return sum;
-      return sum + row.differenceAmount;
-    }, 0);
-    return { total, danger, warning, missing, ok, promos, potential };
+      const latestSync = latestSyncForRows(rows);
+    return { total, skus, danger, warning, missing, ok, latestSync };
   }, [rows]);
 
   const actions = useMemo(() => Array.from(new Set(rows.map((row) => row.action))).sort(), [rows]);
@@ -636,36 +654,34 @@ export default function RentabilidadMeliPage() {
 
       {error && <div className="message error">{error}</div>}
 
-      <section className="rentabilidad-kpi-grid">
-        <div className="card rentabilidad-kpi-card">
-          <span>Total publicaciones</span>
+      <section className="card rentabilidad-summary-bar">
+        <div>
+          <span>Ultima sync</span>
+          <strong>{formatDateTime(metrics.latestSync)}</strong>
+        </div>
+        <div>
+          <span>SKUs</span>
+          <strong>{metrics.skus}</strong>
+        </div>
+        <div>
+          <span>Publicaciones</span>
           <strong>{metrics.total}</strong>
-          <small>Con item ID de MercadoLibre</small>
         </div>
-        <div className="card rentabilidad-kpi-card promo">
-          <span>Con promocion</span>
-          <strong>{metrics.promos}</strong>
-          <small>Precio final o aporte ML detectado</small>
+        <div>
+          <span>OK</span>
+          <strong>{metrics.ok}</strong>
         </div>
-        <div className="card rentabilidad-kpi-card danger">
-          <span>Con perdida</span>
-          <strong>{metrics.danger}</strong>
-          <small>Ganancia o margen negativo</small>
-        </div>
-        <div className="card rentabilidad-kpi-card warning">
-          <span>Para revisar</span>
+        <div>
+          <span>Revisar</span>
           <strong>{metrics.warning}</strong>
-          <small>Margen bajo o precio alto</small>
         </div>
-        <div className="card rentabilidad-kpi-card missing">
+        <div>
+          <span>Perdida</span>
+          <strong>{metrics.danger}</strong>
+        </div>
+        <div>
           <span>Datos faltantes</span>
           <strong>{metrics.missing}</strong>
-          <small>Precio, envio o comision</small>
-        </div>
-        <div className="card rentabilidad-kpi-card">
-          <span>Oportunidad bruta</span>
-          <strong>{money(metrics.potential)}</strong>
-          <small>Suma de brechas positivas</small>
         </div>
       </section>
 
@@ -720,23 +736,18 @@ export default function RentabilidadMeliPage() {
                   <th>Estado</th>
                   <th>SKU / producto</th>
                   <th>Publicaciones</th>
-                  <th>Promos</th>
-                  <th>Margen real</th>
-                  <th>Ganancia real</th>
-                  <th>Oportunidad</th>
+                  <th>Margen critico</th>
+                  <th>Mejor margen</th>
+                  <th>Problemas</th>
+                  <th>Ajuste necesario</th>
                   <th>Accion</th>
-                  <th>Sync</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {groupedRows.map((group) => {
                   const expanded = Boolean(expandedSkus[group.key]);
-                  const latestSync = group.rows
-                    .map((row) => row.shipping.meli_last_sync_at || row.shipping.updated_at)
-                    .filter(Boolean)
-                    .sort()
-                    .reverse()[0];
+                  const problemSummary = groupProblemSummary(group.rows);
 
                   return (
                     <Fragment key={group.key}>
@@ -752,19 +763,18 @@ export default function RentabilidadMeliPage() {
                         </td>
                         <td><strong>{group.rows.length}</strong></td>
                         <td>
-                          <strong>{group.promoCount}</strong>
-                          <br />
-                          <span className="small">detectadas</span>
-                        </td>
-                        <td>
                           <strong>{group.worstMargin !== null ? percent(group.worstMargin) : "-"}</strong>
                           <br />
-                          <span className="small">Mejor {group.bestMargin !== null ? percent(group.bestMargin) : "-"}</span>
+                          <span className="small">Peor publicacion</span>
                         </td>
-                        <td>{moneyWithCents(group.totalNetProfit)}</td>
+                        <td>
+                          <strong>{group.bestMargin !== null ? percent(group.bestMargin) : "-"}</strong>
+                          <br />
+                          <span className="small">Mejor publicacion</span>
+                        </td>
+                        <td><span className="small">{problemSummary}</span></td>
                         <td>{moneyWithCents(group.totalPotential)}</td>
                         <td><span className="badge">{group.action}</span></td>
-                        <td><span className="small">{formatDateTime(latestSync)}</span></td>
                         <td>
                           <button className="button ghost small-button" type="button" onClick={() => toggleSku(group.key)}>
                             {expanded ? "Ocultar" : "Ver publicaciones"}
@@ -773,7 +783,7 @@ export default function RentabilidadMeliPage() {
                       </tr>
                       {expanded && (
                         <tr className="rentabilidad-detail-row">
-                          <td colSpan={10}>
+                          <td colSpan={9}>
                             <div className="rentabilidad-detail-panel">
                               <table className="rentabilidad-detail-table">
                                 <thead>
@@ -878,7 +888,7 @@ export default function RentabilidadMeliPage() {
                   );
                 })}                {groupedRows.length === 0 && (
                   <tr>
-                    <td colSpan={10}>No hay publicaciones para mostrar con esos filtros.</td>
+                    <td colSpan={9}>No hay publicaciones para mostrar con esos filtros.</td>
                   </tr>
                 )}
               </tbody>

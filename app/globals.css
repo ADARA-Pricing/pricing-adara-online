@@ -4203,6 +4203,40 @@ td strong {
   background: #f8fbff;
 }
 
+.rentabilidad-summary-bar {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(6, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.rentabilidad-summary-bar div {
+  padding: 16px 18px;
+  border-right: 1px solid #e2e8f0;
+}
+
+.rentabilidad-summary-bar div:last-child {
+  border-right: 0;
+}
+
+.rentabilidad-summary-bar span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.rentabilidad-summary-bar strong {
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
 .rentabilidad-filters-card {
   border-radius: 18px;
   padding: 18px;
@@ -4459,6 +4493,14 @@ td strong {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .rentabilidad-summary-bar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .rentabilidad-summary-bar div {
+    border-bottom: 1px solid #e2e8f0;
+  }
+
   .rentabilidad-filter-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -4466,8 +4508,13 @@ td strong {
 
 @media (max-width: 760px) {
   .rentabilidad-kpi-grid,
+  .rentabilidad-summary-bar,
   .rentabilidad-filter-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rentabilidad-summary-bar div {
+    border-right: 0;
   }
 
   .rentabilidad-table-header {
