@@ -245,16 +245,35 @@ function normalizedPublicationTitle(value?: string | null) {
 }
 
 function publicationGroupKey(row: ProfitRow) {
-  const catalog = catalogStatus(row.shipping);
   const title = row.shipping.meli_title || row.product.name;
   const catalogId = row.shipping.meli_catalog_product_id;
 
-  if (catalogId) return `catalog:${catalogId}:${catalog.label}:${catalog.detail || ""}`;
+  if (catalogId) return `catalog:${catalogId}`;
   if (row.shipping.meli_catalog_listing || row.shipping.meli_catalog_status) {
-    return `catalog:${catalog.label}:${catalog.detail || ""}:${normalizedPublicationTitle(title)}`;
+    return `catalog:${normalizedPublicationTitle(title)}`;
   }
 
   return `listing:${normalizedPublicationTitle(title) || row.shipping.meli_item_id || row.key}`;
+}
+
+function catalogStatusForRows(rows: ProfitRow[]) {
+  const statuses = rows.map((row) => catalogStatus(row.shipping));
+  const order = ["rentabilidad-catalog-danger", "rentabilidad-catalog-warning", "rentabilidad-catalog-win", "rentabilidad-catalog-neutral"];
+  const selected = statuses.sort((a, b) => order.indexOf(a.className) - order.indexOf(b.className))[0] || statuses[0];
+  const ptwValues = rows
+    .map((row) => Number(row.shipping.meli_catalog_price_to_win || 0))
+    .filter((value) => value > 0)
+    .sort((a, b) => a - b);
+
+  if (!selected || !ptwValues.length) return selected;
+
+  const first = ptwValues[0];
+  const last = ptwValues[ptwValues.length - 1];
+  const detail = Math.abs(first - last) < 1
+    ? `PTW ${moneyWithCents(first)}`
+    : `PTW ${moneyWithCents(first)} a ${moneyWithCents(last)}`;
+
+  return { ...selected, detail };
 }
 
 function buildPublicationGroups(rows: ProfitRow[]) {
@@ -294,6 +313,7 @@ function buildPublicationGroups(rows: ProfitRow[]) {
   return Array.from(map.values()).map((group) => ({
     ...group,
     rows: sortProfitRows(group.rows),
+    catalog: catalogStatusForRows(group.rows),
   })).sort((a, b) => {
     const rankA = a.catalog.label.startsWith("Catalogo") ? 0 : 1;
     const rankB = b.catalog.label.startsWith("Catalogo") ? 0 : 1;
