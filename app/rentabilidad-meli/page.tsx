@@ -111,15 +111,19 @@ function inferredInstallmentNumber(
   shippings: MercadoLibreShippingCost[],
 ) {
   const explicit = installmentNumberFromLabel(rawInstallmentLabel(shipping));
-  if (explicit) return explicit;
+  if (explicit && explicit > 1) return explicit;
 
   const price = Math.round(Number(shipping.meli_price || 0));
-  if (!price) return null;
+  if (!price) return explicit || null;
 
   const prices = sortedDistinctPrices(shippings);
+  if (prices.length <= 1) return explicit || null;
+
   const index = prices.findIndex((item) => Math.abs(item - price) <= 100);
   const inferredByOrder = [1, 3, 6, 9, 12];
-  return index >= 0 ? inferredByOrder[index] || null : null;
+  if (index >= 0) return inferredByOrder[index] || explicit || null;
+
+  return explicit || null;
 }
 
 function optionInstallmentLabel(option: MercadoLibrePriceOption) {
