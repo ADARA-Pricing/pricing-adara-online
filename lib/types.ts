@@ -108,6 +108,9 @@ export type MercadoLibreShippingCost = {
   meli_promotions?: unknown[] | null;
   meli_listing_type_id?: string | null;
   meli_listing_type_name?: string | null;
+  meli_sale_fee_amount?: number | null;
+  meli_sale_fee_details?: Record<string, unknown> | null;
+  meli_financing_fee_rate?: number | null;
   meli_sale_terms?: unknown[] | null;
   meli_tags?: string[] | null;
   meli_installments_text?: string | null;

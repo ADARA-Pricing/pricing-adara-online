@@ -9,6 +9,7 @@ type MeliItem = {
   permalink?: string | null;
   seller_custom_field?: string | null;
   price?: number;
+  base_price?: number | null;
   sale_price?: {
     amount?: number | null;
     regular_amount?: number | null;
@@ -50,6 +51,20 @@ type MeliPriceToWin = {
   competitors_sharing_first_place?: number | null;
   reason?: string[] | null;
   catalog_product_id?: string | null;
+};
+
+type MeliListingPrice = {
+  currency_id?: string | null;
+  listing_type_id?: string | null;
+  listing_type_name?: string | null;
+  sale_fee_amount?: number | null;
+  sale_fee_details?: {
+    financing_add_on_fee?: number | null;
+    fixed_fee?: number | null;
+    gross_amount?: number | null;
+    meli_percentage_fee?: number | null;
+    percentage_fee?: number | null;
+  } | null;
 };
 
 type PromotionSummary = {
@@ -818,6 +833,23 @@ async function getPriceToWinForItem(item: MeliItem, account: any): Promise<MeliP
   }
 }
 
+async function getListingPriceForItem(item: MeliItem, account: any): Promise<MeliListingPrice | null> {
+  const price = Number(item.price || item.base_price || 0);
+  const listingTypeId = item.listing_type_id;
+  if (!price || !listingTypeId) return null;
+
+  try {
+    const data = await meliFetch(
+      `/sites/MLA/listing_prices?price=${encodeURIComponent(String(price))}&listing_type_id=${encodeURIComponent(listingTypeId)}`,
+      account,
+    );
+    const prices = Array.isArray(data) ? data : [];
+    return (prices.find((entry: MeliListingPrice) => entry?.listing_type_id === listingTypeId) || prices[0] || null) as MeliListingPrice | null;
+  } catch {
+    return null;
+  }
+}
+
 async function getListingTypeNames(account: any) {
   const map = new Map<string, string>();
   try {
@@ -889,6 +921,7 @@ export async function POST() {
     const promotionsByItem = new Map<string, PromotionSummary>();
     const detailedItemsByItem = new Map<string, MeliItem>();
     const priceToWinByItem = new Map<string, MeliPriceToWin | null>();
+    const listingPriceByItem = new Map<string, MeliListingPrice | null>();
 
     async function shippingCostForMatchedItem(item: MeliItem) {
       const cached = shippingCostsByItem.get(item.id);
@@ -918,6 +951,16 @@ export async function POST() {
       return result;
     }
 
+    async function listingPriceForMatchedItem(item: MeliItem) {
+      if (listingPriceByItem.has(item.id)) return listingPriceByItem.get(item.id) || null;
+
+      const detailedItem = detailedItemsByItem.get(item.id) || await getDetailedItemForPricing(item, account);
+      detailedItemsByItem.set(item.id, detailedItem);
+      const result = await getListingPriceForItem(detailedItem, account);
+      listingPriceByItem.set(item.id, result);
+      return result;
+    }
+
     const matchedItemsForFetch = items.filter((item) =>
       getItemSkus(item).some((sku) => Boolean(productsBySku.get(sku)?.id)),
     );
@@ -929,6 +972,7 @@ export async function POST() {
         shippingCostForMatchedItem(item),
         promotionForMatchedItem(item),
         priceToWinForMatchedItem(item),
+        listingPriceForMatchedItem(item),
       ]);
     });
 
@@ -979,6 +1023,7 @@ export async function POST() {
         const promotionResult = await promotionForMatchedItem(item);
         const detailedItem = detailedItemsByItem.get(item.id) || item;
         const priceToWinResult = await priceToWinForMatchedItem(item);
+        const listingPriceResult = await listingPriceForMatchedItem(item);
         const newShippingCost = Number(shippingResult?.cost || 0);
         const shippingSource = shippingResult?.source || null;
         const { data: current } = await supabase
@@ -1011,6 +1056,9 @@ export async function POST() {
           meli_promotions: promotionResult.raw,
           meli_listing_type_id: detailedItem.listing_type_id || null,
           meli_listing_type_name: detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null,
+          meli_sale_fee_amount: Number(listingPriceResult?.sale_fee_amount || 0) || null,
+          meli_sale_fee_details: listingPriceResult?.sale_fee_details || null,
+          meli_financing_fee_rate: Number(listingPriceResult?.sale_fee_details?.financing_add_on_fee || 0),
           meli_sale_terms: detailedItem.sale_terms || [],
           meli_tags: detailedItem.tags || [],
           meli_installments_text: detectInstallmentsText(detailedItem, detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null),
@@ -1121,6 +1169,7 @@ export async function POST() {
       duration_ms: Date.now() - startedAt,
       shipping_queries: shippingCostsByItem.size,
       promotion_queries: promotionsByItem.size,
+      listing_price_queries: listingPriceByItem.size,
       logs: logs.slice(0, 50),
     });
   } catch (error) {

@@ -150,6 +150,25 @@ function sortPricingOptions(options: MercadoLibrePriceOption[]) {
   });
 }
 
+function optionFromFinancingFee(
+  shipping: MercadoLibreShippingCost,
+  options: MercadoLibrePriceOption[],
+) {
+  const feeRate = Number(shipping.meli_financing_fee_rate ?? 0);
+  if (!Number.isFinite(feeRate)) return null;
+
+  if (feeRate <= 0.01 && shipping.meli_listing_type_id === "gold_special") {
+    return options.find((option) => option.code === "MC") || mercadoLibreClassicOption();
+  }
+
+  if (feeRate <= 0.01) return null;
+
+  return (
+    options.find((option) => Math.abs(Number(option.financing_fee_rate || 0) - feeRate) <= 0.15) ||
+    null
+  );
+}
+
 function publicationSortRank(row: ProfitRow) {
   const catalogRank =
     row.shipping.meli_catalog_listing || row.shipping.meli_catalog_product_id || row.shipping.meli_catalog_status
@@ -181,6 +200,9 @@ function findOptionForPublication(
   productShippings: MercadoLibreShippingCost[],
   options: MercadoLibrePriceOption[],
 ) {
+  const optionByFinancingFee = optionFromFinancingFee(shipping, options);
+  if (optionByFinancingFee) return optionByFinancingFee;
+
   const installments = inferredInstallmentNumber(shipping, productShippings);
   if (!installments || installments === 1) {
     return options.find((option) => option.code === "MC") || mercadoLibreClassicOption();
