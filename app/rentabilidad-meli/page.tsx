@@ -72,6 +72,12 @@ type PublicationRowGroup = {
 
 function rawInstallmentLabel(shipping?: MercadoLibreShippingCost | null) {
   if (!shipping) return "Sin dato ML";
+  const campaignTag = installmentCampaignTag(shipping);
+  if (campaignTag === "3x_campaign") return "3 cuotas";
+  if (campaignTag === "9x_campaign") return "9 cuotas";
+  if (campaignTag === "12x_campaign") return "12 cuotas";
+  if (shipping.meli_listing_type_id === "gold_pro") return "6 cuotas";
+  if (shipping.meli_listing_type_id === "gold_special") return "Clasica / 1 pago";
   if (shipping.meli_installments_text) return shipping.meli_installments_text;
 
   const saleTerms = Array.isArray(shipping.meli_sale_terms) ? shipping.meli_sale_terms : [];
@@ -95,6 +101,26 @@ function rawInstallmentLabel(shipping?: MercadoLibreShippingCost | null) {
   return "Sin dato ML";
 }
 
+function installmentCampaignTag(shipping?: MercadoLibreShippingCost | null) {
+  if (!shipping) return null;
+  const saleTerms = Array.isArray(shipping.meli_sale_terms) ? shipping.meli_sale_terms : [];
+  const searchable = [
+    ...(Array.isArray(shipping.meli_tags) ? shipping.meli_tags : []),
+    ...saleTerms.flatMap((term) => {
+      const value = term as { id?: string; name?: string; value_name?: string; value_id?: string };
+      return [value.id, value.name, value.value_name, value.value_id];
+    }),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (searchable.includes("3x_campaign")) return "3x_campaign";
+  if (searchable.includes("9x_campaign")) return "9x_campaign";
+  if (searchable.includes("12x_campaign")) return "12x_campaign";
+  return null;
+}
+
 function installmentNumberFromLabel(label: string) {
   const normalized = label.toLowerCase();
   const match = normalized.match(/(\d{1,2})\s*cuotas?/i);
@@ -103,49 +129,13 @@ function installmentNumberFromLabel(label: string) {
   return null;
 }
 
-function sortedDistinctPrices(shippings: MercadoLibreShippingCost[]) {
-  const sorted = shippings
-    .map((item) => Math.round(Number(item.meli_price || 0)))
-    .filter((price) => price > 0)
-    .sort((a, b) => a - b);
-
-  return sorted.reduce<number[]>((groups, price) => {
-    const last = groups[groups.length - 1];
-    if (last && Math.abs(price - last) <= 100) return groups;
-    return [...groups, price];
-  }, []);
-}
-
 function inferredInstallmentNumber(
   shipping: MercadoLibreShippingCost,
-  shippings: MercadoLibreShippingCost[],
+  _shippings: MercadoLibreShippingCost[],
 ) {
   const explicit = installmentNumberFromLabel(rawInstallmentLabel(shipping));
-  if (explicit && explicit > 1) return explicit;
-
-  if (shipping.meli_listing_type_id === "gold_special") return 1;
-
-  const price = Math.round(Number(shipping.meli_price || 0));
-  if (!price) return explicit || null;
-
-  const premiumShippings = shippings.filter((item) => item.meli_listing_type_id === "gold_pro");
-  const premiumPrices = sortedDistinctPrices(premiumShippings);
-  if (premiumPrices.length > 1 && shipping.meli_listing_type_id === "gold_pro") {
-    const premiumIndex = premiumPrices.findIndex((item) => Math.abs(item - price) <= 100);
-    const premiumInstallments = [3, 6, 9, 12];
-    if (premiumIndex >= 0) return premiumInstallments[premiumIndex] || explicit || null;
-  }
-
-  const prices = sortedDistinctPrices(shippings);
-  if (prices.length <= 1) {
-    return shipping.meli_listing_type_id === "gold_pro" ? 6 : explicit || null;
-  }
-
-  const index = prices.findIndex((item) => Math.abs(item - price) <= 100);
-  const inferredByOrder = [1, 3, 6, 9, 12];
-  if (index >= 0) return inferredByOrder[index] || explicit || null;
-
-  return shipping.meli_listing_type_id === "gold_pro" ? 6 : explicit || null;
+  if (explicit) return explicit;
+  return null;
 }
 
 function optionInstallmentLabel(option: MercadoLibrePriceOption) {

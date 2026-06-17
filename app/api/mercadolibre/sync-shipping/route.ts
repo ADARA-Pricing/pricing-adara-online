@@ -269,6 +269,13 @@ async function getShippingCostsByItemIds(items: MeliItem[], account: any) {
 
 function detectInstallmentsText(item: MeliItem, listingTypeName?: string | null) {
   const saleTerms = item.sale_terms || [];
+  const campaignTag = installmentCampaignTag(item);
+  if (campaignTag === "3x_campaign") return "3 cuotas";
+  if (campaignTag === "9x_campaign") return "9 cuotas";
+  if (campaignTag === "12x_campaign") return "12 cuotas";
+  if (item.listing_type_id === "gold_pro") return "6 cuotas";
+  if (item.listing_type_id === "gold_special") return "Clásica / 1 pago";
+
   const searchable = [
     listingTypeName,
     item.listing_type_id,
@@ -296,27 +303,28 @@ function detectInstallmentsText(item: MeliItem, listingTypeName?: string | null)
   return null;
 }
 
+function installmentCampaignTag(item: MeliItem) {
+  const saleTerms = item.sale_terms || [];
+  const searchable = [
+    ...(item.tags || []),
+    ...saleTerms.flatMap((term) => [term.id, term.name, term.value_name, term.value_id]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (searchable.includes("3x_campaign")) return "3x_campaign";
+  if (searchable.includes("9x_campaign")) return "9x_campaign";
+  if (searchable.includes("12x_campaign")) return "12x_campaign";
+  return null;
+}
+
 function installmentCountFromText(text?: string | null) {
   const normalized = (text || "").toLowerCase();
   const match = normalized.match(/(\d{1,2})\s*(x|cuotas?|installments?)/i);
   if (match?.[1]) return Number(match[1]);
   if (normalized.includes("1 pago") || normalized.includes("clasica") || normalized.includes("clÃ¡sica")) return 1;
   return null;
-}
-
-function financingFeeRateForInstallments(count: number | null) {
-  switch (count) {
-    case 3:
-      return 8.4;
-    case 6:
-      return 12.3;
-    case 9:
-      return 15.7;
-    case 12:
-      return 19.2;
-    default:
-      return null;
-  }
 }
 
 function numberFromValue(value: unknown): number | null {
@@ -909,6 +917,9 @@ async function getListingPriceForItem(item: MeliItem, account: any): Promise<Mel
       listing_type_id: listingTypeId,
     });
     if (item.category_id) params.set("category_id", item.category_id);
+    if (item.domain_id) params.set("domain_id", item.domain_id);
+    const campaignTag = installmentCampaignTag(item);
+    if (campaignTag) params.set("tags", campaignTag);
 
     const data = await meliFetch(
       `/sites/MLA/listing_prices?${params.toString()}`,
@@ -1298,8 +1309,7 @@ export async function POST() {
           detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null,
         );
         const detectedInstallments = installmentCountFromText(detectedInstallmentsText);
-        const detectedFinancingFeeRate =
-          financingFeeRateForInstallments(detectedInstallments) ?? financingFeeRate(listingPriceResult);
+        const detectedFinancingFeeRate = financingFeeRate(listingPriceResult);
         const optionCode =
           detectedInstallments
             ? optionCodeForInstallments(detectedInstallments)
