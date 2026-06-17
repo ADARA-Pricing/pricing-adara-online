@@ -123,17 +123,29 @@ function inferredInstallmentNumber(
   const explicit = installmentNumberFromLabel(rawInstallmentLabel(shipping));
   if (explicit && explicit > 1) return explicit;
 
+  if (shipping.meli_listing_type_id === "gold_special") return 1;
+
   const price = Math.round(Number(shipping.meli_price || 0));
   if (!price) return explicit || null;
 
+  const premiumShippings = shippings.filter((item) => item.meli_listing_type_id === "gold_pro");
+  const premiumPrices = sortedDistinctPrices(premiumShippings);
+  if (premiumPrices.length > 1 && shipping.meli_listing_type_id === "gold_pro") {
+    const premiumIndex = premiumPrices.findIndex((item) => Math.abs(item - price) <= 100);
+    const premiumInstallments = [3, 6, 9, 12];
+    if (premiumIndex >= 0) return premiumInstallments[premiumIndex] || explicit || null;
+  }
+
   const prices = sortedDistinctPrices(shippings);
-  if (prices.length <= 1) return explicit || null;
+  if (prices.length <= 1) {
+    return shipping.meli_listing_type_id === "gold_pro" ? 6 : explicit || null;
+  }
 
   const index = prices.findIndex((item) => Math.abs(item - price) <= 100);
   const inferredByOrder = [1, 3, 6, 9, 12];
   if (index >= 0) return inferredByOrder[index] || explicit || null;
 
-  return explicit || null;
+  return shipping.meli_listing_type_id === "gold_pro" ? 6 : explicit || null;
 }
 
 function optionInstallmentLabel(option: MercadoLibrePriceOption) {
