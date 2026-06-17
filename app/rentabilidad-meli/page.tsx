@@ -482,6 +482,7 @@ export default function RentabilidadMeliPage() {
   const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [meliStatusFilter, setMeliStatusFilter] = useState("active");
   const [actionFilter, setActionFilter] = useState("");
   const [expandedSkus, setExpandedSkus] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
@@ -720,14 +721,16 @@ export default function RentabilidadMeliPage() {
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
+      const meliStatus = (row.shipping.meli_status || "").toLowerCase();
 
       return (
         (!normalized || searchable.includes(normalized)) &&
         (!statusFilter || row.status === statusFilter) &&
+        (!meliStatusFilter || meliStatus === meliStatusFilter) &&
         (!actionFilter || row.action === actionFilter)
       );
     });
-  }, [rows, query, statusFilter, actionFilter]);
+  }, [rows, query, statusFilter, meliStatusFilter, actionFilter]);
 
   const groupedRows = useMemo<ProfitGroup[]>(() => {
     const order: Record<ProfitStatus, number> = { danger: 4, missing: 3, warning: 2, ok: 1 };
@@ -849,6 +852,14 @@ export default function RentabilidadMeliPage() {
               <option value="warning">Revisar</option>
               <option value="missing">Datos faltantes</option>
               <option value="ok">OK</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Estado ML</label>
+            <select value={meliStatusFilter} onChange={(event) => setMeliStatusFilter(event.target.value)}>
+              <option value="active">Activas</option>
+              <option value="paused">Pausadas</option>
+              <option value="">Todas</option>
             </select>
           </div>
           <div className="field">

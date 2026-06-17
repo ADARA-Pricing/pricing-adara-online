@@ -4245,7 +4245,7 @@ td strong {
 
 .rentabilidad-filter-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) 220px 240px;
+  grid-template-columns: minmax(280px, 1fr) 190px 190px 240px;
   gap: 14px;
   align-items: end;
 }
