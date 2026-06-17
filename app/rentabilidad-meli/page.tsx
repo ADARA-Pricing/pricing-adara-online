@@ -94,13 +94,16 @@ function installmentNumberFromLabel(label: string) {
 }
 
 function sortedDistinctPrices(shippings: MercadoLibreShippingCost[]) {
-  return Array.from(
-    new Set(
-      shippings
-        .map((item) => Math.round(Number(item.meli_price || 0)))
-        .filter((price) => price > 0),
-    ),
-  ).sort((a, b) => a - b);
+  const sorted = shippings
+    .map((item) => Math.round(Number(item.meli_price || 0)))
+    .filter((price) => price > 0)
+    .sort((a, b) => a - b);
+
+  return sorted.reduce<number[]>((groups, price) => {
+    const last = groups[groups.length - 1];
+    if (last && Math.abs(price - last) <= 100) return groups;
+    return [...groups, price];
+  }, []);
 }
 
 function inferredInstallmentNumber(
@@ -114,19 +117,16 @@ function inferredInstallmentNumber(
   if (!price) return null;
 
   const prices = sortedDistinctPrices(shippings);
-  const index = prices.findIndex((item) => item === price);
+  const index = prices.findIndex((item) => Math.abs(item - price) <= 100);
   const inferredByOrder = [1, 3, 6, 9, 12];
   return index >= 0 ? inferredByOrder[index] || null : null;
 }
 
-function installmentLabel(shipping: MercadoLibreShippingCost, shippings: MercadoLibreShippingCost[]) {
-  const rawLabel = rawInstallmentLabel(shipping);
-  if (rawLabel !== "Premium / cuotas" && rawLabel !== "Sin dato ML") return rawLabel;
-
-  const inferred = inferredInstallmentNumber(shipping, shippings);
-  if (inferred) return inferred === 1 ? "Clasica / 1 pago" : `${inferred} cuotas`;
-
-  return rawLabel;
+function optionInstallmentLabel(option: MercadoLibrePriceOption) {
+  const installments = Number(option.installment_count || 0);
+  if (option.code === "MC" || installments <= 1) return "Clasica / 1 pago";
+  if (installments > 1) return `${installments} cuotas`;
+  return option.code;
 }
 
 function sortPricingOptions(options: MercadoLibrePriceOption[]) {
@@ -143,6 +143,32 @@ function sortPricingOptions(options: MercadoLibrePriceOption[]) {
     const orderB = fixedOrder[b.code] ?? 1000;
     if (orderA !== orderB) return orderA - orderB;
     return a.code.localeCompare(b.code, "es");
+  });
+}
+
+function publicationSortRank(row: ProfitRow) {
+  const catalogRank =
+    row.shipping.meli_catalog_listing || row.shipping.meli_catalog_product_id || row.shipping.meli_catalog_status
+      ? 0
+      : 1;
+  const installmentRank = Number(row.option.installment_count || 1);
+  return {
+    catalogRank,
+    installmentRank: installmentRank > 0 ? installmentRank : 1,
+    title: row.shipping.meli_title || row.product.name || "",
+    itemId: row.shipping.meli_item_id || "",
+  };
+}
+
+function sortProfitRows(rows: ProfitRow[]) {
+  return [...rows].sort((a, b) => {
+    const rankA = publicationSortRank(a);
+    const rankB = publicationSortRank(b);
+    if (rankA.catalogRank !== rankB.catalogRank) return rankA.catalogRank - rankB.catalogRank;
+    if (rankA.installmentRank !== rankB.installmentRank) return rankA.installmentRank - rankB.installmentRank;
+    const byTitle = rankA.title.localeCompare(rankB.title, "es");
+    if (byTitle) return byTitle;
+    return rankA.itemId.localeCompare(rankB.itemId, "es");
   });
 }
 
@@ -540,7 +566,10 @@ export default function RentabilidadMeliPage() {
       current.promoCount += row.shipping.meli_promo_price ? 1 : 0;
     });
 
-    return Array.from(map.values()).sort((a, b) => {
+    return Array.from(map.values()).map((group) => ({
+      ...group,
+      rows: sortProfitRows(group.rows),
+    })).sort((a, b) => {
       const byStatus = order[b.status] - order[a.status];
       if (byStatus) return byStatus;
       return a.product.sku.localeCompare(b.product.sku, "es");
@@ -759,7 +788,7 @@ export default function RentabilidadMeliPage() {
                                       <td>
                                         <strong>{row.option.code}</strong>
                                         <br />
-                                        <span className="small">{installmentLabel(row.shipping, shippingCosts)}</span>
+                                        <span className="small">{optionInstallmentLabel(row.option)}</span>
                                       </td>
                                       <td className="rentabilidad-price-cell">
                                         <strong>{row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</strong>
