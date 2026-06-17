@@ -6,6 +6,8 @@ import type { Product } from "@/lib/types";
 type MeliItem = {
   id: string;
   title?: string;
+  thumbnail?: string | null;
+  pictures?: Array<{ secure_url?: string | null; url?: string | null }>;
   permalink?: string | null;
   seller_custom_field?: string | null;
   price?: number;
@@ -1023,6 +1025,10 @@ function promotionSellerAmount(item: MeliPromotionItem) {
   return original > 0 && rate > 0 ? (original * rate) / 100 : null;
 }
 
+function itemThumbnail(item: MeliItem) {
+  return item.thumbnail || item.pictures?.[0]?.secure_url || item.pictures?.[0]?.url || null;
+}
+
 function marketplaceFeeRate(listingPrice: MeliListingPrice | null) {
   return Number(listingPrice?.sale_fee_details?.meli_percentage_fee || 0);
 }
@@ -1323,6 +1329,7 @@ export async function POST() {
 
         const metadataPayload = {
           meli_item_id: item.id,
+          meli_thumbnail: itemThumbnail(detailedItem),
           meli_title: detailedItem.title || null,
           meli_permalink: detailedItem.permalink || null,
           meli_price: Number(detailedItem.price ?? 0) || null,

@@ -199,6 +199,10 @@ function productInitial(product: Product) {
   return value.slice(0, 2).toUpperCase();
 }
 
+function productImage(shippings: MercadoLibreShippingCost[]) {
+  return shippings.find((shipping) => Boolean(shipping.meli_thumbnail))?.meli_thumbnail || null;
+}
+
 function installmentCampaignTag(shipping?: MercadoLibreShippingCost | null) {
   if (!shipping?.meli_tags || !Array.isArray(shipping.meli_tags)) return null;
   const tags = shipping.meli_tags.map((tag) => String(tag).toLowerCase());
@@ -879,11 +883,14 @@ export default function ProductsPage() {
                 .filter(Boolean)
                 .sort()
                 .reverse()[0];
+              const thumbnail = productImage(shippings);
               return (
                 <article key={product.id || product.sku} className={`product-row-card ${expanded ? "expanded" : ""}`}>
                   <div className="product-row-main">
                     <button className="product-select-box" type="button" aria-label="Seleccionar producto" />
-                    <div className="product-thumb">{productInitial(product)}</div>
+                    <div className="product-thumb">
+                      {thumbnail ? <img src={thumbnail} alt="" /> : productInitial(product)}
+                    </div>
 
                     <div className="product-primary">
                       <h3>{product.name}</h3>
