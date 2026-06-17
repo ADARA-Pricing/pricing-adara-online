@@ -182,10 +182,7 @@ function optionFromFinancingFee(
 }
 
 function publicationSortRank(row: ProfitRow) {
-  const catalogRank =
-    row.shipping.meli_catalog_listing || row.shipping.meli_catalog_product_id || row.shipping.meli_catalog_status
-      ? 0
-      : 1;
+  const catalogRank = row.shipping.meli_catalog_listing ? 0 : 1;
   const installmentRank = Number(row.option.installment_count || 1);
   return {
     catalogRank,
@@ -255,7 +252,21 @@ function publicationGroupKey(row: ProfitRow) {
   return `classic:${normalizedPublicationTitle(title) || catalogId || row.shipping.meli_item_id || row.key}`;
 }
 
+function isCatalogWinner(row: ProfitRow) {
+  const status = (row.shipping.meli_catalog_status || "").toLowerCase();
+  return row.shipping.meli_catalog_listing && (
+    status === "winning" ||
+    status === "winner" ||
+    status === "sharing_first_place"
+  );
+}
+
+function publicationGroupHasOwnWinner(rows: ProfitRow[]) {
+  return rows.some((row) => isCatalogWinner(row));
+}
+
 function catalogStatusForRows(rows: ProfitRow[]) {
+  const ownWinnerCount = rows.filter((row) => isCatalogWinner(row)).length;
   const statuses = rows.map((row) => catalogStatus(row.shipping));
   const order = ["rentabilidad-catalog-danger", "rentabilidad-catalog-warning", "rentabilidad-catalog-win", "rentabilidad-catalog-neutral"];
   const selected = statuses.sort((a, b) => order.indexOf(a.className) - order.indexOf(b.className))[0] || statuses[0];
@@ -272,7 +283,41 @@ function catalogStatusForRows(rows: ProfitRow[]) {
     ? `PTW ${moneyWithCents(first)}`
     : `PTW ${moneyWithCents(first)} a ${moneyWithCents(last)}`;
 
+  if (ownWinnerCount > 0 && ownWinnerCount < rows.length) {
+    return {
+      label: "Catalogo con ganador propio",
+      detail: `${ownWinnerCount} ganando · ${detail}`,
+      className: "rentabilidad-catalog-warning",
+    };
+  }
+
   return { ...selected, detail };
+}
+
+function catalogStatusForRow(row: ProfitRow, publicationGroup: PublicationRowGroup) {
+  if (!row.shipping.meli_catalog_listing) return catalogStatus(row.shipping);
+  if (isCatalogWinner(row)) return catalogStatus(row.shipping);
+  if (publicationGroupHasOwnWinner(publicationGroup.rows)) {
+    return {
+      label: "Compite con propia",
+      detail: row.shipping.meli_catalog_price_to_win ? `PTW ${moneyWithCents(row.shipping.meli_catalog_price_to_win)}` : null,
+      className: "rentabilidad-catalog-warning",
+    };
+  }
+  return catalogStatus(row.shipping);
+}
+
+function rowActionLabel(row: ProfitRow, publicationGroup: PublicationRowGroup) {
+  if (row.shipping.meli_catalog_listing && !isCatalogWinner(row) && publicationGroupHasOwnWinner(publicationGroup.rows)) {
+    return "Revisar solapamiento";
+  }
+  return row.action;
+}
+
+function publicationGroupActionLabel(publicationGroup: PublicationRowGroup) {
+  const ownWinnerCount = publicationGroup.rows.filter((row) => isCatalogWinner(row)).length;
+  if (ownWinnerCount > 0 && ownWinnerCount < publicationGroup.rows.length) return "Revisar solapamiento";
+  return publicationGroup.action;
 }
 
 function buildPublicationGroups(rows: ProfitRow[]) {
@@ -904,7 +949,7 @@ export default function RentabilidadMeliPage() {
                                         {publicationGroup.rows.length} publicaciones · Peor {publicationGroup.worstMargin !== null ? percent(publicationGroup.worstMargin) : "-"} · Mejor {publicationGroup.bestMargin !== null ? percent(publicationGroup.bestMargin) : "-"} · Ajuste {moneyWithCents(publicationGroup.totalPotential)}
                                       </p>
                                     </div>
-                                    <span className="badge">{publicationGroup.action}</span>
+                                    <span className="badge">{publicationGroupActionLabel(publicationGroup)}</span>
                                   </div>
                                   <div className="rentabilidad-channel-table-wrap">
                                     <table className="rentabilidad-detail-table rentabilidad-channel-table">
@@ -912,6 +957,7 @@ export default function RentabilidadMeliPage() {
                                         <tr>
                                           <th>Canal</th>
                                           <th>Item ML</th>
+                                          <th>Catalogo</th>
                                           <th>Precio ML / promo</th>
                                           <th>Precio sugerido</th>
                                           <th>Diferencia</th>
@@ -936,6 +982,17 @@ export default function RentabilidadMeliPage() {
                                                 <a href={row.shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir ML</a>
                                               ) : null}
                                               {row.issue && <em>{row.issue}</em>}
+                                            </td>
+                                            <td>
+                                              {(() => {
+                                                const status = catalogStatusForRow(row, publicationGroup);
+                                                return (
+                                                  <span className={`rentabilidad-catalog-badge ${status.className}`}>
+                                                    {status.label}
+                                                    {status.detail ? ` · ${status.detail}` : ""}
+                                                  </span>
+                                                );
+                                              })()}
                                             </td>
                                             <td className="rentabilidad-price-cell">
                                               <strong>{row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</strong>
@@ -983,7 +1040,7 @@ export default function RentabilidadMeliPage() {
                                                 </>
                                               ) : null}
                                             </td>
-                                            <td><span className="badge">{row.action}</span></td>
+                                            <td><span className="badge">{rowActionLabel(row, publicationGroup)}</span></td>
                                           </tr>
                                         ))}
                                       </tbody>
