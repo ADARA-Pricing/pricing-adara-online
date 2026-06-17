@@ -15,6 +15,7 @@ import {
 import type {
   MercadoLibreCategoryFee,
   MercadoLibreInstallmentFee,
+  MercadoLibrePromotionOpportunity,
   MercadoLibrePriceOption,
   MercadoLibreShippingCost,
   Product,
@@ -471,6 +472,41 @@ function effectiveMeliSalePrice(shipping: MercadoLibreShippingCost) {
   return buyerPrice;
 }
 
+function opportunityEffectiveBase(opportunity?: MercadoLibrePromotionOpportunity | null) {
+  const promoPrice = Number(opportunity?.promo_price || opportunity?.suggested_discounted_price || 0);
+  if (!promoPrice) return null;
+  return promoPrice + Number(opportunity?.meli_amount || 0);
+}
+
+function opportunityLabel(status?: string | null) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "started") return "Activa";
+  if (normalized === "candidate") return "Disponible";
+  if (normalized === "pending") return "Programada";
+  return status || "Promo";
+}
+
+function bestSharedOpportunityForItem(
+  meliItemId: string | null | undefined,
+  opportunities: MercadoLibrePromotionOpportunity[],
+) {
+  if (!meliItemId) return null;
+  const now = Date.now();
+  return opportunities
+    .filter((opportunity) => opportunity.meli_item_id === meliItemId)
+    .filter((opportunity) => Number(opportunity.meli_amount || 0) > 0 || Number(opportunity.meli_percentage || 0) > 0)
+    .filter((opportunity) => {
+      const end = opportunity.end_date ? new Date(opportunity.end_date).getTime() : null;
+      return !end || end >= now;
+    })
+    .sort((a, b) => {
+      const baseA = opportunityEffectiveBase(a) || 0;
+      const baseB = opportunityEffectiveBase(b) || 0;
+      if (baseA !== baseB) return baseB - baseA;
+      return Number(b.meli_amount || 0) - Number(a.meli_amount || 0);
+    })[0] || null;
+}
+
 export default function RentabilidadMeliPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -479,6 +515,7 @@ export default function RentabilidadMeliPage() {
   const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
   const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
+  const [promotionOpportunities, setPromotionOpportunities] = useState<MercadoLibrePromotionOpportunity[]>([]);
   const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -503,6 +540,7 @@ export default function RentabilidadMeliPage() {
       categoryFeesResponse,
       taxesResponse,
       shippingResponse,
+      promotionOpportunitiesResponse,
       marginsResponse,
     ] = await Promise.all([
       supabase.from("products").select("*").eq("status", "active").order("name", { ascending: true }),
@@ -510,6 +548,7 @@ export default function RentabilidadMeliPage() {
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
       supabase.from("tax_settings").select("*").eq("key", "default").single(),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).order("updated_at", { ascending: false }),
+      supabase.from("mercadolibre_promotion_opportunities").select("*").order("meli_amount", { ascending: false }),
       supabase.from("product_channel_margins").select("*"),
     ]);
 
@@ -529,6 +568,9 @@ export default function RentabilidadMeliPage() {
 
     if (shippingResponse.error) setError(shippingResponse.error.message);
     else setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
+
+    if (promotionOpportunitiesResponse.error) setError(promotionOpportunitiesResponse.error.message);
+    else setPromotionOpportunities((promotionOpportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]);
 
     if (marginsResponse.error) setError(marginsResponse.error.message);
     else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
@@ -1023,19 +1065,35 @@ export default function RentabilidadMeliPage() {
                                               ) : "-"}
                                             </td>
                                             <td className="rentabilidad-promo-cell">
-                                              {row.promoName || row.shipping.meli_promo_price ? (
-                                                <>
-                                                  <strong>{row.promoName || "Promocion activa"}</strong>
-                                                  <span>Precio publico {row.buyerPrice ? moneyWithCents(row.buyerPrice) : "-"}</span>
-                                                  {Number(row.shipping.meli_promo_meli_amount || 0) > 0 ? (
-                                                    <span>Aporte ML {moneyWithCents(Number(row.shipping.meli_promo_meli_amount || 0))}</span>
-                                                  ) : null}
-                                                  <span>Base comision {row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</span>
-                                                  <span>Descuento total {row.sellerDiscountAmount ? moneyWithCents(row.sellerDiscountAmount) : "-"}</span>
-                                                </>
-                                              ) : (
-                                                <span className="small">Sin promo detectada</span>
-                                              )}
+                                              {(() => {
+                                                const opportunity = bestSharedOpportunityForItem(row.shipping.meli_item_id, promotionOpportunities);
+                                                const opportunityBase = opportunityEffectiveBase(opportunity);
+                                                return (
+                                                  <>
+                                                    {row.promoName || row.shipping.meli_promo_price ? (
+                                                      <>
+                                                        <strong>{row.promoName || "Promocion activa"}</strong>
+                                                        <span>Precio publico {row.buyerPrice ? moneyWithCents(row.buyerPrice) : "-"}</span>
+                                                        {Number(row.shipping.meli_promo_meli_amount || 0) > 0 ? (
+                                                          <span>Aporte ML {moneyWithCents(Number(row.shipping.meli_promo_meli_amount || 0))}</span>
+                                                        ) : null}
+                                                        <span>Base comision {row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</span>
+                                                        <span>Descuento total {row.sellerDiscountAmount ? moneyWithCents(row.sellerDiscountAmount) : "-"}</span>
+                                                      </>
+                                                    ) : (
+                                                      <span className="small">Sin promo detectada</span>
+                                                    )}
+                                                    {opportunity ? (
+                                                      <div className="rentabilidad-opportunity-box">
+                                                        <strong>{opportunityLabel(opportunity.item_promotion_status)}: {opportunity.promotion_name || opportunity.promotion_type}</strong>
+                                                        <span>Comprador {opportunity.promo_price ? moneyWithCents(opportunity.promo_price) : "-"}</span>
+                                                        <span>Aporte ML {moneyWithCents(Number(opportunity.meli_amount || 0))} ({percent(Number(opportunity.meli_percentage || 0))})</span>
+                                                        <span>Base estimada {opportunityBase ? moneyWithCents(opportunityBase) : "-"}</span>
+                                                      </div>
+                                                    ) : null}
+                                                  </>
+                                                );
+                                              })()}
                                             </td>
                                             <td>
                                               <strong>{row.currentMargin !== null ? percent(row.currentMargin) : "-"}</strong>

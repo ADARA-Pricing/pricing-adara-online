@@ -4378,6 +4378,21 @@ td strong {
   margin-bottom: 2px;
 }
 
+.rentabilidad-opportunity-box {
+  border-top: 1px solid #dbeafe;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.rentabilidad-opportunity-box strong {
+  color: #1d4ed8;
+}
+
+.rentabilidad-opportunity-box span:nth-child(3) {
+  color: #047857;
+  font-weight: 800;
+}
+
 .rentabilidad-inline-button {
   margin-top: 8px;
   width: fit-content;

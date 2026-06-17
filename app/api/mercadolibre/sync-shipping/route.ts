@@ -82,6 +82,30 @@ type PromotionSummary = {
   raw: unknown[];
 };
 
+type MeliSellerPromotion = {
+  id: string;
+  type?: string | null;
+  status?: string | null;
+  name?: string | null;
+  start_date?: string | null;
+  finish_date?: string | null;
+};
+
+type MeliPromotionItem = {
+  id?: string;
+  status?: string | null;
+  price?: number | null;
+  original_price?: number | null;
+  offer_id?: string | null;
+  meli_percentage?: number | null;
+  seller_percentage?: number | null;
+  min_discounted_price?: number | null;
+  max_discounted_price?: number | null;
+  suggested_discounted_price?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
+};
+
 function chunk<T>(items: T[], size: number) {
   const result: T[][] = [];
   for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));
@@ -863,6 +887,75 @@ async function getListingTypeNames(account: any) {
   return map;
 }
 
+async function getSellerPromotions(account: any): Promise<MeliSellerPromotion[]> {
+  try {
+    const data = await meliFetch(`/seller-promotions/users/${account.meli_user_id}?app_version=v2`, account);
+    return (Array.isArray(data?.results) ? data.results : [])
+      .filter((item: MeliSellerPromotion) => item?.id && item?.type)
+      .filter((item: MeliSellerPromotion) => {
+        const status = String(item.status || "").toLowerCase();
+        return status === "started" || status === "pending";
+      });
+  } catch {
+    return [];
+  }
+}
+
+async function getPromotionItems(
+  promotion: MeliSellerPromotion,
+  account: any,
+  relevantItemIds: Set<string>,
+): Promise<MeliPromotionItem[]> {
+  if (!promotion.id || !promotion.type) return [];
+  const results: MeliPromotionItem[] = [];
+  let searchAfter: string | null = null;
+  let page = 0;
+
+  do {
+    const params = new URLSearchParams({
+      promotion_type: promotion.type,
+      app_version: "v2",
+      limit: "50",
+    });
+    if (searchAfter) params.set("searchAfter", searchAfter);
+
+    try {
+      const data = await meliFetch(`/seller-promotions/promotions/${promotion.id}/items?${params.toString()}`, account);
+      const pageResults = Array.isArray(data?.results) ? data.results : [];
+      results.push(...pageResults.filter((item: MeliPromotionItem) => item?.id && relevantItemIds.has(item.id)));
+      searchAfter = data?.paging?.searchAfter || null;
+      page += 1;
+      if (!pageResults.length) break;
+    } catch {
+      break;
+    }
+  } while (searchAfter && page < 8);
+
+  return results;
+}
+
+function promotionDate(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function promotionPrice(item: MeliPromotionItem) {
+  return Number(item.price || item.suggested_discounted_price || 0) || null;
+}
+
+function promotionMeliAmount(item: MeliPromotionItem) {
+  const original = Number(item.original_price || 0);
+  const rate = Number(item.meli_percentage || 0);
+  return original > 0 && rate > 0 ? (original * rate) / 100 : null;
+}
+
+function promotionSellerAmount(item: MeliPromotionItem) {
+  const original = Number(item.original_price || 0);
+  const rate = Number(item.seller_percentage || 0);
+  return original > 0 && rate > 0 ? (original * rate) / 100 : null;
+}
+
 export async function POST() {
   const supabase = createAdminClient();
   const startedAt = Date.now();
@@ -964,6 +1057,7 @@ export async function POST() {
     const matchedItemsForFetch = items.filter((item) =>
       getItemSkus(item).some((sku) => Boolean(productsBySku.get(sku)?.id)),
     );
+    const matchedItemIds = new Set(matchedItemsForFetch.map((item) => item.id));
 
     await mapWithConcurrency(matchedItemsForFetch, 4, async (item) => {
       const detailedItem = await getDetailedItemForPricing(item, account);
@@ -975,6 +1069,46 @@ export async function POST() {
         listingPriceForMatchedItem(item),
       ]);
     });
+
+    const sellerPromotions = await getSellerPromotions(account);
+    const promotionOpportunityRows: any[] = [];
+
+    await mapWithConcurrency(sellerPromotions, 3, async (promotion) => {
+      const promotionItems = await getPromotionItems(promotion, account, matchedItemIds);
+      promotionItems.forEach((item) => {
+        const promoPrice = promotionPrice(item);
+        const meliAmount = promotionMeliAmount(item);
+        promotionOpportunityRows.push({
+          promotion_id: promotion.id,
+          promotion_name: promotion.name || null,
+          promotion_type: promotion.type || null,
+          promotion_status: promotion.status || null,
+          item_promotion_status: item.status || null,
+          offer_id: item.offer_id || null,
+          meli_item_id: item.id,
+          original_price: Number(item.original_price || 0) || null,
+          promo_price: promoPrice,
+          min_discounted_price: Number(item.min_discounted_price || 0) || null,
+          max_discounted_price: Number(item.max_discounted_price || 0) || null,
+          suggested_discounted_price: Number(item.suggested_discounted_price || 0) || null,
+          seller_percentage: Number(item.seller_percentage || 0) || null,
+          meli_percentage: Number(item.meli_percentage || 0) || null,
+          seller_amount: promotionSellerAmount(item),
+          meli_amount: meliAmount,
+          start_date: promotionDate(item.start_date || promotion.start_date),
+          end_date: promotionDate(item.end_date || promotion.finish_date),
+          raw: item,
+          last_sync_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      });
+    });
+
+    await supabase.from("mercadolibre_promotion_opportunities").delete().neq("promotion_id", "__never__");
+    for (const batch of chunk(promotionOpportunityRows, 200)) {
+      const { error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch);
+      if (promoSaveError) throw new Error(promoSaveError.message);
+    }
 
     const logs: any[] = [];
     let updated = 0;
@@ -1170,6 +1304,8 @@ export async function POST() {
       shipping_queries: shippingCostsByItem.size,
       promotion_queries: promotionsByItem.size,
       listing_price_queries: listingPriceByItem.size,
+      seller_promotions: sellerPromotions.length,
+      promotion_opportunities: promotionOpportunityRows.length,
       logs: logs.slice(0, 50),
     });
   } catch (error) {

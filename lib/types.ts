@@ -135,6 +135,32 @@ export type MercadoLibreShippingCost = {
   updated_at?: string;
 };
 
+export type MercadoLibrePromotionOpportunity = {
+  id?: string;
+  created_at?: string;
+  updated_at?: string;
+  last_sync_at?: string | null;
+  promotion_id: string;
+  promotion_name?: string | null;
+  promotion_type?: string | null;
+  promotion_status?: string | null;
+  item_promotion_status?: string | null;
+  offer_id?: string | null;
+  meli_item_id: string;
+  original_price?: number | null;
+  promo_price?: number | null;
+  min_discounted_price?: number | null;
+  max_discounted_price?: number | null;
+  suggested_discounted_price?: number | null;
+  seller_percentage?: number | null;
+  meli_percentage?: number | null;
+  seller_amount?: number | null;
+  meli_amount?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  raw?: unknown;
+};
+
 export type TaxSettings = {
   key: string;
   iibb_rate: number;
