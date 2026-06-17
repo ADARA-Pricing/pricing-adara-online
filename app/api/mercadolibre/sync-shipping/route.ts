@@ -1315,7 +1315,7 @@ export async function POST() {
             ? optionCodeForInstallments(detectedInstallments)
             : optionCodeByFinancingRate(detectedFinancingFeeRate, (currentInstallmentFees || []) as CurrentInstallmentFee[]);
 
-        if (optionCode && Number.isFinite(detectedFinancingFeeRate)) {
+        if (optionCode && optionCode !== "MC" && Number.isFinite(detectedFinancingFeeRate) && detectedFinancingFeeRate > 0) {
           const currentRates = financingFeeObservations.get(optionCode) || [];
           currentRates.push(detectedFinancingFeeRate);
           financingFeeObservations.set(optionCode, currentRates);
@@ -1471,7 +1471,7 @@ export async function POST() {
     for (const [code, rates] of financingFeeObservations.entries()) {
       if (!rates.length) continue;
       const rate = Math.max(...rates.filter((value) => Number.isFinite(value)));
-      if (!Number.isFinite(rate)) continue;
+      if (!Number.isFinite(rate) || rate <= 0) continue;
 
       const { error: installmentFeeError } = await supabase
         .from("mercadolibre_installment_fees")
