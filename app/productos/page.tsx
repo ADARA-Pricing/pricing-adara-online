@@ -199,9 +199,21 @@ function productInitial(product: Product) {
   return value.slice(0, 2).toUpperCase();
 }
 
+function installmentCampaignTag(shipping?: MercadoLibreShippingCost | null) {
+  if (!shipping?.meli_tags || !Array.isArray(shipping.meli_tags)) return null;
+  const tags = shipping.meli_tags.map((tag) => String(tag).toLowerCase());
+  if (tags.includes("3x_campaign")) return "3x_campaign";
+  if (tags.includes("9x_campaign")) return "9x_campaign";
+  if (tags.includes("12x_campaign")) return "12x_campaign";
+  return null;
+}
+
 function rawInstallmentLabel(shipping?: MercadoLibreShippingCost | null) {
   if (!shipping) return "Sin dato ML";
-  if (shipping.meli_installments_text) return shipping.meli_installments_text;
+  const campaignTag = installmentCampaignTag(shipping);
+  if (campaignTag === "3x_campaign") return "3 cuotas";
+  if (campaignTag === "9x_campaign") return "9 cuotas";
+  if (campaignTag === "12x_campaign") return "12 cuotas";
 
   const saleTerms = Array.isArray(shipping.meli_sale_terms) ? shipping.meli_sale_terms : [];
   const searchable = [
@@ -216,8 +228,9 @@ function rawInstallmentLabel(shipping?: MercadoLibreShippingCost | null) {
 
   const match = searchable.match(/(\d{1,2})\s*(x|cuotas?|installments?)/i);
   if (match?.[1]) return `${match[1]} cuotas`;
-  if (searchable.includes("gold_pro") || searchable.includes("premium")) return "Premium / cuotas";
+  if (searchable.includes("gold_pro") || searchable.includes("premium")) return "6 cuotas";
   if (searchable.includes("gold_special") || searchable.includes("clásica") || searchable.includes("clasica")) return "Clásica / 1 pago";
+  if (shipping.meli_installments_text) return shipping.meli_installments_text;
   return "Sin dato ML";
 }
 
@@ -229,33 +242,16 @@ function installmentNumberFromLabel(label: string) {
   return null;
 }
 
-function sortedDistinctPrices(shippings: MercadoLibreShippingCost[]) {
-  return Array.from(
-    new Set(
-      shippings
-        .map((item) => Math.round(Number(item.meli_price || 0)))
-        .filter((price) => price > 0),
-    ),
-  ).sort((a, b) => a - b);
-}
-
-function inferredInstallmentNumber(shipping: MercadoLibreShippingCost, shippings: MercadoLibreShippingCost[]) {
+function inferredInstallmentNumber(shipping: MercadoLibreShippingCost, _shippings: MercadoLibreShippingCost[]) {
   const rawLabel = rawInstallmentLabel(shipping);
   const explicit = installmentNumberFromLabel(rawLabel);
   if (explicit) return explicit;
-
-  const price = Math.round(Number(shipping.meli_price || 0));
-  if (!price) return null;
-
-  const prices = sortedDistinctPrices(shippings);
-  const index = prices.findIndex((item) => item === price);
-  const inferredByOrder = [1, 3, 6, 9, 12];
-  return index >= 0 ? inferredByOrder[index] || null : null;
+  return null;
 }
 
 function installmentLabel(shipping: MercadoLibreShippingCost, shippings: MercadoLibreShippingCost[]) {
   const rawLabel = rawInstallmentLabel(shipping);
-  if (rawLabel !== "Premium / cuotas" && rawLabel !== "Sin dato ML") return rawLabel;
+  if (rawLabel !== "Sin dato ML") return rawLabel;
 
   const inferred = inferredInstallmentNumber(shipping, shippings);
   if (inferred) return `${inferred === 1 ? "Clásica / 1 pago" : `${inferred} cuotas`}`;
@@ -620,6 +616,14 @@ export default function ProductsPage() {
     const total = products.length;
     const withMl = enriched.filter(({ shippings }) => shippings.some((shipping) => Boolean(shipping?.meli_item_id))).length;
     const withoutMl = Math.max(total - withMl, 0);
+    const linkedPublications = shippingCosts.filter((shipping) => Boolean(shipping?.meli_item_id));
+    const activePublications = linkedPublications.filter((shipping) => shipping.meli_status === "active").length;
+    const pausedPublications = linkedPublications.filter((shipping) => shipping.meli_status === "paused").length;
+    const latestSync = linkedPublications
+      .map((shipping) => shipping.meli_last_sync_at || shipping.updated_at)
+      .filter(Boolean)
+      .sort()
+      .reverse()[0];
     const syncedToday = enriched.filter(({ shippings }) => {
       const now = new Date();
       return shippings.some((shipping) => {
@@ -629,8 +633,8 @@ export default function ProductsPage() {
       });
     }).length;
 
-    return { total, withMl, withoutMl, syncedToday };
-  }, [products, enriched]);
+    return { total, withMl, withoutMl, syncedToday, activePublications, pausedPublications, latestSync };
+  }, [products, enriched, shippingCosts]);
 
   return (
     <main className="container wide products-advanced-page">
@@ -700,9 +704,9 @@ export default function ProductsPage() {
         <div className="card product-kpi-card">
           <span className="product-kpi-icon violet">↻</span>
           <div>
-            <p>Sincronizados hoy</p>
-            <strong>{metrics.syncedToday}</strong>
-            <small>Última sync disponible</small>
+            <p>Publicaciones activas</p>
+            <strong>{metrics.activePublications}</strong>
+            <small>{metrics.pausedPublications} pausadas</small>
           </div>
         </div>
         <div className="card product-kpi-card">
@@ -712,6 +716,21 @@ export default function ProductsPage() {
             <strong>{metrics.withoutMl}</strong>
             <small>{metrics.total ? `${Math.round((metrics.withoutMl / metrics.total) * 100)}% del catálogo` : "0% del catálogo"}</small>
           </div>
+        </div>
+      </section>
+
+      <section className="card products-sync-summary">
+        <div>
+          <span>Última sincronización ML</span>
+          <strong>{formatDateTime(metrics.latestSync)}</strong>
+        </div>
+        <div>
+          <span>Productos actualizados hoy</span>
+          <strong>{metrics.syncedToday}</strong>
+        </div>
+        <div>
+          <span>Publicaciones vinculadas</span>
+          <strong>{metrics.activePublications + metrics.pausedPublications}</strong>
         </div>
       </section>
 
@@ -897,15 +916,6 @@ export default function ProductsPage() {
                         )}
                       </strong>
                     </div>
-                    <div className="product-row-stat">
-                      <span>Stock ML</span>
-                      <strong>{publicationCount ? sharedMlStock : "-"}</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>Última sync</span>
-                      <strong>{formatDateTime(latestSync)}</strong>
-                    </div>
-
                     <button className="product-expand-button" type="button" onClick={() => setExpandedSku(expanded ? null : product.sku)}>
                       {expanded ? "⌃" : "⌄"}
                     </button>
@@ -932,6 +942,7 @@ export default function ProductsPage() {
                           <p>Stock compartido: {publicationCount ? sharedMlStock : "-"}</p>
                           <p>Activas: {activePublications}</p>
                           <p>Pausadas: {pausedPublications}</p>
+                          <p>Última sync: {formatDateTime(latestSync)}</p>
                           <p className="small">No se suma el stock porque las publicaciones comparten el mismo inventario.</p>
                         </div>
                         <div>

@@ -3818,6 +3818,40 @@ td strong {
   color: #64748b;
 }
 
+.products-sync-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  border-radius: 18px;
+}
+
+.products-sync-summary div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.products-sync-summary span {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.products-sync-summary strong {
+  color: #0f172a;
+  font-size: 14px;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .product-editor-card {
   border-radius: 20px;
   margin-bottom: 18px;
@@ -3855,7 +3889,7 @@ td strong {
 
 .product-row-main {
   display: grid;
-  grid-template-columns: 28px 74px minmax(260px, 1.35fr) repeat(7, minmax(95px, 0.55fr)) 44px;
+  grid-template-columns: 28px 74px minmax(320px, 1.45fr) repeat(4, minmax(110px, 0.55fr)) 44px;
   gap: 12px;
   align-items: center;
   padding: 16px;
@@ -3979,7 +4013,7 @@ td strong {
 
 @media (max-width: 1500px) {
   .product-row-main {
-    grid-template-columns: 28px 64px minmax(250px, 1fr) repeat(4, minmax(90px, 0.45fr)) 44px;
+    grid-template-columns: 28px 64px minmax(250px, 1fr) repeat(3, minmax(90px, 0.45fr)) 44px;
   }
 
   .product-row-stat:nth-of-type(n+6) {
@@ -3990,6 +4024,7 @@ td strong {
 @media (max-width: 1100px) {
   .products-toolbar-grid,
   .products-kpi-grid,
+  .products-sync-summary,
   .product-detail-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -4006,6 +4041,7 @@ td strong {
 @media (max-width: 760px) {
   .products-toolbar-grid,
   .products-kpi-grid,
+  .products-sync-summary,
   .product-detail-grid {
     grid-template-columns: 1fr;
   }
