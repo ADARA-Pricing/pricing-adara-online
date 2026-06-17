@@ -33,6 +33,14 @@ type MarketItem = {
   rawPriceToWinStatus: string | null;
 };
 
+type CatalogProduct = {
+  id: string;
+  name: string;
+  domain_id?: string | null;
+  pictures?: { url?: string; secure_url?: string }[];
+  status?: string | null;
+};
+
 function asNumber(value: unknown) {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -52,6 +60,18 @@ function detectChannel(item: any) {
   if (item.listing_type_id === "gold_pro") return "MP6";
   if (item.listing_type_id === "gold_premium") return "Premium";
   return item.listing_type_id || "Sin dato";
+}
+
+function firstPicture(product: any, detail: any, offer: any) {
+  return (
+    offer.thumbnail ||
+    detail?.thumbnail ||
+    detail?.pictures?.[0]?.secure_url ||
+    detail?.pictures?.[0]?.url ||
+    product?.pictures?.[0]?.secure_url ||
+    product?.pictures?.[0]?.url ||
+    null
+  );
 }
 
 function priceToWinFromResponse(data: any) {
@@ -147,58 +167,75 @@ export async function POST(request: NextRequest) {
     }
 
     const searchParams = new URLSearchParams({
-      limit: String(limit),
-      sort: "price_asc",
+      site_id: "MLA",
+      limit: String(Math.min(limit, 12)),
     });
     if (query) searchParams.set("q", query);
-    if (categoryId) searchParams.set("category", categoryId);
+    if (categoryId && categoryId.toUpperCase().startsWith("MLA-")) {
+      searchParams.set("domain_id", categoryId);
+    }
 
-    const search = await meliFetch(`/sites/MLA/search?${searchParams.toString()}`, account);
-    const results = Array.isArray(search?.results) ? search.results : [];
-    const topResults = results.slice(0, limit);
+    const productSearch = await meliFetch(`/products/search?${searchParams.toString()}`, account);
+    const products = Array.isArray(productSearch?.results)
+      ? (productSearch.results as CatalogProduct[]).slice(0, Math.min(limit, 12))
+      : [];
 
-    const items = await Promise.all(
-      topResults.map(async (result: any): Promise<MarketItem> => {
-        const detail = await fetchOptional<any>(`/items/${result.id}`, account);
-        const source = detail || result;
-        const priceToWin = source.catalog_listing
-          ? await fetchOptional<any>(`/items/${result.id}/price_to_win`, account)
-          : null;
-
-        return {
-          id: result.id,
-          title: source.title || result.title || result.id,
-          price: asNumber(result.price ?? source.price),
-          originalPrice: nullableNumber(result.original_price ?? source.original_price),
-          permalink: result.permalink || source.permalink || `https://articulo.mercadolibre.com.ar/${result.id}`,
-          thumbnail: result.thumbnail || source.thumbnail || null,
-          condition: result.condition || source.condition || null,
-          listingTypeId: result.listing_type_id || source.listing_type_id || null,
-          channel: detectChannel({ ...result, ...source }),
-          availableQuantity: nullableNumber(source.available_quantity ?? result.available_quantity),
-          soldQuantity: nullableNumber(source.sold_quantity ?? result.sold_quantity),
-          catalogListing: Boolean(source.catalog_listing ?? result.catalog_listing),
-          catalogProductId: source.catalog_product_id || result.catalog_product_id || null,
-          categoryId: source.category_id || result.category_id || null,
-          sellerId: nullableNumber(result.seller?.id ?? source.seller_id),
-          sellerNickname: result.seller?.nickname || null,
-          acceptsMercadoPago: Boolean(result.accepts_mercadopago ?? source.accepts_mercadopago),
-          freeShipping: Boolean(result.shipping?.free_shipping ?? source.shipping?.free_shipping),
-          logisticType: result.shipping?.logistic_type || source.shipping?.logistic_type || null,
-          shippingMode: result.shipping?.mode || source.shipping?.mode || null,
-          tags: Array.isArray(source.tags) ? source.tags.map((tag: unknown) => String(tag)) : [],
-          priceToWin: priceToWinFromResponse(priceToWin),
-          rawPriceToWinStatus: priceToWin?.status || priceToWin?.reason || null,
-        };
+    const offerGroups = await Promise.all(
+      products.map(async (product) => {
+        const offers = await fetchOptional<any>(`/products/${product.id}/items?site_id=MLA&limit=${Math.min(limit, 20)}`, account);
+        const results = Array.isArray(offers?.results) ? offers.results : [];
+        return results.map((offer: any) => ({ product, offer }));
       }),
     );
+
+    const offerRows = offerGroups.flat().slice(0, limit);
+    const items = (
+      await Promise.all(
+        offerRows.map(async ({ product, offer }: { product: CatalogProduct; offer: any }): Promise<MarketItem> => {
+          const itemId = offer.item_id || offer.id;
+          const detail = itemId ? await fetchOptional<any>(`/items/${itemId}`, account) : null;
+          const source = detail || offer;
+          const catalogListing = Boolean(source.catalog_listing ?? true);
+          const priceToWin = itemId && catalogListing
+            ? await fetchOptional<any>(`/items/${itemId}/price_to_win`, account)
+            : null;
+
+          return {
+            id: itemId,
+            title: source.title || product.name || itemId,
+            price: asNumber(offer.price ?? source.price),
+            originalPrice: nullableNumber(offer.original_price ?? source.original_price),
+            permalink: source.permalink || `https://articulo.mercadolibre.com.ar/${itemId}`,
+            thumbnail: firstPicture(product, detail, offer),
+            condition: offer.condition || source.condition || null,
+            listingTypeId: offer.listing_type_id || source.listing_type_id || null,
+            channel: detectChannel({ ...offer, ...source }),
+            availableQuantity: nullableNumber(source.available_quantity ?? offer.available_quantity),
+            soldQuantity: nullableNumber(source.sold_quantity ?? offer.sold_quantity),
+            catalogListing,
+            catalogProductId: product.id || source.catalog_product_id || null,
+            categoryId: offer.category_id || source.category_id || product.domain_id || null,
+            sellerId: nullableNumber(offer.seller_id ?? source.seller_id),
+            sellerNickname: offer.seller?.nickname || null,
+            acceptsMercadoPago: Boolean(offer.accepts_mercadopago ?? source.accepts_mercadopago),
+            freeShipping: Boolean(offer.shipping?.free_shipping ?? source.shipping?.free_shipping),
+            logisticType: offer.shipping?.logistic_type || source.shipping?.logistic_type || null,
+            shippingMode: offer.shipping?.mode || source.shipping?.mode || null,
+            tags: Array.isArray(offer.tags || source.tags) ? (offer.tags || source.tags).map((tag: unknown) => String(tag)) : [],
+            priceToWin: priceToWinFromResponse(priceToWin),
+            rawPriceToWinStatus: priceToWin?.status || priceToWin?.reason || null,
+          };
+        }),
+      )
+    ).sort((a, b) => a.price - b.price);
 
     return NextResponse.json({
       query,
       categoryId: categoryId || null,
-      paging: search?.paging || null,
-      filters: search?.filters || [],
-      availableFilters: search?.available_filters || [],
+      searchMode: "catalog_products",
+      paging: productSearch?.paging || null,
+      filters: [],
+      availableFilters: [],
       items,
       summary: summarize(items),
       generatedAt: new Date().toISOString(),

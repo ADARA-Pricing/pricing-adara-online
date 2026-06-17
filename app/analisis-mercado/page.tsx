@@ -201,8 +201,8 @@ export default function MarketAnalysisPage() {
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ej: Tablet Xiaomi Redmi Pad 2 8GB 256GB" />
           </div>
           <div className="field">
-            <label>Categoría ML opcional</label>
-            <input value={categoryId} onChange={(event) => setCategoryId(event.target.value)} placeholder="MLA..." />
+            <label>Dominio ML opcional</label>
+            <input value={categoryId} onChange={(event) => setCategoryId(event.target.value)} placeholder="MLA-TABLETS" />
           </div>
           <div className="field">
             <label>Resultados</label>
@@ -328,6 +328,11 @@ export default function MarketAnalysisPage() {
               </div>
               <span className="badge">{data.items.length} resultados</span>
             </div>
+            {data.items.length === 0 ? (
+              <div className="empty-state-box">
+                No encontramos ofertas activas para productos de catálogo con esa búsqueda. Probá con un nombre más específico o con un dominio ML.
+              </div>
+            ) : (
             <div className="table-wrap market-results-table">
               <table>
                 <thead>
@@ -383,6 +388,7 @@ export default function MarketAnalysisPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </section>
         </>
       )}
