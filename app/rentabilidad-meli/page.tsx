@@ -248,12 +248,11 @@ function publicationGroupKey(row: ProfitRow) {
   const title = row.shipping.meli_title || row.product.name;
   const catalogId = row.shipping.meli_catalog_product_id;
 
-  if (catalogId) return `catalog:${catalogId}`;
-  if (row.shipping.meli_catalog_listing || row.shipping.meli_catalog_status) {
-    return `catalog:${normalizedPublicationTitle(title)}`;
+  if (row.shipping.meli_catalog_listing) {
+    return `catalog-listing:${catalogId || normalizedPublicationTitle(title)}`;
   }
 
-  return `listing:${normalizedPublicationTitle(title) || row.shipping.meli_item_id || row.key}`;
+  return `classic:${normalizedPublicationTitle(title) || catalogId || row.shipping.meli_item_id || row.key}`;
 }
 
 function catalogStatusForRows(rows: ProfitRow[]) {
@@ -315,8 +314,8 @@ function buildPublicationGroups(rows: ProfitRow[]) {
     rows: sortProfitRows(group.rows),
     catalog: catalogStatusForRows(group.rows),
   })).sort((a, b) => {
-    const rankA = a.catalog.label.startsWith("Catalogo") ? 0 : 1;
-    const rankB = b.catalog.label.startsWith("Catalogo") ? 0 : 1;
+    const rankA = a.rows.some((row) => row.shipping.meli_catalog_listing) ? 0 : 1;
+    const rankB = b.rows.some((row) => row.shipping.meli_catalog_listing) ? 0 : 1;
     if (rankA !== rankB) return rankA - rankB;
     const byStatus = order[b.status] - order[a.status];
     if (byStatus) return byStatus;
@@ -378,11 +377,12 @@ function meliStatusLabel(status?: string | null) {
 }
 
 function catalogStatus(shipping: MercadoLibreShippingCost) {
-  const isCatalog = Boolean(shipping.meli_catalog_listing || shipping.meli_catalog_product_id);
+  const isCatalog = Boolean(shipping.meli_catalog_listing);
   if (!isCatalog) {
+    const hasCatalogReference = Boolean(shipping.meli_catalog_product_id || shipping.meli_catalog_status);
     return {
-      label: "No catalogo",
-      detail: null,
+      label: hasCatalogReference ? "Clasica / fuera de catalogo" : "No catalogo",
+      detail: Array.isArray(shipping.meli_catalog_reason) ? shipping.meli_catalog_reason.join(", ") : null,
       className: "rentabilidad-catalog-neutral",
     };
   }
@@ -892,6 +892,9 @@ export default function RentabilidadMeliPage() {
                                     <div>
                                       <div className="rentabilidad-publication-title">
                                         <strong>{publicationGroup.title}</strong>
+                                        <span className="rentabilidad-publication-kind">
+                                          {publicationGroup.rows.some((row) => row.shipping.meli_catalog_listing) ? "Catalogo" : "Clasica"}
+                                        </span>
                                         <span className={`rentabilidad-catalog-badge ${publicationGroup.catalog.className}`}>
                                           {publicationGroup.catalog.label}
                                           {publicationGroup.catalog.detail ? ` · ${publicationGroup.catalog.detail}` : ""}

@@ -4484,6 +4484,16 @@ td strong {
   color: #0f172a;
 }
 
+.rentabilidad-publication-kind {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 850;
+  padding: 3px 8px;
+  text-transform: uppercase;
+}
+
 .rentabilidad-publication-group-header p {
   margin: 6px 0 0;
   color: #64748b;
