@@ -45,9 +45,29 @@ type CatalogSummary = {
   bestItem: MarketItem | null;
 };
 
+type CategoryFeeInfo = {
+  categoryId: string | null;
+  categoryName: string | null;
+  marketplaceFeeRate: number | null;
+  saleFeeAmount: number | null;
+  listingTypeId: string | null;
+  listingTypeName: string | null;
+  referencePrice: number | null;
+  source: string;
+};
+
 type MarketResponse = {
   query: string;
   categoryId: string | null;
+  resolvedCategory?: {
+    input: string | null;
+    categoryId: string | null;
+    categoryName: string | null;
+    domainId: string | null;
+    productId: string | null;
+    itemId: string | null;
+  };
+  categoryFee?: CategoryFeeInfo | null;
   generatedAt: string;
   items: MarketItem[];
   summary: {
@@ -99,15 +119,20 @@ function logisticLabel(item: MarketItem) {
   return item.shippingMode || "-";
 }
 
+function numberFromInput(value: string | number | null | undefined) {
+  const parsed = Number(String(value ?? "").replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function marginForPrice(price: number | null, inputs: SimulationInputs) {
   if (!price) return null;
-  const cost = Number(inputs.costWithoutVat || 0);
-  const categoryFee = Number(inputs.categoryFeeRate || 0);
-  const taxes = Number(inputs.taxRate || 0);
-  const shipping = Number(inputs.shippingCost || 0);
+  const cost = numberFromInput(inputs.costWithoutVat);
+  const categoryFee = numberFromInput(inputs.categoryFeeRate);
+  const taxes = numberFromInput(inputs.taxRate);
+  const shipping = numberFromInput(inputs.shippingCost);
   if (!cost) return null;
 
-  const revenueWithoutVat = price / (1 + Number(inputs.vatRate || 21) / 100);
+  const revenueWithoutVat = price / (1 + numberFromInput(inputs.vatRate || 21) / 100);
   const variableCosts = price * ((categoryFee + taxes) / 100) + shipping;
   const profit = revenueWithoutVat - cost - variableCosts;
   return {
@@ -177,6 +202,10 @@ export default function MarketAnalysisPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || "No se pudo analizar el mercado.");
       setData(payload);
+      const meliFee = Number(payload?.categoryFee?.marketplaceFeeRate);
+      if (Number.isFinite(meliFee) && meliFee > 0) {
+        setInputs((current) => ({ ...current, categoryFeeRate: String(meliFee).replace(".", ",") }));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo analizar el mercado.");
     } finally {
@@ -201,8 +230,8 @@ export default function MarketAnalysisPage() {
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ej: Tablet Xiaomi Redmi Pad 2 8GB 256GB" />
           </div>
           <div className="field">
-            <label>Dominio ML opcional</label>
-            <input value={categoryId} onChange={(event) => setCategoryId(event.target.value)} placeholder="MLA-TABLETS" />
+            <label>Categoría / producto ML opcional</label>
+            <input value={categoryId} onChange={(event) => setCategoryId(event.target.value)} placeholder="MLA82085 o MLA56609590" />
           </div>
           <div className="field">
             <label>Resultados</label>
@@ -261,9 +290,11 @@ export default function MarketAnalysisPage() {
             <div><span>Full</span><strong>{data ? `${data.summary.fullCount}` : "-"}</strong></div>
             <div><span>Stock visible</span><strong>{data?.summary.visibleStock ?? "-"}</strong></div>
             <div><span>Ventas visibles</span><strong>{data?.summary.visibleSoldQuantity ?? "-"}</strong></div>
+            <div><span>Categoría ML</span><strong>{data?.resolvedCategory?.categoryId || "-"}</strong></div>
+            <div><span>Comisión ML</span><strong>{data?.categoryFee?.marketplaceFeeRate ? percent(data.categoryFee.marketplaceFeeRate) : "-"}</strong></div>
           </div>
           <p className="small market-data-note">
-            Ventas y stock son datos visibles/acumulados que MercadoLibre expone. Para ventas por semana hay que guardar histórico.
+            Ventas y stock son datos visibles/acumulados que MercadoLibre expone. La comisión ML se consulta desde listing_prices con la categoría real detectada.
           </p>
         </section>
       </section>

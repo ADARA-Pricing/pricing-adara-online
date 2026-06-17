@@ -33,12 +33,32 @@ type MarketItem = {
   rawPriceToWinStatus: string | null;
 };
 
+type CategoryFeeInfo = {
+  categoryId: string | null;
+  categoryName: string | null;
+  marketplaceFeeRate: number | null;
+  saleFeeAmount: number | null;
+  listingTypeId: string | null;
+  listingTypeName: string | null;
+  referencePrice: number | null;
+  source: string;
+};
+
 type CatalogProduct = {
   id: string;
   name: string;
   domain_id?: string | null;
   pictures?: { url?: string; secure_url?: string }[];
   status?: string | null;
+};
+
+type CategoryReference = {
+  raw: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  domainId: string | null;
+  productId: string | null;
+  itemId: string | null;
 };
 
 function asNumber(value: unknown) {
@@ -85,12 +105,97 @@ function priceToWinFromResponse(data: any) {
   );
 }
 
+function categoryNameFromResponse(data: any) {
+  if (!data || typeof data !== "object") return null;
+  return data.name || data.path_from_root?.[data.path_from_root.length - 1]?.name || null;
+}
+
 async function fetchOptional<T>(path: string, account: any): Promise<T | null> {
   try {
     return await meliFetch(path, account);
   } catch {
     return null;
   }
+}
+
+async function resolveCategoryReference(input: string, account: any): Promise<CategoryReference | null> {
+  const raw = input.trim();
+  if (!raw) return null;
+  const value = raw.toUpperCase();
+
+  if (/^MLA-\w+/.test(value)) {
+    return { raw, categoryId: null, categoryName: null, domainId: value, productId: null, itemId: null };
+  }
+
+  if (/^MLA\d+/.test(value)) {
+    const category = await fetchOptional<any>(`/categories/${value}`, account);
+    if (category?.id) {
+      return {
+        raw,
+        categoryId: category.id,
+        categoryName: categoryNameFromResponse(category),
+        domainId: null,
+        productId: null,
+        itemId: null,
+      };
+    }
+
+    const product = await fetchOptional<any>(`/products/${value}`, account);
+    if (product?.id) {
+      return {
+        raw,
+        categoryId: null,
+        categoryName: null,
+        domainId: product.domain_id || null,
+        productId: product.id,
+        itemId: null,
+      };
+    }
+
+    const item = await fetchOptional<any>(`/items/${value}`, account);
+    if (item?.id) {
+      const itemCategory = item.category_id ? await fetchOptional<any>(`/categories/${item.category_id}`, account) : null;
+      return {
+        raw,
+        categoryId: item.category_id || null,
+        categoryName: categoryNameFromResponse(itemCategory),
+        domainId: item.domain_id || null,
+        productId: item.catalog_product_id || null,
+        itemId: item.id,
+      };
+    }
+  }
+
+  return null;
+}
+
+async function getCategoryFeeInfo(
+  categoryId: string | null,
+  referencePrice: number | null,
+  account: any,
+): Promise<CategoryFeeInfo | null> {
+  if (!categoryId || !referencePrice) return null;
+
+  const params = new URLSearchParams({
+    price: String(referencePrice),
+    category_id: categoryId,
+    listing_type_id: "gold_special",
+  });
+
+  const listingPrice = await fetchOptional<any>(`/sites/MLA/listing_prices?${params.toString()}`, account);
+  const data = Array.isArray(listingPrice) ? listingPrice[0] : listingPrice;
+  const category = await fetchOptional<any>(`/categories/${categoryId}`, account);
+
+  return {
+    categoryId,
+    categoryName: categoryNameFromResponse(category),
+    marketplaceFeeRate: nullableNumber(data?.sale_fee_details?.meli_percentage_fee ?? data?.sale_fee_details?.percentage_fee),
+    saleFeeAmount: nullableNumber(data?.sale_fee_amount),
+    listingTypeId: data?.listing_type_id || "gold_special",
+    listingTypeName: data?.listing_type_name || "Clásica",
+    referencePrice,
+    source: "listing_prices",
+  };
 }
 
 function summarize(items: MarketItem[]) {
@@ -166,18 +271,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Conectá MercadoLibre antes de analizar mercado." }, { status: 401 });
     }
 
+    const reference = await resolveCategoryReference(categoryId, account);
     const searchParams = new URLSearchParams({
       site_id: "MLA",
       limit: String(Math.min(limit, 12)),
     });
     if (query) searchParams.set("q", query);
-    if (categoryId && categoryId.toUpperCase().startsWith("MLA-")) {
-      searchParams.set("domain_id", categoryId);
-    }
+    if (reference?.domainId) searchParams.set("domain_id", reference.domainId);
 
-    const productSearch = await meliFetch(`/products/search?${searchParams.toString()}`, account);
+    const productSearch = reference?.productId
+      ? { results: [await meliFetch(`/products/${reference.productId}`, account)], paging: null }
+      : query || reference?.domainId
+        ? await meliFetch(`/products/search?${searchParams.toString()}`, account)
+        : { results: [], paging: null };
     const products = Array.isArray(productSearch?.results)
-      ? (productSearch.results as CatalogProduct[]).slice(0, Math.min(limit, 12))
+      ? (productSearch.results as CatalogProduct[]).filter(Boolean).slice(0, Math.min(limit, 12))
       : [];
 
     const offerGroups = await Promise.all(
@@ -229,15 +337,29 @@ export async function POST(request: NextRequest) {
       )
     ).sort((a, b) => a.price - b.price);
 
+    const summary = summarize(items);
+    const referenceCategoryId = reference?.categoryId || items.find((item) => /^MLA\d+/.test(item.categoryId || ""))?.categoryId || null;
+    const referencePrice = summary.minPrice || items.find((item) => item.price > 0)?.price || 100000;
+    const categoryFee = await getCategoryFeeInfo(referenceCategoryId, referencePrice, account);
+
     return NextResponse.json({
       query,
       categoryId: categoryId || null,
+      resolvedCategory: {
+        input: reference?.raw || categoryId || null,
+        categoryId: categoryFee?.categoryId || referenceCategoryId,
+        categoryName: categoryFee?.categoryName || reference?.categoryName || null,
+        domainId: reference?.domainId || null,
+        productId: reference?.productId || null,
+        itemId: reference?.itemId || null,
+      },
+      categoryFee,
       searchMode: "catalog_products",
       paging: productSearch?.paging || null,
       filters: [],
       availableFilters: [],
       items,
-      summary: summarize(items),
+      summary,
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
