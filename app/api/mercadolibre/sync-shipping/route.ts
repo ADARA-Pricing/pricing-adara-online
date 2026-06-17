@@ -323,7 +323,7 @@ function installmentCountFromText(text?: string | null) {
   const normalized = (text || "").toLowerCase();
   const match = normalized.match(/(\d{1,2})\s*(x|cuotas?|installments?)/i);
   if (match?.[1]) return Number(match[1]);
-  if (normalized.includes("1 pago") || normalized.includes("clasica") || normalized.includes("clÃ¡sica")) return 1;
+  if (normalized.includes("1 pago") || normalized.includes("clasica") || normalized.includes("clásica")) return 1;
   return null;
 }
 

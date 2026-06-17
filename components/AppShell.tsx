@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase";
 
 type NavItem = {
@@ -129,31 +129,68 @@ function isActive(pathname: string | null, href: string) {
   return pathname === href || Boolean(pathname?.startsWith(`${href}/`));
 }
 
+function initialsFromEmail(email?: string | null) {
+  if (!email) return "AD";
+  const name = email.split("@")[0] || "AD";
+  const parts = name.split(/[._-]+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function nameFromEmail(email?: string | null) {
+  if (!email) return "Usuario ADARA";
+  return email
+    .split("@")[0]
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const [collapsed, setCollapsed] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   const publicPage = pathname === "/" || pathname?.startsWith("/login");
-  if (publicPage) return <>{children}</>;
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("adara-sidebar-collapsed");
+    if (stored) setCollapsed(stored === "true");
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail(data.user?.email ?? null);
+    });
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem("adara-sidebar-collapsed", String(next));
+      return next;
+    });
+  }
 
   async function logout() {
     await supabase.auth.signOut();
     router.push("/login");
   }
 
+  if (publicPage) return <>{children}</>;
+
   const configActive = configItems.some((item) => isActive(pathname, item.href));
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-logo-row">
           <Link href="/precios" className="adara-logo" aria-label="ADARA">
             <span className="adara-logo-main">ADARA</span>
             <span className="adara-logo-sub">Group</span>
           </Link>
-          <button type="button" className="sidebar-collapse" aria-label="Contraer menú">
-            ≪
+          <button type="button" className="sidebar-collapse" aria-label={collapsed ? "Expandir menú" : "Contraer menú"} onClick={toggleCollapsed}>
+            {collapsed ? ">" : "<"}
           </button>
         </div>
 
@@ -163,15 +200,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               key={item.href}
               href={item.href}
               className={`sidebar-link ${isActive(pathname, item.href) ? "active" : ""}`}
+              title={collapsed ? item.label : undefined}
             >
               <span className="sidebar-icon">{item.icon}</span>
-              <span>{item.label}</span>
+              <span className="sidebar-label">{item.label}</span>
             </Link>
           ))}
 
           <div className={`sidebar-link sidebar-section ${configActive ? "active-section" : ""}`}>
             <span className="sidebar-icon"><IconSettings /></span>
-            <span>Configuración</span>
+            <span className="sidebar-label">Configuración</span>
             <span className="sidebar-caret">⌃</span>
           </div>
 
@@ -181,9 +219,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={`sidebar-sublink ${isActive(pathname, item.href) ? "active" : ""}`}
+                title={collapsed ? item.label : undefined}
               >
                 <span className="sidebar-dot" />
-                <span>{item.label}</span>
+                <span className="sidebar-label">{item.label}</span>
               </Link>
             ))}
           </div>
@@ -192,14 +231,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="sidebar-bottom">
           <button className="sidebar-link sidebar-logout" type="button" onClick={logout}>
             <span className="sidebar-icon"><IconLogout /></span>
-            <span>Salir</span>
+            <span className="sidebar-label">Salir</span>
           </button>
 
           <div className="sidebar-user">
-            <div className="sidebar-avatar">AM</div>
+            <div className="sidebar-avatar">{initialsFromEmail(userEmail)}</div>
             <div>
-              <strong>Admin Mercado</strong>
-              <span>admin@adara.com</span>
+              <strong>{nameFromEmail(userEmail)}</strong>
+              <span>{userEmail || "Sesión activa"}</span>
             </div>
             <span className="sidebar-user-caret">⌄</span>
           </div>

@@ -2901,6 +2901,11 @@ td strong {
   display: grid;
   grid-template-columns: 292px minmax(0, 1fr);
   background: #f3f6fb;
+  transition: grid-template-columns 180ms ease;
+}
+
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 94px minmax(0, 1fr);
 }
 
 .app-content {
@@ -2921,6 +2926,12 @@ td strong {
   gap: 16px;
   z-index: 20;
   overflow: hidden;
+  transition: padding 180ms ease;
+}
+
+.sidebar-collapsed .sidebar {
+  padding-left: 14px;
+  padding-right: 14px;
 }
 
 .sidebar-logo-row {
@@ -2963,7 +2974,24 @@ td strong {
   background: #ffffff;
   color: #1e3a8a;
   font-weight: 900;
-  cursor: default;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.sidebar-collapse:hover {
+  background: #eef4ff;
+  border-color: #bfdbfe;
+  color: #1455f5;
+}
+
+.sidebar-collapsed .sidebar-logo-row {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.sidebar-collapsed .adara-logo {
+  display: none;
 }
 
 .sidebar-nav {
@@ -2994,6 +3022,24 @@ td strong {
   width: 100%;
   font: inherit;
   cursor: pointer;
+}
+
+.sidebar-label {
+  min-width: 0;
+}
+
+.sidebar-collapsed .sidebar-link,
+.sidebar-collapsed .sidebar-sublink {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.sidebar-collapsed .sidebar-label,
+.sidebar-collapsed .sidebar-caret,
+.sidebar-collapsed .sidebar-user > div,
+.sidebar-collapsed .sidebar-user-caret {
+  display: none;
 }
 
 .sidebar-link:hover,
@@ -3048,6 +3094,16 @@ td strong {
   padding-left: 10px;
 }
 
+.sidebar-collapsed .sidebar-submenu {
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.sidebar-collapsed .sidebar-dot {
+  width: 10px;
+  height: 10px;
+}
+
 .sidebar-sublink {
   min-height: 42px;
   font-size: 14px;
@@ -3085,6 +3141,13 @@ td strong {
   padding: 10px;
   border-radius: 16px;
   color: #0f172a;
+}
+
+.sidebar-collapsed .sidebar-user {
+  display: flex;
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .sidebar-avatar {
@@ -3379,13 +3442,34 @@ td strong {
 }
 
 @media (max-width: 820px) {
-  .app-shell {
+  .app-shell,
+  .app-shell.sidebar-collapsed {
     grid-template-columns: 1fr;
   }
 
-  .sidebar {
+  .sidebar,
+  .sidebar-collapsed .sidebar {
     position: relative;
     height: auto;
+    padding: 18px;
+  }
+
+  .sidebar-collapsed .adara-logo {
+    display: inline-flex;
+  }
+
+  .sidebar-collapsed .sidebar-label,
+  .sidebar-collapsed .sidebar-caret,
+  .sidebar-collapsed .sidebar-user > div,
+  .sidebar-collapsed .sidebar-user-caret {
+    display: initial;
+  }
+
+  .sidebar-collapsed .sidebar-link,
+  .sidebar-collapsed .sidebar-sublink {
+    justify-content: flex-start;
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   .app-content {
