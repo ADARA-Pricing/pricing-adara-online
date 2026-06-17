@@ -161,12 +161,7 @@ function optionFromFinancingFee(
     return options.find((option) => option.code === "MC") || mercadoLibreClassicOption();
   }
 
-  if (feeRate <= 0.01) return null;
-
-  return (
-    options.find((option) => Math.abs(Number(option.financing_fee_rate || 0) - feeRate) <= 0.15) ||
-    null
-  );
+  return null;
 }
 
 function publicationSortRank(row: ProfitRow) {
