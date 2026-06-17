@@ -91,6 +91,17 @@ function IconProfit() {
   );
 }
 
+function IconMarketAnalysis() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sidebar-icon-svg" aria-hidden="true">
+      <circle cx="10.5" cy="10.5" r="5.5" />
+      <path d="M15 15l4 4" />
+      <path d="M8.5 10.5h4" />
+      <path d="M10.5 8.5v4" />
+    </svg>
+  );
+}
+
 function IconSettings() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sidebar-icon-svg" aria-hidden="true">
@@ -117,6 +128,7 @@ const mainItems: NavItem[] = [
   { href: "/impuestos", label: "Impuestos", icon: <IconTaxes /> },
   { href: "/precios", label: "Precios", icon: <IconPrices /> },
   { href: "/rentabilidad-meli", label: "Rentabilidad Meli", icon: <IconProfit /> },
+  { href: "/analisis-mercado", label: "Análisis de Mercado", icon: <IconMarketAnalysis /> },
   { href: "/simulador", label: "Simulador", icon: <IconSimulator /> },
 ];
 

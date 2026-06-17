@@ -35,6 +35,17 @@ function HeroSvg({ title }: { title: string }) {
     );
   }
 
+  if (normalized.includes("mercado")) {
+    return (
+      <svg {...commonProps}>
+        <circle cx="10.5" cy="10.5" r="5.5" />
+        <path d="M15 15l4 4" />
+        <path d="M8.5 10.5h4" />
+        <path d="M10.5 8.5v4" />
+      </svg>
+    );
+  }
+
   if (normalized.includes("simulador")) {
     return (
       <svg {...commonProps}>

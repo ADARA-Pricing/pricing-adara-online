@@ -4959,3 +4959,202 @@ textarea:focus-visible {
     display: none;
   }
 }
+
+
+/* v7.64 - Analisis de Mercado */
+.market-analysis-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.market-search-card,
+.market-simulation-card,
+.market-summary-card,
+.market-channel-card,
+.market-insights-card,
+.market-results-card {
+  border-radius: 20px;
+}
+
+.market-search-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) 190px 130px auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.market-query-field {
+  min-width: 0;
+}
+
+.market-layout {
+  display: grid;
+  grid-template-columns: minmax(460px, 1.1fr) minmax(360px, 0.9fr);
+  gap: 16px;
+}
+
+.market-simulation-card h2,
+.market-summary-card h2,
+.market-channel-card h2,
+.market-insights-card h2,
+.market-results-card h2 {
+  margin: 0 0 6px;
+}
+
+.market-simulation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.market-wide-field {
+  grid-column: 1 / -1;
+}
+
+.market-opportunity-box {
+  margin-top: 16px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.market-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.market-summary-grid div,
+.market-insights-grid div {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.market-summary-grid span,
+.market-insights-grid span,
+.market-channel-tile span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+}
+
+.market-summary-grid strong,
+.market-insights-grid strong,
+.market-channel-tile strong {
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.market-data-note {
+  margin: 12px 0 0;
+}
+
+.market-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.market-channel-tile {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.market-channel-tile p {
+  margin: 6px 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.market-channel-tile em {
+  display: block;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.market-insights-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.market-insights-grid p {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.market-results-table th,
+.market-results-table td {
+  vertical-align: middle;
+}
+
+.market-item-cell {
+  min-width: 340px;
+}
+
+.market-item-cell > div {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.market-item-cell img,
+.market-thumb-placeholder {
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+  border: 1px solid #dbe4f0;
+  background: #f8fafc;
+  object-fit: contain;
+}
+
+.market-item-cell strong {
+  color: #0f172a;
+}
+
+.market-item-cell p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.market-catalog-badge {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+@media (max-width: 1200px) {
+  .market-search-grid,
+  .market-layout,
+  .market-insights-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .market-simulation-grid,
+  .market-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
