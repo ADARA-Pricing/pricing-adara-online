@@ -73,6 +73,23 @@ function chunk<T>(items: T[], size: number) {
   return result;
 }
 
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>,
+) {
+  let index = 0;
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (index < items.length) {
+      const currentIndex = index;
+      index += 1;
+      await worker(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(runners);
+}
+
 function normalizeSku(value?: string | null) {
   return (value || "").trim().toUpperCase();
 }
@@ -735,19 +752,17 @@ async function getPromotionSummaryForItem(item: MeliItem, account: any) {
     `/seller-promotions/items/${item.id}?app_version=v2`,
     `/seller-promotions/items/${item.id}/offers?app_version=v2`,
   ];
-  const rawResponses: unknown[] = [];
-
-  for (const endpoint of endpoints) {
+  const rawResponses = await Promise.all(endpoints.map(async (endpoint) => {
     try {
       const data = await meliFetch(endpoint, account);
-      rawResponses.push({ endpoint, data });
+      return { endpoint, data };
     } catch (error) {
-      rawResponses.push({
+      return {
         endpoint,
         error: error instanceof Error ? error.message : "No se pudo consultar este endpoint de promociones.",
-      });
+      };
     }
-  }
+  }));
 
   const endpointSummary = summarizePromotion(rawResponses, item.price, salePriceSummary?.promoPrice || null);
   if (salePriceSummary && !endpointSummary.promoPrice) return {
@@ -902,6 +917,20 @@ export async function POST() {
       priceToWinByItem.set(item.id, result);
       return result;
     }
+
+    const matchedItemsForFetch = items.filter((item) =>
+      getItemSkus(item).some((sku) => Boolean(productsBySku.get(sku)?.id)),
+    );
+
+    await mapWithConcurrency(matchedItemsForFetch, 4, async (item) => {
+      const detailedItem = await getDetailedItemForPricing(item, account);
+      detailedItemsByItem.set(item.id, detailedItem);
+      await Promise.all([
+        shippingCostForMatchedItem(item),
+        promotionForMatchedItem(item),
+        priceToWinForMatchedItem(item),
+      ]);
+    });
 
     const logs: any[] = [];
     let updated = 0;

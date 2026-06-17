@@ -66,13 +66,12 @@ export default function MercadoLibreConfigPage() {
 
     try {
       const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 120000);
+      const timeout = window.setTimeout(() => controller.abort(), 300000);
 
       const response = await fetch("/api/mercadolibre/sync-shipping", {
         method: "POST",
         signal: controller.signal,
-      });
-      window.clearTimeout(timeout);
+      }).finally(() => window.clearTimeout(timeout));
 
       const data = await response.json();
 
