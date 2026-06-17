@@ -57,6 +57,18 @@ type ProfitGroup = {
   totalPotential: number;
 };
 
+type PublicationRowGroup = {
+  key: string;
+  title: string;
+  rows: ProfitRow[];
+  status: ProfitStatus;
+  action: string;
+  bestMargin: number | null;
+  worstMargin: number | null;
+  totalPotential: number;
+  catalog: ReturnType<typeof catalogStatus>;
+};
+
 function rawInstallmentLabel(shipping?: MercadoLibreShippingCost | null) {
   if (!shipping) return "Sin dato ML";
   if (shipping.meli_installments_text) return shipping.meli_installments_text;
@@ -221,6 +233,75 @@ function groupProblemSummary(rows: ProfitRow[]) {
   ].filter(Boolean);
 
   return problems.length ? problems.slice(0, 3).join(" · ") : "Sin alertas";
+}
+
+function normalizedPublicationTitle(value?: string | null) {
+  return (value || "")
+    .toLowerCase()
+    .replace(/["']/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function publicationGroupKey(row: ProfitRow) {
+  const catalog = catalogStatus(row.shipping);
+  const title = row.shipping.meli_title || row.product.name;
+  const catalogId = row.shipping.meli_catalog_product_id;
+
+  if (catalogId) return `catalog:${catalogId}:${catalog.label}:${catalog.detail || ""}`;
+  if (row.shipping.meli_catalog_listing || row.shipping.meli_catalog_status) {
+    return `catalog:${catalog.label}:${catalog.detail || ""}:${normalizedPublicationTitle(title)}`;
+  }
+
+  return `listing:${normalizedPublicationTitle(title) || row.shipping.meli_item_id || row.key}`;
+}
+
+function buildPublicationGroups(rows: ProfitRow[]) {
+  const order: Record<ProfitStatus, number> = { danger: 4, missing: 3, warning: 2, ok: 1 };
+  const map = new Map<string, PublicationRowGroup>();
+
+  sortProfitRows(rows).forEach((row) => {
+    const key = publicationGroupKey(row);
+    const current = map.get(key);
+    if (!current) {
+      map.set(key, {
+        key,
+        title: row.shipping.meli_title || row.product.name,
+        rows: [row],
+        status: row.status,
+        action: row.action,
+        bestMargin: row.currentMargin,
+        worstMargin: row.currentMargin,
+        totalPotential: row.differenceAmount && row.differenceAmount > 0 ? row.differenceAmount : 0,
+        catalog: catalogStatus(row.shipping),
+      });
+      return;
+    }
+
+    current.rows.push(row);
+    if (order[row.status] > order[current.status]) {
+      current.status = row.status;
+      current.action = row.action;
+    }
+    if (row.currentMargin !== null) {
+      current.bestMargin = current.bestMargin === null ? row.currentMargin : Math.max(current.bestMargin, row.currentMargin);
+      current.worstMargin = current.worstMargin === null ? row.currentMargin : Math.min(current.worstMargin, row.currentMargin);
+    }
+    current.totalPotential += row.differenceAmount && row.differenceAmount > 0 ? row.differenceAmount : 0;
+  });
+
+  return Array.from(map.values()).map((group) => ({
+    ...group,
+    rows: sortProfitRows(group.rows),
+  })).sort((a, b) => {
+    const rankA = a.catalog.label.startsWith("Catalogo") ? 0 : 1;
+    const rankB = b.catalog.label.startsWith("Catalogo") ? 0 : 1;
+    if (rankA !== rankB) return rankA - rankB;
+    const byStatus = order[b.status] - order[a.status];
+    if (byStatus) return byStatus;
+    return a.title.localeCompare(b.title, "es");
+  });
 }
 
 function findOptionForPublication(
@@ -785,101 +866,108 @@ export default function RentabilidadMeliPage() {
                         <tr className="rentabilidad-detail-row">
                           <td colSpan={9}>
                             <div className="rentabilidad-detail-panel">
-                              <table className="rentabilidad-detail-table">
-                                <thead>
-                                  <tr>
-                                    <th>Publicacion</th>
-                                    <th>Canal</th>
-                                    <th>Precio ML / promo</th>
-                                    <th>Precio sugerido</th>
-                                    <th>Diferencia</th>
-                                    <th>Base calculo ML</th>
-                                    <th>Margen</th>
-                                    <th>Ganancia</th>
-                                    <th>Accion</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {group.rows.map((row) => (
-                                    <tr key={row.key}>
-                                      <td className="rentabilidad-product-cell">
-                                        <strong>{row.shipping.meli_title || row.product.name}</strong>
-                                        <span>
-                                          {row.shipping.meli_item_id || "-"} - {meliStatusLabel(row.shipping.meli_status)}
-                                          {row.shipping.meli_permalink ? (
-                                            <>
-                                              {" - "}
-                                              <a href={row.shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir ML</a>
-                                            </>
-                                          ) : null}
+                              {buildPublicationGroups(group.rows).map((publicationGroup) => (
+                                <div className="rentabilidad-publication-group" key={publicationGroup.key}>
+                                  <div className="rentabilidad-publication-group-header">
+                                    <div>
+                                      <div className="rentabilidad-publication-title">
+                                        <strong>{publicationGroup.title}</strong>
+                                        <span className={`rentabilidad-catalog-badge ${publicationGroup.catalog.className}`}>
+                                          {publicationGroup.catalog.label}
+                                          {publicationGroup.catalog.detail ? ` · ${publicationGroup.catalog.detail}` : ""}
                                         </span>
-                                        {(() => {
-                                          const status = catalogStatus(row.shipping);
-                                          return (
-                                            <span className={`rentabilidad-catalog-badge ${status.className}`}>
-                                              {status.label}
-                                              {status.detail ? ` · ${status.detail}` : ""}
-                                            </span>
-                                          );
-                                        })()}
-                                        {row.issue && <em>{row.issue}</em>}
-                                      </td>
-                                      <td>
-                                        <strong>{row.option.code}</strong>
-                                        <br />
-                                        <span className="small">{optionInstallmentLabel(row.option)}</span>
-                                      </td>
-                                      <td className="rentabilidad-price-cell">
-                                        <strong>{row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</strong>
-                                        <span>Lista {row.listPrice ? moneyWithCents(row.listPrice) : "-"}</span>
-                                        {row.buyerPrice && row.buyerPrice !== row.listPrice ? (
-                                          <span>Comprador {moneyWithCents(row.buyerPrice)}</span>
-                                        ) : null}
-                                      </td>
-                                      <td>{row.suggestedPrice ? moneyWithCents(row.suggestedPrice) : "-"}</td>
-                                      <td>
-                                        {row.differenceAmount !== null ? (
-                                          <span className={row.differenceAmount > 0 ? "rentabilidad-gap-up" : "rentabilidad-gap-down"}>
-                                            {moneyWithCents(row.differenceAmount)}
-                                            <br />
-                                            <small>{percent(row.differenceRate)}</small>
-                                          </span>
-                                        ) : "-"}
-                                      </td>
-                                      <td className="rentabilidad-promo-cell">
-                                        {row.promoName || row.shipping.meli_promo_price ? (
-                                          <>
-                                            <strong>{row.promoName || "Promocion activa"}</strong>
-                                            <span>Precio publico {row.buyerPrice ? moneyWithCents(row.buyerPrice) : "-"}</span>
-                                            {Number(row.shipping.meli_promo_meli_amount || 0) > 0 ? (
-                                              <span>Aporte ML {moneyWithCents(Number(row.shipping.meli_promo_meli_amount || 0))}</span>
-                                            ) : null}
-                                            <span>Base comision {row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</span>
-                                            <span>Descuento total {row.sellerDiscountAmount ? moneyWithCents(row.sellerDiscountAmount) : "-"}</span>
-                                          </>
-                                        ) : (
-                                          <span className="small">Sin promo detectada</span>
-                                        )}
-                                      </td>
-                                      <td>
-                                        <strong>{row.currentMargin !== null ? percent(row.currentMargin) : "-"}</strong>
-                                        <br />
-                                        <span className="small">Objetivo {percent(row.targetMargin)}</span>
-                                      </td>
-                                      <td>
-                                        {row.netProfit !== null ? moneyWithCents(row.netProfit) : "-"}
-                                        {row.suggestedNetProfit !== null ? (
-                                          <>
-                                            <br />
-                                            <span className="small">Sug. {moneyWithCents(row.suggestedNetProfit)}</span>
-                                          </>
-                                        ) : null}
-                                      </td>
-                                      <td><span className="badge">{row.action}</span></td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                      </div>
+                                      <p>
+                                        {publicationGroup.rows.length} publicaciones · Peor {publicationGroup.worstMargin !== null ? percent(publicationGroup.worstMargin) : "-"} · Mejor {publicationGroup.bestMargin !== null ? percent(publicationGroup.bestMargin) : "-"} · Ajuste {moneyWithCents(publicationGroup.totalPotential)}
+                                      </p>
+                                    </div>
+                                    <span className="badge">{publicationGroup.action}</span>
+                                  </div>
+                                  <div className="rentabilidad-channel-table-wrap">
+                                    <table className="rentabilidad-detail-table rentabilidad-channel-table">
+                                      <thead>
+                                        <tr>
+                                          <th>Canal</th>
+                                          <th>Item ML</th>
+                                          <th>Precio ML / promo</th>
+                                          <th>Precio sugerido</th>
+                                          <th>Diferencia</th>
+                                          <th>Base calculo ML</th>
+                                          <th>Margen</th>
+                                          <th>Ganancia</th>
+                                          <th>Accion</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {publicationGroup.rows.map((row) => (
+                                          <tr key={row.key}>
+                                            <td>
+                                              <strong>{row.option.code}</strong>
+                                              <br />
+                                              <span className="small">{optionInstallmentLabel(row.option)}</span>
+                                            </td>
+                                            <td className="rentabilidad-item-cell">
+                                              <strong>{row.shipping.meli_item_id || "-"}</strong>
+                                              <span>{meliStatusLabel(row.shipping.meli_status)}</span>
+                                              {row.shipping.meli_permalink ? (
+                                                <a href={row.shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir ML</a>
+                                              ) : null}
+                                              {row.issue && <em>{row.issue}</em>}
+                                            </td>
+                                            <td className="rentabilidad-price-cell">
+                                              <strong>{row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</strong>
+                                              <span>Lista {row.listPrice ? moneyWithCents(row.listPrice) : "-"}</span>
+                                              {row.buyerPrice && row.buyerPrice !== row.listPrice ? (
+                                                <span>Comprador {moneyWithCents(row.buyerPrice)}</span>
+                                              ) : null}
+                                            </td>
+                                            <td>{row.suggestedPrice ? moneyWithCents(row.suggestedPrice) : "-"}</td>
+                                            <td>
+                                              {row.differenceAmount !== null ? (
+                                                <span className={row.differenceAmount > 0 ? "rentabilidad-gap-up" : "rentabilidad-gap-down"}>
+                                                  {moneyWithCents(row.differenceAmount)}
+                                                  <br />
+                                                  <small>{percent(row.differenceRate)}</small>
+                                                </span>
+                                              ) : "-"}
+                                            </td>
+                                            <td className="rentabilidad-promo-cell">
+                                              {row.promoName || row.shipping.meli_promo_price ? (
+                                                <>
+                                                  <strong>{row.promoName || "Promocion activa"}</strong>
+                                                  <span>Precio publico {row.buyerPrice ? moneyWithCents(row.buyerPrice) : "-"}</span>
+                                                  {Number(row.shipping.meli_promo_meli_amount || 0) > 0 ? (
+                                                    <span>Aporte ML {moneyWithCents(Number(row.shipping.meli_promo_meli_amount || 0))}</span>
+                                                  ) : null}
+                                                  <span>Base comision {row.sellerEffectivePrice ? moneyWithCents(row.sellerEffectivePrice) : "-"}</span>
+                                                  <span>Descuento total {row.sellerDiscountAmount ? moneyWithCents(row.sellerDiscountAmount) : "-"}</span>
+                                                </>
+                                              ) : (
+                                                <span className="small">Sin promo detectada</span>
+                                              )}
+                                            </td>
+                                            <td>
+                                              <strong>{row.currentMargin !== null ? percent(row.currentMargin) : "-"}</strong>
+                                              <br />
+                                              <span className="small">Objetivo {percent(row.targetMargin)}</span>
+                                            </td>
+                                            <td>
+                                              {row.netProfit !== null ? moneyWithCents(row.netProfit) : "-"}
+                                              {row.suggestedNetProfit !== null ? (
+                                                <>
+                                                  <br />
+                                                  <span className="small">Sug. {moneyWithCents(row.suggestedNetProfit)}</span>
+                                                </>
+                                              ) : null}
+                                            </td>
+                                            <td><span className="badge">{row.action}</span></td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </td>
                         </tr>
