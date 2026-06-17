@@ -39,6 +39,21 @@ function boolLabel(value?: boolean | null) {
   return value ? "Sí" : "No";
 }
 
+function dateLabel(value?: string | null) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function listLabel(values?: string[] | null) {
+  if (!Array.isArray(values) || values.length === 0) return "-";
+  return values.slice(0, 3).join(", ") + (values.length > 3 ? ` +${values.length - 3}` : "");
+}
+
 function defaultFlag(value: boolean | null | undefined, fallback = false) {
   return value ?? fallback;
 }
@@ -54,6 +69,7 @@ export default function MercadoLibrePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncingMeli, setSyncingMeli] = useState(false);
   const [showChannelForm, setShowChannelForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
 
@@ -94,6 +110,27 @@ export default function MercadoLibrePage() {
 
   function updateCategory<K extends keyof MercadoLibreCategoryFee>(key: K, value: MercadoLibreCategoryFee[K]) {
     setCategoryForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function syncFromMercadoLibre() {
+    setSyncingMeli(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/mercadolibre/sync-shipping", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudo sincronizar MercadoLibre.");
+
+      setMessage(
+        `MercadoLibre sincronizado: ${data.category_fee_updates || 0} categorias y ${data.installment_fee_updates || 0} costos de cuotas actualizados.`
+      );
+      await loadData();
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : "No se pudo sincronizar MercadoLibre.");
+    } finally {
+      setSyncingMeli(false);
+    }
   }
 
   function applyChannelPreset(channelType: string) {
@@ -294,9 +331,12 @@ export default function MercadoLibrePage() {
         <div className="channel-actions-header">
           <div>
             <h2 style={{ marginTop: 0, marginBottom: 6 }}>Configuración de canales y categorías</h2>
-            <p className="small" style={{ marginBottom: 0 }}>Las tablas quedan siempre visibles. Usá estos botones para agregar o editar información sin recargar la pantalla.</p>
+            <p className="small" style={{ marginBottom: 0 }}>MercadoLibre puede actualizar comisiones por categoría y costo de cuotas desde las publicaciones sincronizadas.</p>
           </div>
           <div className="channel-actions-buttons">
+            <button type="button" className="button" onClick={syncFromMercadoLibre} disabled={syncingMeli}>
+              {syncingMeli ? "Sincronizando..." : "Actualizar costos ML"}
+            </button>
             <button type="button" className={`button ${showChannelForm ? "secondary" : "ghost"}`} onClick={startNewChannel}>
               {showChannelForm ? "Ocultar canal" : "Agregar canal"}
             </button>
@@ -422,18 +462,20 @@ export default function MercadoLibrePage() {
           {loading ? <p>Cargando...</p> : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Categoría</th><th>Comisión</th><th>Estado</th><th>Notas</th><th></th></tr></thead>
+                <thead><tr><th>Categoría</th><th>Comisión</th><th>Categorías ML</th><th>Sync ML</th><th>Estado</th><th>Notas</th><th></th></tr></thead>
                 <tbody>
                   {categories.map((item) => (
                     <tr key={item.id || item.category}>
                       <td>{item.category}</td>
                       <td>{percent(item.marketplace_fee_rate)}</td>
+                      <td>{listLabel(item.meli_category_names)}</td>
+                      <td>{dateLabel(item.meli_last_sync_at)}</td>
                       <td>{item.active ? <span className="badge">activa</span> : <span className="badge">inactiva</span>}</td>
                       <td>{item.notes || "-"}</td>
                       <td className="actions-cell"><button className="button ghost small-button" onClick={() => editCategory(item)}>Editar</button><button className="button danger small-button" onClick={() => deleteCategory(item)}>Eliminar</button></td>
                     </tr>
                   ))}
-                  {categories.length === 0 && <tr><td colSpan={5}>Sin categorías cargadas.</td></tr>}
+                  {categories.length === 0 && <tr><td colSpan={7}>Sin categorías cargadas.</td></tr>}
                 </tbody>
               </table>
             </div>

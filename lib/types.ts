@@ -74,6 +74,10 @@ export type MercadoLibreCategoryFee = {
   category: string;
   marketplace_fee_rate: number;
   active: boolean;
+  meli_category_ids?: string[] | null;
+  meli_category_names?: string[] | null;
+  meli_source?: string | null;
+  meli_last_sync_at?: string | null;
   notes?: string | null;
   created_at?: string;
   updated_at?: string;

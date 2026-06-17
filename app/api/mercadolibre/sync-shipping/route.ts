@@ -18,6 +18,7 @@ type MeliItem = {
   } | null;
   original_price?: number | null;
   currency_id?: string | null;
+  category_id?: string | null;
   listing_type_id?: string | null;
   catalog_listing?: boolean | null;
   catalog_product_id?: string | null;
@@ -65,6 +66,23 @@ type MeliListingPrice = {
     meli_percentage_fee?: number | null;
     percentage_fee?: number | null;
   } | null;
+};
+
+type MeliCategory = {
+  id?: string;
+  name?: string;
+  path_from_root?: Array<{ id?: string; name?: string }>;
+};
+
+type CurrentInstallmentFee = {
+  code: string;
+  installment_count?: number | null;
+  financing_fee_rate?: number | null;
+};
+
+type CategoryFeeObservation = {
+  rate: number;
+  meliCategories: Map<string, string>;
 };
 
 type PromotionSummary = {
@@ -275,6 +293,14 @@ function detectInstallmentsText(item: MeliItem, listingTypeName?: string | null)
   if (searchable.includes("gold_pro") || searchable.includes("premium")) return "Premium / cuotas";
   if (searchable.includes("gold_special") || searchable.includes("clásica") || searchable.includes("clasica")) return "Clásica / 1 pago";
 
+  return null;
+}
+
+function installmentCountFromText(text?: string | null) {
+  const normalized = (text || "").toLowerCase();
+  const match = normalized.match(/(\d{1,2})\s*(x|cuotas?|installments?)/i);
+  if (match?.[1]) return Number(match[1]);
+  if (normalized.includes("1 pago") || normalized.includes("clasica") || normalized.includes("clÃ¡sica")) return 1;
   return null;
 }
 
@@ -863,12 +889,27 @@ async function getListingPriceForItem(item: MeliItem, account: any): Promise<Mel
   if (!price || !listingTypeId) return null;
 
   try {
+    const params = new URLSearchParams({
+      price: String(price),
+      listing_type_id: listingTypeId,
+    });
+    if (item.category_id) params.set("category_id", item.category_id);
+
     const data = await meliFetch(
-      `/sites/MLA/listing_prices?price=${encodeURIComponent(String(price))}&listing_type_id=${encodeURIComponent(listingTypeId)}`,
+      `/sites/MLA/listing_prices?${params.toString()}`,
       account,
     );
     const prices = Array.isArray(data) ? data : [];
     return (prices.find((entry: MeliListingPrice) => entry?.listing_type_id === listingTypeId) || prices[0] || null) as MeliListingPrice | null;
+  } catch {
+    return null;
+  }
+}
+
+async function getMeliCategory(categoryId: string | null | undefined, account: any): Promise<MeliCategory | null> {
+  if (!categoryId) return null;
+  try {
+    return await meliFetch(`/categories/${categoryId}`, account) as MeliCategory;
   } catch {
     return null;
   }
@@ -956,6 +997,49 @@ function promotionSellerAmount(item: MeliPromotionItem) {
   return original > 0 && rate > 0 ? (original * rate) / 100 : null;
 }
 
+function marketplaceFeeRate(listingPrice: MeliListingPrice | null) {
+  return Number(listingPrice?.sale_fee_details?.meli_percentage_fee || 0);
+}
+
+function financingFeeRate(listingPrice: MeliListingPrice | null) {
+  return Number(listingPrice?.sale_fee_details?.financing_add_on_fee || 0);
+}
+
+function optionCodeForInstallments(count: number | null) {
+  if (!count || count <= 1) return "MC";
+  return `MP${count}`;
+}
+
+function optionCodeByFinancingRate(rate: number, options: CurrentInstallmentFee[]) {
+  if (!Number.isFinite(rate) || rate <= 0.01) return "MC";
+
+  const candidates = options.filter((option) => Number(option.installment_count || 0) > 1);
+  let best: { code: string; distance: number } | null = null;
+
+  candidates.forEach((option) => {
+    const distance = Math.abs(Number(option.financing_fee_rate || 0) - rate);
+    if (!best || distance < best.distance) best = { code: option.code, distance };
+  });
+
+  return best && best.distance <= 1.5 ? best.code : null;
+}
+
+function addCategoryObservation(
+  observations: Map<string, CategoryFeeObservation>,
+  productCategory: string | null | undefined,
+  listingPrice: MeliListingPrice | null,
+  meliCategory: MeliCategory | null,
+) {
+  const category = (productCategory || "").trim();
+  const rate = marketplaceFeeRate(listingPrice);
+  if (!category || !Number.isFinite(rate) || rate <= 0) return;
+
+  const current = observations.get(category) || { rate: 0, meliCategories: new Map<string, string>() };
+  current.rate = Math.max(current.rate, rate);
+  if (meliCategory?.id) current.meliCategories.set(meliCategory.id, meliCategory.name || meliCategory.id);
+  observations.set(category, current);
+}
+
 export async function POST() {
   const supabase = createAdminClient();
   const startedAt = Date.now();
@@ -974,6 +1058,13 @@ export async function POST() {
       .eq("status", "active");
 
     if (productsError) throw new Error(productsError.message);
+
+    const { data: currentInstallmentFees, error: installmentFeesError } = await supabase
+      .from("mercadolibre_installment_fees")
+      .select("code, installment_count, financing_fee_rate")
+      .eq("channel_type", "mercadolibre");
+
+    if (installmentFeesError) throw new Error(installmentFeesError.message);
 
     const productsBySku = new Map<string, Product>();
     (products || []).forEach((product: Product) => {
@@ -1015,6 +1106,9 @@ export async function POST() {
     const detailedItemsByItem = new Map<string, MeliItem>();
     const priceToWinByItem = new Map<string, MeliPriceToWin | null>();
     const listingPriceByItem = new Map<string, MeliListingPrice | null>();
+    const meliCategoriesById = new Map<string, MeliCategory | null>();
+    const categoryFeeObservations = new Map<string, CategoryFeeObservation>();
+    const financingFeeObservations = new Map<string, number[]>();
 
     async function shippingCostForMatchedItem(item: MeliItem) {
       const cached = shippingCostsByItem.get(item.id);
@@ -1051,6 +1145,18 @@ export async function POST() {
       detailedItemsByItem.set(item.id, detailedItem);
       const result = await getListingPriceForItem(detailedItem, account);
       listingPriceByItem.set(item.id, result);
+      return result;
+    }
+
+    async function meliCategoryForMatchedItem(item: MeliItem) {
+      const detailedItem = detailedItemsByItem.get(item.id) || await getDetailedItemForPricing(item, account);
+      detailedItemsByItem.set(item.id, detailedItem);
+      const categoryId = detailedItem.category_id || item.category_id || null;
+      if (!categoryId) return null;
+      if (meliCategoriesById.has(categoryId)) return meliCategoriesById.get(categoryId) || null;
+
+      const result = await getMeliCategory(categoryId, account);
+      meliCategoriesById.set(categoryId, result);
       return result;
     }
 
@@ -1158,6 +1264,7 @@ export async function POST() {
         const detailedItem = detailedItemsByItem.get(item.id) || item;
         const priceToWinResult = await priceToWinForMatchedItem(item);
         const listingPriceResult = await listingPriceForMatchedItem(item);
+        const meliCategoryResult = await meliCategoryForMatchedItem(item);
         const newShippingCost = Number(shippingResult?.cost || 0);
         const shippingSource = shippingResult?.source || null;
         const { data: current } = await supabase
@@ -1169,6 +1276,24 @@ export async function POST() {
 
         const oldShippingCost = Number(current?.shipping_cost_amount || 0);
         matched += 1;
+        addCategoryObservation(categoryFeeObservations, product.category, listingPriceResult, meliCategoryResult);
+
+        const detectedInstallmentsText = detectInstallmentsText(
+          detailedItem,
+          detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null,
+        );
+        const detectedInstallments = installmentCountFromText(detectedInstallmentsText);
+        const detectedFinancingFeeRate = financingFeeRate(listingPriceResult);
+        const optionCode =
+          detectedInstallments
+            ? optionCodeForInstallments(detectedInstallments)
+            : optionCodeByFinancingRate(detectedFinancingFeeRate, (currentInstallmentFees || []) as CurrentInstallmentFee[]);
+
+        if (optionCode && Number.isFinite(detectedFinancingFeeRate)) {
+          const currentRates = financingFeeObservations.get(optionCode) || [];
+          currentRates.push(detectedFinancingFeeRate);
+          financingFeeObservations.set(optionCode, currentRates);
+        }
 
         const metadataPayload = {
           meli_item_id: item.id,
@@ -1192,10 +1317,10 @@ export async function POST() {
           meli_listing_type_name: detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null,
           meli_sale_fee_amount: Number(listingPriceResult?.sale_fee_amount || 0) || null,
           meli_sale_fee_details: listingPriceResult?.sale_fee_details || null,
-          meli_financing_fee_rate: Number(listingPriceResult?.sale_fee_details?.financing_add_on_fee || 0),
+          meli_financing_fee_rate: detectedFinancingFeeRate,
           meli_sale_terms: detailedItem.sale_terms || [],
           meli_tags: detailedItem.tags || [],
-          meli_installments_text: detectInstallmentsText(detailedItem, detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null),
+          meli_installments_text: detectedInstallmentsText,
           meli_status: detailedItem.status || null,
           meli_stock: Number(detailedItem.available_quantity ?? 0),
           meli_free_shipping: Boolean(detailedItem.shipping?.free_shipping),
@@ -1289,6 +1414,52 @@ export async function POST() {
       await supabase.from("mercadolibre_shipping_sync_logs").insert(logs);
     }
 
+    const categoryFeeRows = [...categoryFeeObservations.entries()].map(([category, observation]) => {
+      const meliCategoryIds = [...observation.meliCategories.keys()];
+      const meliCategoryNames = [...observation.meliCategories.values()];
+      const sourceLabel = meliCategoryNames.length
+        ? `MercadoLibre: ${meliCategoryNames.slice(0, 4).join(", ")}${meliCategoryNames.length > 4 ? "..." : ""}`
+        : "MercadoLibre listing_prices";
+
+      return {
+        category,
+        marketplace_fee_rate: Number(observation.rate.toFixed(3)),
+        active: true,
+        notes: `Sincronizado desde ${sourceLabel}`,
+        meli_category_ids: meliCategoryIds,
+        meli_category_names: meliCategoryNames,
+        meli_source: "listing_prices.sale_fee_details.meli_percentage_fee",
+        meli_last_sync_at: now,
+        updated_at: now,
+      };
+    });
+
+    if (categoryFeeRows.length) {
+      const { error: categoryFeeError } = await supabase
+        .from("mercadolibre_category_fees")
+        .upsert(categoryFeeRows, { onConflict: "category" });
+      if (categoryFeeError) throw new Error(categoryFeeError.message);
+    }
+
+    let installmentFeeUpdates = 0;
+    for (const [code, rates] of financingFeeObservations.entries()) {
+      if (!rates.length) continue;
+      const rate = Math.max(...rates.filter((value) => Number.isFinite(value)));
+      if (!Number.isFinite(rate)) continue;
+
+      const { error: installmentFeeError } = await supabase
+        .from("mercadolibre_installment_fees")
+        .update({
+          financing_fee_rate: Number(rate.toFixed(3)),
+          notes: `Sincronizado desde MercadoLibre listing_prices (${rates.length} publicaciones)`,
+          updated_at: now,
+        })
+        .eq("code", code);
+
+      if (installmentFeeError) throw new Error(installmentFeeError.message);
+      installmentFeeUpdates += 1;
+    }
+
     return NextResponse.json({
       ok: true,
       total_items: items.length,
@@ -1306,6 +1477,8 @@ export async function POST() {
       listing_price_queries: listingPriceByItem.size,
       seller_promotions: sellerPromotions.length,
       promotion_opportunities: promotionOpportunityRows.length,
+      category_fee_updates: categoryFeeRows.length,
+      installment_fee_updates: installmentFeeUpdates,
       logs: logs.slice(0, 50),
     });
   } catch (error) {
