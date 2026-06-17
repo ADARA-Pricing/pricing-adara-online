@@ -49,7 +49,8 @@ export default function LoginPage() {
   return (
     <main className="container">
       <section className="card login">
-        <div className="brand" style={{ marginBottom: 20 }}>
+        <div className="login-brand">
+          <img src="/logo-adara.png" alt="ADARA Group" />
           <h1>Pricing ADARA</h1>
           <p>Ingreso del equipo</p>
         </div>

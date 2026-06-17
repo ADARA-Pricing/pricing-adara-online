@@ -186,8 +186,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="sidebar">
         <div className="sidebar-logo-row">
           <Link href="/precios" className="adara-logo" aria-label="ADARA">
-            <span className="adara-logo-main">ADARA</span>
-            <span className="adara-logo-sub">Group</span>
+            <img src="/logo-adara.png" alt="ADARA Group" />
+            <span className="adara-logo-mark" aria-hidden="true">A</span>
           </Link>
           <button type="button" className="sidebar-collapse" aria-label={collapsed ? "Expandir menú" : "Contraer menú"} onClick={toggleCollapsed}>
             {collapsed ? ">" : "<"}
