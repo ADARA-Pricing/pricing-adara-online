@@ -154,6 +154,9 @@ function optionFromFinancingFee(
   shipping: MercadoLibreShippingCost,
   options: MercadoLibrePriceOption[],
 ) {
+  const explicitInstallments = installmentNumberFromLabel(rawInstallmentLabel(shipping));
+  if (explicitInstallments && explicitInstallments > 1) return null;
+
   const feeRate = Number(shipping.meli_financing_fee_rate ?? 0);
   if (!Number.isFinite(feeRate)) return null;
 
@@ -161,7 +164,12 @@ function optionFromFinancingFee(
     return options.find((option) => option.code === "MC") || mercadoLibreClassicOption();
   }
 
-  return null;
+  if (feeRate <= 0.01) return null;
+
+  return (
+    options.find((option) => Math.abs(Number(option.financing_fee_rate || 0) - feeRate) <= 0.15) ||
+    null
+  );
 }
 
 function publicationSortRank(row: ProfitRow) {
