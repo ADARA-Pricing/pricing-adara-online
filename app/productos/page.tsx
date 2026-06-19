@@ -203,6 +203,20 @@ function productImage(shippings: MercadoLibreShippingCost[]) {
   return shippings.find((shipping) => Boolean(shipping.meli_thumbnail))?.meli_thumbnail || null;
 }
 
+function bestMeliPrice(shippings: MercadoLibreShippingCost[]) {
+  const activePrices = shippings
+    .filter((shipping) => shipping.meli_status === "active")
+    .map((shipping) => Number(shipping.meli_price || shipping.meli_promo_price || 0))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  const prices = activePrices.length
+    ? activePrices
+    : shippings
+        .map((shipping) => Number(shipping.meli_price || shipping.meli_promo_price || 0))
+        .filter((price) => Number.isFinite(price) && price > 0);
+
+  return prices.length ? Math.min(...prices) : null;
+}
+
 function installmentCampaignTag(shipping?: MercadoLibreShippingCost | null) {
   if (!shipping?.meli_tags || !Array.isArray(shipping.meli_tags)) return null;
   const tags = shipping.meli_tags.map((tag) => String(tag).toLowerCase());
@@ -884,6 +898,7 @@ export default function ProductsPage() {
                 .sort()
                 .reverse()[0];
               const thumbnail = productImage(shippings);
+              const bestPrice = bestMeliPrice(shippings);
               return (
                 <article key={product.id || product.sku} className={`product-row-card ${expanded ? "expanded" : ""}`}>
                   <div className="product-row-main">
@@ -906,8 +921,8 @@ export default function ProductsPage() {
                       <strong>{money(product.cost_without_vat)}</strong>
                     </div>
                     <div className="product-row-stat">
-                      <span>IVA</span>
-                      <strong>{product.vat_rate}%</strong>
+                      <span>Precio ML</span>
+                      <strong>{bestPrice ? money(bestPrice) : "-"}</strong>
                     </div>
                     <div className="product-row-stat">
                       <span>Publicaciones ML</span>
