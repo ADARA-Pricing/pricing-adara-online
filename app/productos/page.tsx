@@ -914,6 +914,10 @@ export default function ProductsPage() {
                       <strong>{publicationCount || "-"}</strong>
                     </div>
                     <div className="product-row-stat">
+                      <span>Stock ML</span>
+                      <strong>{publicationCount ? sharedMlStock : "-"}</strong>
+                    </div>
+                    <div className="product-row-stat">
                       <span>Estado ML</span>
                       <strong>
                         {publicationCount ? (
