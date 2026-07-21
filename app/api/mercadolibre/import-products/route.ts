@@ -207,7 +207,7 @@ async function buildPreview() {
     existingBySku.set(normalizeSku(product.sku), product);
   });
 
-  const rows = items.map((item) => {
+  const rawRows = items.map((item) => {
     const skus = getItemSkus(item);
     const sku = skus[0] || fallbackSku(item);
     const existing = existingBySku.get(sku) || null;
@@ -231,6 +231,46 @@ async function buildPreview() {
     };
   });
 
+  const groupedBySku = new Map<string, (typeof rawRows)[number][]>();
+  rawRows.forEach((row) => {
+    const key = normalizeSku(row.sku);
+    const group = groupedBySku.get(key) || [];
+    group.push(row);
+    groupedBySku.set(key, group);
+  });
+
+  const rows = [...groupedBySku.values()]
+    .map((group) => {
+      const sorted = [...group].sort((a, b) => {
+        const aActive = a.status === "active" ? 1 : 0;
+        const bActive = b.status === "active" ? 1 : 0;
+        if (aActive !== bActive) return bActive - aActive;
+
+        const aHasSku = a.sku_source === "meli" ? 1 : 0;
+        const bHasSku = b.sku_source === "meli" ? 1 : 0;
+        if (aHasSku !== bHasSku) return bHasSku - aHasSku;
+
+        if (a.stock !== b.stock) return b.stock - a.stock;
+        if (a.price !== b.price) return a.price - b.price;
+        return a.title.localeCompare(b.title, "es");
+      });
+      const representative = sorted[0];
+      const publicationIds = sorted.map((row) => row.meli_item_id);
+      const maxStock = Math.max(...sorted.map((row) => Number(row.stock || 0)));
+
+      return {
+        ...representative,
+        stock: maxStock,
+        publication_count: sorted.length,
+        publication_ids: publicationIds,
+        duplicate_titles: sorted.slice(1).map((row) => row.title),
+      };
+    })
+    .sort((a, b) => {
+      if (a.exists !== b.exists) return a.exists ? 1 : -1;
+      return a.sku.localeCompare(b.sku, "es");
+    });
+
   const missingRows = rows.filter((row) => !row.exists);
   const existingRows = rows.filter((row) => row.exists);
   const withoutSku = rows.filter((row) => row.sku_source === "item_id");
@@ -238,7 +278,9 @@ async function buildPreview() {
   return {
     ok: true,
     totals_by_status: totalsByStatus,
-    total_items: rows.length,
+    total_items: rawRows.length,
+    total_products: rows.length,
+    duplicate_publications: rawRows.length - rows.length,
     missing: missingRows.length,
     existing: existingRows.length,
     without_sku: withoutSku.length,
@@ -265,10 +307,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const importExisting = Boolean(body?.import_existing);
+    const selectedSkus = Array.isArray(body?.selected_skus)
+      ? new Set(body.selected_skus.map((sku: unknown) => normalizeSku(String(sku || ""))).filter(Boolean))
+      : null;
     const preview = await buildPreview();
     if ("error" in preview) return NextResponse.json({ error: preview.error }, { status: preview.status });
 
-    const rowsToImport = preview.rows.filter((row) => importExisting || !row.exists);
+    let rowsToImport = preview.rows.filter((row) => importExisting || !row.exists);
+    if (selectedSkus) {
+      rowsToImport = rowsToImport.filter((row) => selectedSkus.has(normalizeSku(row.sku)));
+    }
     const payload = rowsToImport.map((row) => row.payload);
 
     if (payload.length === 0) {
@@ -287,7 +335,10 @@ export async function POST(request: NextRequest) {
       ok: true,
       imported: payload.length,
       total_items: preview.total_items,
+      total_products: preview.total_products,
       skipped_existing: importExisting ? 0 : preview.existing,
+      skipped_unselected: selectedSkus ? preview.rows.filter((row) => !row.exists && !selectedSkus.has(normalizeSku(row.sku))).length : 0,
+      duplicate_publications: preview.duplicate_publications,
       without_sku: preview.without_sku,
     });
   } catch (error) {

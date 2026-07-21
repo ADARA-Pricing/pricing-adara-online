@@ -62,6 +62,9 @@ type MeliImportRow = {
   thumbnail: string | null;
   permalink: string | null;
   exists: boolean;
+  publication_count: number;
+  publication_ids: string[];
+  duplicate_titles?: string[];
   payload: ImportRow["payload"] & {
     stock?: number | null;
   };
@@ -69,6 +72,8 @@ type MeliImportRow = {
 
 type MeliImportPreview = {
   total_items: number;
+  total_products: number;
+  duplicate_publications: number;
   missing: number;
   existing: number;
   without_sku: number;
@@ -340,6 +345,7 @@ export default function ProductsPage() {
   const [meliPreview, setMeliPreview] = useState<MeliImportPreview | null>(null);
   const [meliPreviewLoading, setMeliPreviewLoading] = useState(false);
   const [meliImporting, setMeliImporting] = useState(false);
+  const [selectedMeliSkus, setSelectedMeliSkus] = useState<string[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
 
   const costWithVatPreview = useMemo(() => {
@@ -347,6 +353,8 @@ export default function ProductsPage() {
     const vat = Number(form.vat_rate || 0);
     return cost * (1 + vat / 100);
   }, [form.cost_without_vat, form.vat_rate]);
+
+  const selectedMeliSet = useMemo(() => new Set(selectedMeliSkus), [selectedMeliSkus]);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -450,8 +458,10 @@ export default function ProductsPage() {
       const response = await fetch("/api/mercadolibre/import-products", { method: "GET" });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudo leer MercadoLibre.");
-      setMeliPreview(data as MeliImportPreview);
-      setMessage(`MercadoLibre leido: ${data.total_items || 0} publicaciones, ${data.missing || 0} productos nuevos para crear.`);
+      const preview = data as MeliImportPreview;
+      setMeliPreview(preview);
+      setSelectedMeliSkus(preview.rows.filter((row) => !row.exists).map((row) => row.sku));
+      setMessage(`MercadoLibre leido: ${preview.total_items || 0} publicaciones agrupadas en ${preview.total_products || preview.rows.length} SKU. ${preview.missing || 0} productos nuevos disponibles.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo leer MercadoLibre.");
     } finally {
@@ -465,6 +475,7 @@ export default function ProductsPage() {
     setMessage(null);
     setError(null);
     setMeliPreview(null);
+    setSelectedMeliSkus([]);
     loadMeliImportPreview();
   }
 
@@ -651,7 +662,28 @@ export default function ProductsPage() {
     await loadProducts();
   }
 
+  function toggleMeliSku(sku: string, checked: boolean) {
+    setSelectedMeliSkus((current) => {
+      if (checked) return current.includes(sku) ? current : [...current, sku];
+      return current.filter((item) => item !== sku);
+    });
+  }
+
+  function selectAllMissingMeli() {
+    if (!meliPreview) return;
+    setSelectedMeliSkus(meliPreview.rows.filter((row) => !row.exists).map((row) => row.sku));
+  }
+
+  function clearMeliSelection() {
+    setSelectedMeliSkus([]);
+  }
+
   async function importMeliProducts() {
+    if (selectedMeliSkus.length === 0) {
+      setError("Selecciona al menos un producto nuevo para importar.");
+      return;
+    }
+
     setMeliImporting(true);
     setSaving(true);
     setMessage(null);
@@ -661,12 +693,12 @@ export default function ProductsPage() {
       const response = await fetch("/api/mercadolibre/import-products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ import_existing: false }),
+        body: JSON.stringify({ import_existing: false, selected_skus: selectedMeliSkus }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudo importar desde MercadoLibre.");
 
-      setMessage(`Importacion MercadoLibre finalizada: ${data.imported || 0} productos nuevos creados. Existentes omitidos: ${data.skipped_existing || 0}.`);
+      setMessage(`Importacion MercadoLibre finalizada: ${data.imported || 0} productos nuevos creados. Existentes omitidos: ${data.skipped_existing || 0}. No seleccionados: ${data.skipped_unselected || 0}.`);
       setMeliPreview(null);
       await loadProducts();
       await loadMeliImportPreview();
@@ -856,7 +888,7 @@ export default function ProductsPage() {
                     ? "Si el SKU ya existe, la app actualiza el producto. Si no existe, lo crea."
                     : activeProductTab === "excel"
                       ? "Descarga la plantilla, completala en Excel y subila. Si el SKU ya existe, se actualiza; si no existe, se crea."
-                      : "Traemos tus publicaciones activas y pausadas de MercadoLibre, detectamos SKU, y creamos solo los productos que todavia no estan en la app."}
+                      : "Traemos tus publicaciones activas y pausadas de MercadoLibre, las agrupamos por SKU para evitar duplicados, y vos elegis cuales crear."}
                 </p>
               </div>
               <div className="actions product-editor-controls" style={{ alignItems: "center", flexWrap: "nowrap" }}>
@@ -970,15 +1002,21 @@ export default function ProductsPage() {
                   <div>
                     <strong>Vista previa MercadoLibre</strong>
                     <p className="small" style={{ margin: "4px 0 0" }}>
-                      La importacion crea productos faltantes y no pisa costos de productos ya existentes.
+                      La importacion agrupa publicaciones por SKU para evitar duplicados. Podes elegir exactamente que productos nuevos crear.
                     </p>
                   </div>
                   <div className="actions">
                     <button className="button ghost products-secondary-button" type="button" disabled={meliPreviewLoading || meliImporting} onClick={loadMeliImportPreview}>
                       {meliPreviewLoading ? "Leyendo ML..." : "Actualizar vista previa"}
                     </button>
-                    <button className="button products-primary-button" type="button" disabled={!meliPreview || meliPreview.missing === 0 || meliImporting || saving} onClick={importMeliProducts}>
-                      {meliImporting ? "Importando..." : "Importar nuevos"}
+                    <button className="button ghost products-secondary-button" type="button" disabled={!meliPreview || meliImporting} onClick={selectAllMissingMeli}>
+                      Seleccionar nuevos
+                    </button>
+                    <button className="button ghost products-secondary-button" type="button" disabled={!meliPreview || meliImporting} onClick={clearMeliSelection}>
+                      Limpiar seleccion
+                    </button>
+                    <button className="button products-primary-button" type="button" disabled={!meliPreview || selectedMeliSkus.length === 0 || meliImporting || saving} onClick={importMeliProducts}>
+                      {meliImporting ? "Importando..." : `Importar seleccionados (${selectedMeliSkus.length})`}
                     </button>
                   </div>
                 </div>
@@ -991,9 +1029,9 @@ export default function ProductsPage() {
                       <div className="card product-kpi-card">
                         <span className="product-kpi-icon">ML</span>
                         <div>
-                          <p>Publicaciones ML</p>
-                          <strong>{meliPreview.total_items}</strong>
-                          <small>Activas y pausadas</small>
+                          <p>SKU unicos</p>
+                          <strong>{meliPreview.total_products || meliPreview.rows.length}</strong>
+                          <small>{meliPreview.total_items} publicaciones ML</small>
                         </div>
                       </div>
                       <div className="card product-kpi-card">
@@ -1015,9 +1053,9 @@ export default function ProductsPage() {
                       <div className="card product-kpi-card">
                         <span className="product-kpi-icon amber">!</span>
                         <div>
-                          <p>Sin SKU visible</p>
-                          <strong>{meliPreview.without_sku}</strong>
-                          <small>Usan Item ID como SKU</small>
+                          <p>Publicaciones repetidas</p>
+                          <strong>{meliPreview.duplicate_publications || 0}</strong>
+                          <small>Filtradas por SKU</small>
                         </div>
                       </div>
                     </section>
@@ -1026,6 +1064,7 @@ export default function ProductsPage() {
                       <table>
                         <thead>
                           <tr>
+                            <th>Elegir</th>
                             <th>Foto</th>
                             <th>SKU</th>
                             <th>Producto ML</th>
@@ -1037,7 +1076,17 @@ export default function ProductsPage() {
                         </thead>
                         <tbody>
                           {meliPreview.rows.slice(0, 80).map((row) => (
-                            <tr key={row.meli_item_id}>
+                            <tr key={row.sku}>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedMeliSet.has(row.sku)}
+                                  disabled={row.exists || meliImporting}
+                                  onChange={(event) => toggleMeliSku(row.sku, event.target.checked)}
+                                  aria-label={`Importar ${row.sku}`}
+                                  style={{ width: 18, height: 18 }}
+                                />
+                              </td>
                               <td>
                                 {row.thumbnail ? <img src={row.thumbnail} alt="" style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 8, background: "#f4f6f8" }} /> : "-"}
                               </td>
@@ -1055,7 +1104,7 @@ export default function ProductsPage() {
                               <td>{row.stock ?? "-"}</td>
                               <td>
                                 <span className={`badge ${row.exists ? "meli-status-active" : "meli-status-none"}`}>
-                                  {row.exists ? "Ya existe" : "Crear"}
+                                  {row.exists ? "Ya existe" : selectedMeliSet.has(row.sku) ? "Crear" : "Omitir"}
                                 </span>
                               </td>
                             </tr>
@@ -1066,7 +1115,7 @@ export default function ProductsPage() {
 
                     {meliPreview.rows.length > 80 && (
                       <p className="small" style={{ marginTop: 10 }}>
-                        Mostrando 80 de {meliPreview.rows.length} publicaciones. La importacion toma todas las nuevas.
+                        Mostrando 80 de {meliPreview.rows.length} SKU unicos. La importacion toma solo los seleccionados.
                       </p>
                     )}
                   </div>
