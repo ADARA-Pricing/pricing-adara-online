@@ -743,7 +743,21 @@ export default function ProductsPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudo importar desde MercadoLibre.");
 
-      setMessage(`Importacion MercadoLibre finalizada: ${data.imported || 0} productos nuevos creados. Existentes omitidos: ${data.skipped_existing || 0}. No seleccionados: ${data.skipped_unselected || 0}.`);
+      const importedCount = Number(data.imported || 0);
+      let syncMessage = "";
+
+      if (importedCount > 0) {
+        setMessage(`Importacion MercadoLibre finalizada: ${importedCount} productos nuevos creados. Sincronizando fotos, envios y publicaciones...`);
+        const syncResponse = await fetch("/api/mercadolibre/sync-shipping", { method: "POST" });
+        const syncData = await syncResponse.json();
+        if (!syncResponse.ok) {
+          throw new Error(syncData?.error || "Los productos se importaron, pero no se pudo sincronizar MercadoLibre.");
+        }
+
+        syncMessage = ` Sincronizacion ML: ${syncData.matched || 0} publicaciones vinculadas, ${syncData.updated || 0} costos de envio actualizados, ${syncData.no_shipping_cost || 0} sin costo devuelto.`;
+      }
+
+      setMessage(`Importacion MercadoLibre finalizada: ${importedCount} productos nuevos creados. Existentes omitidos: ${data.skipped_existing || 0}. No seleccionados: ${data.skipped_unselected || 0}.${syncMessage}`);
       setMeliPreview(null);
       await loadProducts();
       await loadMeliImportPreview();
@@ -1061,7 +1075,7 @@ export default function ProductsPage() {
                       Limpiar seleccion
                     </button>
                     <button className="button products-primary-button" type="button" disabled={!meliPreview || selectedMeliSkus.length === 0 || meliImporting || saving} onClick={importMeliProducts}>
-                      {meliImporting ? "Importando..." : `Importar seleccionados (${selectedMeliSkus.length})`}
+                      {meliImporting ? "Importando y sincronizando..." : `Importar seleccionados (${selectedMeliSkus.length})`}
                     </button>
                   </div>
                 </div>
