@@ -31,6 +31,28 @@ const emptyCategory: MercadoLibreCategoryFee = {
   notes: ""
 };
 
+type MeliCategoryImportRow = {
+  meli_category_id: string;
+  meli_category_name: string;
+  meli_category_path: string;
+  suggested_category: string;
+  marketplace_fee_rate: number;
+  publication_count: number;
+  active_publications: number;
+  paused_publications: number;
+  sample_titles: string[];
+  exists: boolean;
+  existing_category: string | null;
+};
+
+type MeliCategoryImportPreview = {
+  total_items: number;
+  total_categories: number;
+  missing: number;
+  existing: number;
+  rows: MeliCategoryImportRow[];
+};
+
 function numberValue(value: number | null | undefined) {
   return value === null || value === undefined ? "" : String(value);
 }
@@ -72,6 +94,12 @@ export default function MercadoLibrePage() {
   const [syncingMeli, setSyncingMeli] = useState(false);
   const [showChannelForm, setShowChannelForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [showCategoryImport, setShowCategoryImport] = useState(false);
+  const [categoryImportPreview, setCategoryImportPreview] = useState<MeliCategoryImportPreview | null>(null);
+  const [categoryImportLoading, setCategoryImportLoading] = useState(false);
+  const [categoryImportSaving, setCategoryImportSaving] = useState(false);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  const [categoryImportNames, setCategoryImportNames] = useState<Record<string, string>>({});
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -130,6 +158,94 @@ export default function MercadoLibrePage() {
       setError(syncError instanceof Error ? syncError.message : "No se pudo sincronizar MercadoLibre.");
     } finally {
       setSyncingMeli(false);
+    }
+  }
+
+  async function loadCategoryImportPreview() {
+    setCategoryImportLoading(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/mercadolibre/import-categories");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudieron leer las categorias de MercadoLibre.");
+
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+      const names = rows.reduce((acc: Record<string, string>, row: MeliCategoryImportRow) => {
+        acc[row.meli_category_id] = row.suggested_category || row.meli_category_name || row.meli_category_id;
+        return acc;
+      }, {});
+
+      setCategoryImportPreview({
+        total_items: Number(data?.total_items || 0),
+        total_categories: Number(data?.total_categories || rows.length || 0),
+        missing: Number(data?.missing || 0),
+        existing: Number(data?.existing || 0),
+        rows,
+      });
+      setCategoryImportNames(names);
+      setSelectedCategoryIds([]);
+      setShowCategoryImport(true);
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "No se pudieron leer las categorias de MercadoLibre.");
+    } finally {
+      setCategoryImportLoading(false);
+    }
+  }
+
+  async function startCategoryImport() {
+    setShowChannelForm(false);
+    setShowCategoryForm(false);
+    if (showCategoryImport && categoryImportPreview) {
+      setShowCategoryImport(false);
+      return;
+    }
+    setShowCategoryImport(true);
+    await loadCategoryImportPreview();
+  }
+
+  function toggleCategorySelection(categoryId: string, checked: boolean) {
+    setSelectedCategoryIds((current) => (
+      checked ? [...new Set([...current, categoryId])] : current.filter((id) => id !== categoryId)
+    ));
+  }
+
+  function updateCategoryImportName(categoryId: string, value: string) {
+    setCategoryImportNames((current) => ({ ...current, [categoryId]: value }));
+  }
+
+  async function importSelectedCategories() {
+    setCategoryImportSaving(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const categoriesToImport = selectedCategoryIds
+        .map((id) => ({ meli_category_id: id, category: (categoryImportNames[id] || "").trim() }))
+        .filter((entry) => entry.category);
+
+      if (categoriesToImport.length === 0) {
+        setError("Selecciona al menos una categoria y asignale un nombre.");
+        return;
+      }
+
+      const response = await fetch("/api/mercadolibre/import-categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categories: categoriesToImport }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudieron importar las categorias.");
+
+      setMessage(`Categorias importadas: ${data.imported || 0}.`);
+      setSelectedCategoryIds([]);
+      await loadData();
+      await loadCategoryImportPreview();
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "No se pudieron importar las categorias.");
+    } finally {
+      setCategoryImportSaving(false);
     }
   }
 
@@ -286,6 +402,7 @@ export default function MercadoLibrePage() {
       applies_vat: defaultFlag(item.applies_vat, isMl)
     });
     setShowCategoryForm(false);
+    setShowCategoryImport(false);
     setShowChannelForm(true);
     setMessage(`Editando ${item.code}.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -294,6 +411,7 @@ export default function MercadoLibrePage() {
   function editCategory(item: MercadoLibreCategoryFee) {
     setCategoryForm({ ...emptyCategory, ...item });
     setShowChannelForm(false);
+    setShowCategoryImport(false);
     setShowCategoryForm(true);
     setMessage(`Editando categoría ${item.category}.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -304,6 +422,7 @@ export default function MercadoLibrePage() {
     setMessage(null);
     setError(null);
     setShowCategoryForm(false);
+    setShowCategoryImport(false);
     setShowChannelForm((current) => !current);
   }
 
@@ -312,6 +431,7 @@ export default function MercadoLibrePage() {
     setMessage(null);
     setError(null);
     setShowChannelForm(false);
+    setShowCategoryImport(false);
     setShowCategoryForm((current) => !current);
   }
 
@@ -337,6 +457,9 @@ export default function MercadoLibrePage() {
             <button type="button" className="button" onClick={syncFromMercadoLibre} disabled={syncingMeli}>
               {syncingMeli ? "Sincronizando..." : "Actualizar costos ML"}
             </button>
+            <button type="button" className={`button ${showCategoryImport ? "secondary" : "ghost"}`} onClick={startCategoryImport} disabled={categoryImportLoading}>
+              {categoryImportLoading ? "Leyendo ML..." : showCategoryImport ? "Ocultar importador" : "Importar categorias ML"}
+            </button>
             <button type="button" className={`button ${showChannelForm ? "secondary" : "ghost"}`} onClick={startNewChannel}>
               {showChannelForm ? "Ocultar canal" : "Agregar canal"}
             </button>
@@ -346,6 +469,122 @@ export default function MercadoLibrePage() {
           </div>
         </div>
       </section>
+
+      {showCategoryImport && (
+        <section className="card channel-card channel-editor-card meli-category-import-card" style={{ marginBottom: 20 }}>
+          <div className="section-title-row">
+            <div>
+              <h2 style={{ marginTop: 0, marginBottom: 6 }}>Importar categorias desde MercadoLibre</h2>
+              <p className="small" style={{ marginBottom: 0 }}>
+                Trae las categorias con publicaciones activas o pausadas, calcula la comision detectada y te deja elegir cuales guardar.
+              </p>
+            </div>
+            <div className="channel-actions-buttons">
+              <button type="button" className="button ghost" onClick={loadCategoryImportPreview} disabled={categoryImportLoading}>
+                {categoryImportLoading ? "Actualizando..." : "Actualizar lista"}
+              </button>
+              <button type="button" className="button ghost" onClick={() => setShowCategoryImport(false)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+
+          {categoryImportPreview && (
+            <div className="category-import-summary">
+              <span className="badge">{categoryImportPreview.total_categories} categorias ML</span>
+              <span className="badge">{categoryImportPreview.total_items} publicaciones</span>
+              <span className="badge">{categoryImportPreview.missing} nuevas</span>
+              <span className="badge">{categoryImportPreview.existing} ya cargadas</span>
+            </div>
+          )}
+
+          <div className="channel-actions-buttons category-import-actions">
+            <button
+              type="button"
+              className="button ghost small-button"
+              onClick={() => setSelectedCategoryIds((categoryImportPreview?.rows || []).filter((row) => !row.exists).map((row) => row.meli_category_id))}
+              disabled={!categoryImportPreview || categoryImportLoading}
+            >
+              Seleccionar nuevas
+            </button>
+            <button
+              type="button"
+              className="button ghost small-button"
+              onClick={() => setSelectedCategoryIds([])}
+              disabled={selectedCategoryIds.length === 0}
+            >
+              Limpiar seleccion
+            </button>
+            <button
+              type="button"
+              className="button small-button"
+              onClick={importSelectedCategories}
+              disabled={categoryImportSaving || selectedCategoryIds.length === 0}
+            >
+              {categoryImportSaving ? "Importando..." : `Importar ${selectedCategoryIds.length}`}
+            </button>
+          </div>
+
+          {categoryImportLoading && !categoryImportPreview ? <p>Cargando categorias desde MercadoLibre...</p> : (
+            <div className="table-wrap category-import-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Importar</th>
+                    <th>Nombre en la app</th>
+                    <th>Categoria MercadoLibre</th>
+                    <th>Publicaciones</th>
+                    <th>Comision</th>
+                    <th>Estado</th>
+                    <th>Ejemplos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(categoryImportPreview?.rows || []).map((row) => {
+                    const selected = selectedCategoryIds.includes(row.meli_category_id);
+                    return (
+                      <tr key={row.meli_category_id}>
+                        <td>
+                          <label className="checkbox-row category-import-check">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={(event) => toggleCategorySelection(row.meli_category_id, event.target.checked)}
+                            />
+                            <span>{selected ? "Si" : "No"}</span>
+                          </label>
+                        </td>
+                        <td>
+                          <input
+                            value={categoryImportNames[row.meli_category_id] || ""}
+                            onChange={(event) => updateCategoryImportName(row.meli_category_id, event.target.value)}
+                            placeholder={row.meli_category_name}
+                          />
+                        </td>
+                        <td>
+                          <strong>{row.meli_category_name}</strong>
+                          <div className="small">{row.meli_category_path}</div>
+                          <div className="small">{row.meli_category_id}</div>
+                        </td>
+                        <td>
+                          <strong>{row.publication_count}</strong>
+                          <div className="small">{row.active_publications} activas / {row.paused_publications} pausadas</div>
+                        </td>
+                        <td>{percent(row.marketplace_fee_rate)}</td>
+                        <td>{row.exists ? <span className="badge">ya cargada</span> : <span className="badge">nueva</span>}</td>
+                        <td>{row.sample_titles?.length ? row.sample_titles.join(" | ") : "-"}</td>
+                      </tr>
+                    );
+                  })}
+                  {!categoryImportLoading && (!categoryImportPreview || categoryImportPreview.rows.length === 0) && (
+                    <tr><td colSpan={7}>No encontramos categorias con publicaciones en MercadoLibre.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {showChannelForm && (
         <section className="card channel-card channel-editor-card" style={{ marginBottom: 20 }}>

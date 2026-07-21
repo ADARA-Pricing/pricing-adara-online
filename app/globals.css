@@ -4983,6 +4983,36 @@ textarea:focus-visible {
   border-radius: 20px;
 }
 
+/* MercadoLibre category importer */
+.meli-category-import-card {
+  border-color: #dbe4f0;
+}
+
+.category-import-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.category-import-actions {
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}
+
+.category-import-table-wrap table {
+  min-width: 980px;
+}
+
+.category-import-table-wrap td:nth-child(2) input {
+  min-width: 220px;
+}
+
+.category-import-check {
+  justify-content: flex-start;
+  min-width: 70px;
+}
+
 .market-search-grid {
   display: grid;
   grid-template-columns: minmax(320px, 1fr) 190px 130px auto;
