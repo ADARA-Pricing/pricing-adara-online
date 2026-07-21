@@ -50,6 +50,33 @@ type ImportRow = {
   };
 };
 
+type MeliImportRow = {
+  meli_item_id: string;
+  sku: string;
+  sku_source: "meli" | "item_id";
+  title: string;
+  price: number;
+  currency_id: string;
+  status: string | null;
+  stock: number;
+  thumbnail: string | null;
+  permalink: string | null;
+  exists: boolean;
+  payload: ImportRow["payload"] & {
+    stock?: number | null;
+  };
+};
+
+type MeliImportPreview = {
+  total_items: number;
+  missing: number;
+  existing: number;
+  without_sku: number;
+  rows: MeliImportRow[];
+};
+
+type ProductEditorTab = "manual" | "excel" | "meli";
+
 function normalizeHeader(value: unknown) {
   return String(value || "")
     .trim()
@@ -309,7 +336,10 @@ export default function ProductsPage() {
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
-  const [activeProductTab, setActiveProductTab] = useState<"manual" | "excel">("manual");
+  const [activeProductTab, setActiveProductTab] = useState<ProductEditorTab>("manual");
+  const [meliPreview, setMeliPreview] = useState<MeliImportPreview | null>(null);
+  const [meliPreviewLoading, setMeliPreviewLoading] = useState(false);
+  const [meliImporting, setMeliImporting] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
 
   const costWithVatPreview = useMemo(() => {
@@ -409,6 +439,33 @@ export default function ProductsPage() {
     setEditorOpen(true);
     setMessage(null);
     setError(null);
+  }
+
+  async function loadMeliImportPreview() {
+    setMeliPreviewLoading(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/mercadolibre/import-products", { method: "GET" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudo leer MercadoLibre.");
+      setMeliPreview(data as MeliImportPreview);
+      setMessage(`MercadoLibre leido: ${data.total_items || 0} publicaciones, ${data.missing || 0} productos nuevos para crear.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo leer MercadoLibre.");
+    } finally {
+      setMeliPreviewLoading(false);
+    }
+  }
+
+  function openMeliImportModal() {
+    setActiveProductTab("meli");
+    setEditorOpen(true);
+    setMessage(null);
+    setError(null);
+    setMeliPreview(null);
+    loadMeliImportPreview();
   }
 
   function closeEditorModal() {
@@ -594,6 +651,33 @@ export default function ProductsPage() {
     await loadProducts();
   }
 
+  async function importMeliProducts() {
+    setMeliImporting(true);
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/mercadolibre/import-products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ import_existing: false }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudo importar desde MercadoLibre.");
+
+      setMessage(`Importacion MercadoLibre finalizada: ${data.imported || 0} productos nuevos creados. Existentes omitidos: ${data.skipped_existing || 0}.`);
+      setMeliPreview(null);
+      await loadProducts();
+      await loadMeliImportPreview();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo importar desde MercadoLibre.");
+    } finally {
+      setMeliImporting(false);
+      setSaving(false);
+    }
+  }
+
   const categories = useMemo(() => {
     const values = new Set(products.map((product) => product.category).filter(Boolean) as string[]);
     return [...values].sort((a, b) => a.localeCompare(b, "es"));
@@ -698,6 +782,9 @@ export default function ProductsPage() {
             <button className="button ghost products-secondary-button" type="button" onClick={openImportModal}>
               Importar Excel
             </button>
+            <button className="button ghost products-secondary-button" type="button" onClick={openMeliImportModal}>
+              Importar desde ML
+            </button>
           </div>
         </div>
       </section>
@@ -758,17 +845,27 @@ export default function ProductsPage() {
             <div className="header product-editor-header" style={{ alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
               <div>
                 <h2 style={{ marginTop: 0, marginBottom: 8 }}>
-                  {activeProductTab === "manual" ? "Nuevo / actualizar producto" : "Carga masiva con Excel"}
+                  {activeProductTab === "manual"
+                    ? "Nuevo / actualizar producto"
+                    : activeProductTab === "excel"
+                      ? "Carga masiva con Excel"
+                      : "Importar productos desde MercadoLibre"}
                 </h2>
                 <p className="small" style={{ margin: 0 }}>
                   {activeProductTab === "manual"
                     ? "Si el SKU ya existe, la app actualiza el producto. Si no existe, lo crea."
-                    : "Descargá la plantilla, completala en Excel y subila. Si el SKU ya existe, se actualiza; si no existe, se crea."}
+                    : activeProductTab === "excel"
+                      ? "Descarga la plantilla, completala en Excel y subila. Si el SKU ya existe, se actualiza; si no existe, se crea."
+                      : "Traemos tus publicaciones activas y pausadas de MercadoLibre, detectamos SKU, y creamos solo los productos que todavia no estan en la app."}
                 </p>
               </div>
               <div className="actions product-editor-controls" style={{ alignItems: "center", flexWrap: "nowrap" }}>
                 <button className={activeProductTab === "manual" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("manual")}>Carga manual</button>
                 <button className={activeProductTab === "excel" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => setActiveProductTab("excel")}>Carga masiva Excel</button>
+                <button className={activeProductTab === "meli" ? "button products-primary-button" : "button ghost products-secondary-button"} type="button" onClick={() => {
+                  setActiveProductTab("meli");
+                  if (!meliPreview && !meliPreviewLoading) loadMeliImportPreview();
+                }}>MercadoLibre</button>
                 <button className="button ghost products-secondary-button" type="button" onClick={closeEditorModal}>Cerrar</button>
               </div>
             </div>
@@ -812,7 +909,7 @@ export default function ProductsPage() {
                   <button className="button ghost products-secondary-button" type="button" onClick={() => setForm(emptyProduct)}>Limpiar</button>
                 </div>
               </form>
-            ) : (
+            ) : activeProductTab === "excel" ? (
               <div>
                 <div className="header" style={{ alignItems: "flex-start", gap: 16 }}>
                   <p className="small" style={{ marginTop: 0 }}>
@@ -864,6 +961,114 @@ export default function ProductsPage() {
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <div className="header" style={{ alignItems: "flex-start", gap: 16 }}>
+                  <div>
+                    <strong>Vista previa MercadoLibre</strong>
+                    <p className="small" style={{ margin: "4px 0 0" }}>
+                      La importacion crea productos faltantes y no pisa costos de productos ya existentes.
+                    </p>
+                  </div>
+                  <div className="actions">
+                    <button className="button ghost products-secondary-button" type="button" disabled={meliPreviewLoading || meliImporting} onClick={loadMeliImportPreview}>
+                      {meliPreviewLoading ? "Leyendo ML..." : "Actualizar vista previa"}
+                    </button>
+                    <button className="button products-primary-button" type="button" disabled={!meliPreview || meliPreview.missing === 0 || meliImporting || saving} onClick={importMeliProducts}>
+                      {meliImporting ? "Importando..." : "Importar nuevos"}
+                    </button>
+                  </div>
+                </div>
+
+                {meliPreviewLoading && <section className="card" style={{ marginTop: 14 }}><p>Leyendo publicaciones de MercadoLibre...</p></section>}
+
+                {meliPreview && (
+                  <div style={{ marginTop: 14 }}>
+                    <section className="products-kpi-grid" style={{ marginBottom: 14 }}>
+                      <div className="card product-kpi-card">
+                        <span className="product-kpi-icon">ML</span>
+                        <div>
+                          <p>Publicaciones ML</p>
+                          <strong>{meliPreview.total_items}</strong>
+                          <small>Activas y pausadas</small>
+                        </div>
+                      </div>
+                      <div className="card product-kpi-card">
+                        <span className="product-kpi-icon green">+</span>
+                        <div>
+                          <p>Nuevos para crear</p>
+                          <strong>{meliPreview.missing}</strong>
+                          <small>No existen en Productos</small>
+                        </div>
+                      </div>
+                      <div className="card product-kpi-card">
+                        <span className="product-kpi-icon violet">=</span>
+                        <div>
+                          <p>Ya existentes</p>
+                          <strong>{meliPreview.existing}</strong>
+                          <small>Se omiten para cuidar costos</small>
+                        </div>
+                      </div>
+                      <div className="card product-kpi-card">
+                        <span className="product-kpi-icon amber">!</span>
+                        <div>
+                          <p>Sin SKU visible</p>
+                          <strong>{meliPreview.without_sku}</strong>
+                          <small>Usan Item ID como SKU</small>
+                        </div>
+                      </div>
+                    </section>
+
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Foto</th>
+                            <th>SKU</th>
+                            <th>Producto ML</th>
+                            <th>Categoria</th>
+                            <th>Precio ML</th>
+                            <th>Stock</th>
+                            <th>Accion</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {meliPreview.rows.slice(0, 80).map((row) => (
+                            <tr key={row.meli_item_id}>
+                              <td>
+                                {row.thumbnail ? <img src={row.thumbnail} alt="" style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 8, background: "#f4f6f8" }} /> : "-"}
+                              </td>
+                              <td>
+                                <strong>{row.sku}</strong>
+                                {row.sku_source === "item_id" && <><br /><span className="small">Sin SKU en ML</span></>}
+                              </td>
+                              <td>
+                                <strong>{row.title}</strong>
+                                <br />
+                                <span className="small">{row.meli_item_id} · {row.status || "-"}</span>
+                              </td>
+                              <td>{row.payload.category || "-"}</td>
+                              <td>{row.price ? money(row.price) : "-"}</td>
+                              <td>{row.stock ?? "-"}</td>
+                              <td>
+                                <span className={`badge ${row.exists ? "meli-status-active" : "meli-status-none"}`}>
+                                  {row.exists ? "Ya existe" : "Crear"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {meliPreview.rows.length > 80 && (
+                      <p className="small" style={{ marginTop: 10 }}>
+                        Mostrando 80 de {meliPreview.rows.length} publicaciones. La importacion toma todas las nuevas.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1035,3 +1240,5 @@ export default function ProductsPage() {
     </main>
   );
 }
+
+
