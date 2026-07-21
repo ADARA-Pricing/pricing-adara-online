@@ -61,6 +61,8 @@ type MeliImportRow = {
   stock: number;
   thumbnail: string | null;
   permalink: string | null;
+  date_created: string | null;
+  last_updated: string | null;
   exists: boolean;
   publication_count: number;
   publication_ids: string[];
@@ -346,6 +348,11 @@ export default function ProductsPage() {
   const [meliPreviewLoading, setMeliPreviewLoading] = useState(false);
   const [meliImporting, setMeliImporting] = useState(false);
   const [selectedMeliSkus, setSelectedMeliSkus] = useState<string[]>([]);
+  const [meliImportSearch, setMeliImportSearch] = useState("");
+  const [meliImportStatusFilter, setMeliImportStatusFilter] = useState("");
+  const [meliImportCategoryFilter, setMeliImportCategoryFilter] = useState("");
+  const [meliImportKindFilter, setMeliImportKindFilter] = useState("missing");
+  const [meliImportRecentFilter, setMeliImportRecentFilter] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
 
   const costWithVatPreview = useMemo(() => {
@@ -355,6 +362,40 @@ export default function ProductsPage() {
   }, [form.cost_without_vat, form.vat_rate]);
 
   const selectedMeliSet = useMemo(() => new Set(selectedMeliSkus), [selectedMeliSkus]);
+
+  const meliImportCategories = useMemo(() => {
+    const values = new Set<string>();
+    meliPreview?.rows.forEach((row) => {
+      const category = row.payload.category?.trim();
+      if (category) values.add(category);
+    });
+    return [...values].sort((a, b) => a.localeCompare(b, "es"));
+  }, [meliPreview]);
+
+  const filteredMeliRows = useMemo(() => {
+    const search = meliImportSearch.trim().toLowerCase();
+    const recentDays = meliImportRecentFilter ? Number(meliImportRecentFilter) : 0;
+    const recentCutoff = recentDays ? Date.now() - recentDays * 24 * 60 * 60 * 1000 : 0;
+
+    return (meliPreview?.rows || []).filter((row) => {
+      if (meliImportKindFilter === "missing" && row.exists) return false;
+      if (meliImportKindFilter === "existing" && !row.exists) return false;
+      if (meliImportStatusFilter && row.status !== meliImportStatusFilter) return false;
+      if (meliImportCategoryFilter && row.payload.category !== meliImportCategoryFilter) return false;
+      if (recentCutoff) {
+        const createdAt = row.date_created ? new Date(row.date_created).getTime() : 0;
+        if (!createdAt || createdAt < recentCutoff) return false;
+      }
+      if (search) {
+        const haystack = [row.sku, row.title, row.meli_item_id, row.payload.category, row.payload.brand, row.payload.model]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(search)) return false;
+      }
+      return true;
+    });
+  }, [meliPreview, meliImportSearch, meliImportStatusFilter, meliImportCategoryFilter, meliImportKindFilter, meliImportRecentFilter]);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -460,7 +501,7 @@ export default function ProductsPage() {
       if (!response.ok) throw new Error(data?.error || "No se pudo leer MercadoLibre.");
       const preview = data as MeliImportPreview;
       setMeliPreview(preview);
-      setSelectedMeliSkus(preview.rows.filter((row) => !row.exists).map((row) => row.sku));
+      setSelectedMeliSkus([]);
       setMessage(`MercadoLibre leido: ${preview.total_items || 0} publicaciones agrupadas en ${preview.total_products || preview.rows.length} SKU. ${preview.missing || 0} productos nuevos disponibles.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo leer MercadoLibre.");
@@ -476,6 +517,11 @@ export default function ProductsPage() {
     setError(null);
     setMeliPreview(null);
     setSelectedMeliSkus([]);
+    setMeliImportSearch("");
+    setMeliImportStatusFilter("");
+    setMeliImportCategoryFilter("");
+    setMeliImportKindFilter("missing");
+    setMeliImportRecentFilter("");
     loadMeliImportPreview();
   }
 
@@ -669,9 +715,8 @@ export default function ProductsPage() {
     });
   }
 
-  function selectAllMissingMeli() {
-    if (!meliPreview) return;
-    setSelectedMeliSkus(meliPreview.rows.filter((row) => !row.exists).map((row) => row.sku));
+  function selectFilteredMissingMeli() {
+    setSelectedMeliSkus(filteredMeliRows.filter((row) => !row.exists).map((row) => row.sku));
   }
 
   function clearMeliSelection() {
@@ -1009,8 +1054,8 @@ export default function ProductsPage() {
                     <button className="button ghost products-secondary-button" type="button" disabled={meliPreviewLoading || meliImporting} onClick={loadMeliImportPreview}>
                       {meliPreviewLoading ? "Leyendo ML..." : "Actualizar vista previa"}
                     </button>
-                    <button className="button ghost products-secondary-button" type="button" disabled={!meliPreview || meliImporting} onClick={selectAllMissingMeli}>
-                      Seleccionar nuevos
+                    <button className="button ghost products-secondary-button" type="button" disabled={!meliPreview || meliImporting} onClick={selectFilteredMissingMeli}>
+                      Seleccionar filtrados
                     </button>
                     <button className="button ghost products-secondary-button" type="button" disabled={!meliPreview || meliImporting} onClick={clearMeliSelection}>
                       Limpiar seleccion
@@ -1025,6 +1070,57 @@ export default function ProductsPage() {
 
                 {meliPreview && (
                   <div style={{ marginTop: 14 }}>
+                    <div className="card" style={{ marginBottom: 14 }}>
+                      <div className="grid" style={{ alignItems: "end" }}>
+                        <div className="field">
+                          <label>Buscar</label>
+                          <input value={meliImportSearch} onChange={(event) => setMeliImportSearch(event.target.value)} placeholder="SKU, titulo o publicacion" />
+                        </div>
+                        <div className="field">
+                          <label>Tipo</label>
+                          <select value={meliImportKindFilter} onChange={(event) => setMeliImportKindFilter(event.target.value)}>
+                            <option value="missing">Solo nuevos</option>
+                            <option value="all">Todos</option>
+                            <option value="existing">Ya existen</option>
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label>Estado ML</label>
+                          <select value={meliImportStatusFilter} onChange={(event) => setMeliImportStatusFilter(event.target.value)}>
+                            <option value="">Todos</option>
+                            <option value="active">Activos</option>
+                            <option value="paused">Pausados</option>
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label>Categoria</label>
+                          <select value={meliImportCategoryFilter} onChange={(event) => setMeliImportCategoryFilter(event.target.value)}>
+                            <option value="">Todas</option>
+                            {meliImportCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label>Recien anadidos</label>
+                          <select value={meliImportRecentFilter} onChange={(event) => setMeliImportRecentFilter(event.target.value)}>
+                            <option value="">Cualquier fecha</option>
+                            <option value="7">Ultimos 7 dias</option>
+                            <option value="30">Ultimos 30 dias</option>
+                            <option value="90">Ultimos 90 dias</option>
+                          </select>
+                        </div>
+                        <button className="button ghost products-secondary-button" type="button" onClick={() => {
+                          setMeliImportSearch("");
+                          setMeliImportStatusFilter("");
+                          setMeliImportCategoryFilter("");
+                          setMeliImportKindFilter("missing");
+                          setMeliImportRecentFilter("");
+                        }}>Limpiar filtros</button>
+                      </div>
+                      <p className="small" style={{ margin: "10px 0 0" }}>
+                        Mostrando {filteredMeliRows.length} de {meliPreview.rows.length} SKU. Seleccionados para importar: {selectedMeliSkus.length}.
+                      </p>
+                    </div>
+
                     <section className="products-kpi-grid" style={{ marginBottom: 14 }}>
                       <div className="card product-kpi-card">
                         <span className="product-kpi-icon">ML</span>
@@ -1075,7 +1171,7 @@ export default function ProductsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {meliPreview.rows.slice(0, 80).map((row) => (
+                          {filteredMeliRows.slice(0, 120).map((row) => (
                             <tr key={row.sku}>
                               <td>
                                 <input
@@ -1113,9 +1209,13 @@ export default function ProductsPage() {
                       </table>
                     </div>
 
-                    {meliPreview.rows.length > 80 && (
+                    {filteredMeliRows.length === 0 && (
+                      <p className="small" style={{ marginTop: 10 }}>No hay SKU para mostrar con esos filtros.</p>
+                    )}
+
+                    {filteredMeliRows.length > 120 && (
                       <p className="small" style={{ marginTop: 10 }}>
-                        Mostrando 80 de {meliPreview.rows.length} SKU unicos. La importacion toma solo los seleccionados.
+                        Mostrando 120 de {filteredMeliRows.length} SKU filtrados. La importacion toma solo los seleccionados.
                       </p>
                     )}
                   </div>

@@ -28,6 +28,8 @@ type MeliItem = {
   available_quantity?: number | null;
   thumbnail?: string | null;
   permalink?: string | null;
+  date_created?: string | null;
+  last_updated?: string | null;
   attributes?: MeliAttribute[];
   variations?: MeliVariation[];
 };
@@ -225,6 +227,8 @@ async function buildPreview() {
       stock: Number(item.available_quantity || 0),
       thumbnail: item.thumbnail || null,
       permalink: item.permalink || null,
+      date_created: item.date_created || null,
+      last_updated: item.last_updated || null,
       exists: Boolean(existing),
       product_id: existing?.id || null,
       payload,
@@ -250,6 +254,10 @@ async function buildPreview() {
         const bHasSku = b.sku_source === "meli" ? 1 : 0;
         if (aHasSku !== bHasSku) return bHasSku - aHasSku;
 
+        const aDate = a.date_created ? new Date(a.date_created).getTime() : 0;
+        const bDate = b.date_created ? new Date(b.date_created).getTime() : 0;
+        if (aDate !== bDate) return bDate - aDate;
+
         if (a.stock !== b.stock) return b.stock - a.stock;
         if (a.price !== b.price) return a.price - b.price;
         return a.title.localeCompare(b.title, "es");
@@ -268,6 +276,9 @@ async function buildPreview() {
     })
     .sort((a, b) => {
       if (a.exists !== b.exists) return a.exists ? 1 : -1;
+      const aDate = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const bDate = b.date_created ? new Date(b.date_created).getTime() : 0;
+      if (aDate !== bDate) return bDate - aDate;
       return a.sku.localeCompare(b.sku, "es");
     });
 
