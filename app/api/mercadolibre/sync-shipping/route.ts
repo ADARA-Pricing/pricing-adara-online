@@ -1029,8 +1029,26 @@ function itemThumbnail(item: MeliItem) {
   return item.thumbnail || item.pictures?.[0]?.secure_url || item.pictures?.[0]?.url || null;
 }
 
+function positiveFeeNumber(value: unknown) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 function marketplaceFeeRate(listingPrice: MeliListingPrice | null) {
-  return Number(listingPrice?.sale_fee_details?.meli_percentage_fee || 0);
+  if (!listingPrice) return 0;
+  const details = listingPrice.sale_fee_details || {};
+  const directRate = positiveFeeNumber(details.meli_percentage_fee) || positiveFeeNumber(details.percentage_fee);
+  if (directRate) return directRate;
+
+  const baseAmount = positiveFeeNumber(details.gross_amount);
+  const saleFeeAmount = positiveFeeNumber(listingPrice.sale_fee_amount);
+  if (!baseAmount || !saleFeeAmount) return 0;
+
+  const financingAmount = positiveFeeNumber(details.financing_add_on_fee);
+  const fixedFee = positiveFeeNumber(details.fixed_fee);
+  const variableFee = Math.max(0, saleFeeAmount - financingAmount - fixedFee);
+  const derivedRate = ((variableFee || saleFeeAmount) / baseAmount) * 100;
+  return Number.isFinite(derivedRate) && derivedRate > 0 ? derivedRate : 0;
 }
 
 function financingFeeRate(listingPrice: MeliListingPrice | null) {
@@ -1461,7 +1479,7 @@ export async function POST() {
         notes: `Sincronizado desde ${sourceLabel}`,
         meli_category_ids: meliCategoryIds,
         meli_category_names: meliCategoryNames,
-        meli_source: "listing_prices.sale_fee_details.meli_percentage_fee",
+        meli_source: "listing_prices.sale_fee_details",
         meli_last_sync_at: now,
         updated_at: now,
       };

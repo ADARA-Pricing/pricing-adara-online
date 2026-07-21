@@ -16,8 +16,13 @@ type MeliItem = {
 
 type MeliListingPrice = {
   listing_type_id?: string | null;
+  sale_fee_amount?: number | null;
   sale_fee_details?: {
+    financing_add_on_fee?: number | null;
+    fixed_fee?: number | null;
+    gross_amount?: number | null;
     meli_percentage_fee?: number | null;
+    percentage_fee?: number | null;
   } | null;
 };
 
@@ -42,11 +47,6 @@ function chunk<T>(items: T[], size: number) {
   return result;
 }
 
-function campaignTag(item: MeliItem) {
-  const tags = item.tags || [];
-  return tags.find((tag) => tag.includes("3x") || tag.includes("6x") || tag.includes("9x") || tag.includes("12x")) || null;
-}
-
 function categoryPath(category: MeliCategory | null) {
   const path = Array.isArray(category?.path_from_root) ? category?.path_from_root || [] : [];
   const names = path.map((entry) => entry.name).filter(Boolean) as string[];
@@ -58,8 +58,26 @@ function categoryLeafName(category: MeliCategory | null, categoryId: string) {
   return path[path.length - 1]?.name || category?.name || categoryId;
 }
 
-function marketplaceFeeRate(listingPrice: MeliListingPrice | null) {
-  return Number(listingPrice?.sale_fee_details?.meli_percentage_fee || 0);
+function positiveNumber(value: unknown) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function marketplaceFeeRate(listingPrice: MeliListingPrice | null, itemPrice?: number | null) {
+  if (!listingPrice) return 0;
+  const details = listingPrice.sale_fee_details || {};
+  const directRate = positiveNumber(details.meli_percentage_fee) || positiveNumber(details.percentage_fee);
+  if (directRate) return directRate;
+
+  const baseAmount = positiveNumber(details.gross_amount) || positiveNumber(itemPrice);
+  const saleFeeAmount = positiveNumber(listingPrice.sale_fee_amount);
+  if (!baseAmount || !saleFeeAmount) return 0;
+
+  const financingAmount = positiveNumber(details.financing_add_on_fee);
+  const fixedFee = positiveNumber(details.fixed_fee);
+  const variableFee = Math.max(0, saleFeeAmount - financingAmount - fixedFee);
+  const derivedRate = ((variableFee || saleFeeAmount) / baseAmount) * 100;
+  return Number.isFinite(derivedRate) && derivedRate > 0 ? derivedRate : 0;
 }
 
 async function getAllItemIds(account: { meli_user_id: number }) {
@@ -110,9 +128,9 @@ async function getMeliCategory(categoryId: string, account: any) {
 }
 
 async function getListingPriceForItem(item: MeliItem, account: any): Promise<MeliListingPrice | null> {
-  const price = Number(item.price || item.base_price || 0);
-  const listingTypeId = item.listing_type_id;
-  if (!price || !listingTypeId) return null;
+  const price = Number(item.price || item.base_price || 10000);
+  const listingTypeId = item.listing_type_id || "gold_special";
+  if (!price || !item.category_id) return null;
 
   try {
     const params = new URLSearchParams({
@@ -121,8 +139,6 @@ async function getListingPriceForItem(item: MeliItem, account: any): Promise<Mel
     });
     if (item.category_id) params.set("category_id", item.category_id);
     if (item.domain_id) params.set("domain_id", item.domain_id);
-    const tag = campaignTag(item);
-    if (tag) params.set("tags", tag);
 
     const data = await meliFetch(`/sites/MLA/listing_prices?${params.toString()}`, account);
     const prices = Array.isArray(data) ? data : [];
@@ -170,7 +186,7 @@ async function buildPreview() {
       const rates: number[] = [];
       for (const item of categoryItems.slice(0, 8)) {
         const listingPrice = await getListingPriceForItem(item, account);
-        const rate = marketplaceFeeRate(listingPrice);
+        const rate = marketplaceFeeRate(listingPrice, Number(item.price || item.base_price || 0));
         if (Number.isFinite(rate) && rate > 0) rates.push(rate);
       }
 
@@ -258,7 +274,7 @@ export async function POST(request: NextRequest) {
         notes: `Importado desde MercadoLibre: ${row.meli_category_path} (${row.publication_count} publicaciones).`,
         meli_category_ids: [row.meli_category_id],
         meli_category_names: [row.meli_category_path || row.meli_category_name],
-        meli_source: "listing_prices.sale_fee_details.meli_percentage_fee",
+        meli_source: "listing_prices.sale_fee_details",
         meli_last_sync_at: now,
         updated_at: now,
       };
