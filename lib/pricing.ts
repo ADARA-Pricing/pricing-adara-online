@@ -213,7 +213,10 @@ export function calculatePriceSummary(
     ? 0
     : Number(target.salesCommissionRate || 0);
 
-  const fixedFeeAmount = Number(shippingCost?.fixed_fee_amount || 0);
+  const fixedFeeAmountGross = Number(shippingCost?.fixed_fee_amount || 0);
+  const fixedFeeAmount = option.applies_shipping
+    ? fixedFeeAmountGross / 1.21
+    : fixedFeeAmountGross;
   const shippingCostAmountGross = option.applies_shipping
     ? Number(shippingCost?.shipping_cost_amount || 0)
     : 0;
