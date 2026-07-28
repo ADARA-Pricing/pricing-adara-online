@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { getConnectedMeliAccount, meliFetch } from "@/lib/mercadolibre";
 import type { Product } from "@/lib/types";
@@ -151,6 +151,44 @@ async function mapWithConcurrency<T>(
 
 function normalizeSku(value?: string | null) {
   return (value || "").trim().toUpperCase();
+}
+
+function normalizeSkuList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((sku) => normalizeSku(String(sku || ""))).filter(Boolean))];
+}
+
+async function getItemIdsBySkus(account: { meli_user_id: number }, skus: string[]) {
+  const itemIds = new Set<string>();
+  const searches: Record<string, number> = {};
+
+  await mapWithConcurrency(skus, 3, async (sku) => {
+    const foundForSku = new Set<string>();
+
+    for (const paramName of ["sku", "seller_sku"]) {
+      const params = new URLSearchParams({
+        [paramName]: sku,
+        limit: "50",
+      });
+
+      try {
+        const data = await meliFetch(`/users/${account.meli_user_id}/items/search?${params.toString()}`, account as any);
+        const results = Array.isArray(data?.results) ? data.results : [];
+        results.forEach((id: string) => {
+          if (id) {
+            itemIds.add(id);
+            foundForSku.add(id);
+          }
+        });
+      } catch {
+        // Algunos sellers/API versions responden solo a uno de los dos filtros.
+      }
+    }
+
+    searches[sku] = foundForSku.size;
+  });
+
+  return { itemIds: [...itemIds], searches };
 }
 
 function skuFromAttributes(attributes?: Array<{ id?: string; name?: string; value_name?: string }>) {
@@ -1090,11 +1128,13 @@ function addCategoryObservation(
   observations.set(category, current);
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const supabase = createAdminClient();
   const startedAt = Date.now();
 
   try {
+    const body = await request.json().catch(() => ({}));
+    const targetSkus = normalizeSkuList(body?.skus);
     const account = await getConnectedMeliAccount();
     if (!account) {
       return NextResponse.json({ error: "Primero conectá MercadoLibre." }, { status: 400 });
@@ -1102,10 +1142,12 @@ export async function POST() {
 
     const listingTypeNames = await getListingTypeNames(account);
 
-    const { data: products, error: productsError } = await supabase
-      .from("products")
-      .select("*")
-      .eq("status", "active");
+    let productsQuery = supabase.from("products").select("*");
+    productsQuery = targetSkus.length
+      ? productsQuery.in("sku", targetSkus)
+      : productsQuery.eq("status", "active");
+
+    const { data: products, error: productsError } = await productsQuery;
 
     if (productsError) throw new Error(productsError.message);
 
@@ -1121,30 +1163,42 @@ export async function POST() {
       productsBySku.set(normalizeSku(product.sku), product);
     });
 
-    const itemIds = new Set<string>();
     const statusesToSync = ["active", "paused"];
     const limit = 50;
     const totalsByStatus: Record<string, number> = {};
+    let itemIds: string[] = [];
+    let skuSearches: Record<string, number> = {};
 
-    for (const status of statusesToSync) {
-      let offset = 0;
-      let total = 0;
+    if (targetSkus.length) {
+      const targetedSearch = await getItemIdsBySkus(account, targetSkus);
+      itemIds = targetedSearch.itemIds;
+      skuSearches = targetedSearch.searches;
+      totalsByStatus.sku_search = itemIds.length;
+    } else {
+      const foundItemIds = new Set<string>();
 
-      do {
-        const data = await meliFetch(
-          `/users/${account.meli_user_id}/items/search?status=${status}&limit=${limit}&offset=${offset}`,
-          account,
-        );
-        const results = data?.results || [];
-        total = Number(data?.paging?.total || results.length || 0);
-        totalsByStatus[status] = total;
-        results.forEach((id: string) => itemIds.add(id));
-        offset += limit;
-      } while (offset < total && offset < 1000);
+      for (const status of statusesToSync) {
+        let offset = 0;
+        let total = 0;
+
+        do {
+          const data = await meliFetch(
+            `/users/${account.meli_user_id}/items/search?status=${status}&limit=${limit}&offset=${offset}`,
+            account,
+          );
+          const results = data?.results || [];
+          total = Number(data?.paging?.total || results.length || 0);
+          totalsByStatus[status] = total;
+          results.forEach((id: string) => foundItemIds.add(id));
+          offset += limit;
+        } while (offset < total && offset < 1000);
+      }
+
+      itemIds = [...foundItemIds];
     }
 
     const items: MeliItem[] = [];
-    for (const ids of chunk([...itemIds], 20)) {
+    for (const ids of chunk(itemIds, 20)) {
       const data = await meliFetch(`/items?ids=${ids.join(",")}`, account);
       (Array.isArray(data) ? data : []).forEach((entry: any) => {
         if (entry?.body?.id) items.push(entry.body as MeliItem);
@@ -1260,7 +1314,14 @@ export async function POST() {
       });
     });
 
-    await supabase.from("mercadolibre_promotion_opportunities").delete().neq("promotion_id", "__never__");
+    if (targetSkus.length) {
+      const idsToRefresh = [...matchedItemIds];
+      if (idsToRefresh.length) {
+        await supabase.from("mercadolibre_promotion_opportunities").delete().in("meli_item_id", idsToRefresh);
+      }
+    } else {
+      await supabase.from("mercadolibre_promotion_opportunities").delete().neq("promotion_id", "__never__");
+    }
     for (const batch of chunk(promotionOpportunityRows, 200)) {
       const { error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch);
       if (promoSaveError) throw new Error(promoSaveError.message);
@@ -1522,6 +1583,9 @@ export async function POST() {
       not_found: notFound,
       without_sku: withoutSku,
       no_shipping_cost: noShippingCost,
+      target_skus: targetSkus,
+      targeted_sync: targetSkus.length > 0,
+      sku_searches: skuSearches,
       duration_ms: Date.now() - startedAt,
       shipping_queries: shippingCostsByItem.size,
       promotion_queries: promotionsByItem.size,

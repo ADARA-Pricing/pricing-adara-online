@@ -596,14 +596,38 @@ export default function ProductsPage() {
       .select()
       .single();
 
-    setSaving(false);
-
     if (error) {
       setError(error.message);
+      setSaving(false);
       return;
     }
 
-    setMessage(existing ? `Producto actualizado: ${cleanSku}` : `Producto creado: ${cleanSku}`);
+    let syncMessage = "";
+    try {
+      const syncResponse = await fetch("/api/mercadolibre/sync-shipping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skus: [cleanSku] }),
+      });
+      const syncData = await syncResponse.json();
+
+      if (syncResponse.ok) {
+        const matched = Number(syncData?.matched || 0);
+        const updated = Number(syncData?.updated || 0);
+        const withoutCost = Number(syncData?.no_shipping_cost || 0);
+
+        syncMessage = matched > 0
+          ? ` MercadoLibre: ${matched} publicacion(es) vinculada(s), ${updated} envio(s) actualizados${withoutCost ? `, ${withoutCost} sin costo devuelto` : ""}.`
+          : " MercadoLibre: no encontramos publicaciones con ese SKU.";
+      } else {
+        syncMessage = ` MercadoLibre no sincronizado: ${syncData?.error || "no se pudo consultar la cuenta"}.`;
+      }
+    } catch (err) {
+      syncMessage = ` MercadoLibre no sincronizado: ${err instanceof Error ? err.message : "error de conexion"}.`;
+    }
+
+    setSaving(false);
+    setMessage(`${existing ? `Producto actualizado: ${cleanSku}` : `Producto creado: ${cleanSku}`}.${syncMessage}`);
     setForm(emptyProduct);
     setEditorOpen(false);
     await loadProducts();
