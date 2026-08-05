@@ -97,7 +97,7 @@ export default function PricesPage() {
       supabase
         .from("products")
         .select("*")
-        .eq("status", "active")
+        .neq("status", "discontinued")
         .order("name", { ascending: true }),
       supabase
         .from("mercadolibre_installment_fees")
