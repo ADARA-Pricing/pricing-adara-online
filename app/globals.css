@@ -5481,6 +5481,35 @@ textarea:focus-visible {
   min-width: 300px;
 }
 
+.promociones-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.promociones-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.promociones-filter-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+}
+
 .promociones-table {
   width: 100%;
   border-collapse: collapse;
@@ -5656,6 +5685,86 @@ textarea:focus-visible {
   padding: 12px;
 }
 
+.promociones-installment-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(180px, 1fr));
+  gap: 10px;
+  padding: 12px 12px 0;
+  background: #f8fafc;
+}
+
+.promociones-installment-summary {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  min-width: 0;
+}
+
+.promociones-summary-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.promociones-summary-head strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.promociones-summary-head span {
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.promociones-summary-values {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+
+.promociones-summary-values div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  border-bottom: 1px solid #edf2f7;
+  padding-bottom: 6px;
+}
+
+.promociones-summary-values span,
+.promociones-installment-summary small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.promociones-summary-values strong {
+  color: #0f172a;
+  font-size: 13px;
+  text-align: right;
+}
+
+.promociones-summary-values strong.positive {
+  color: #047857;
+}
+
+.promociones-summary-values strong.negative {
+  color: #dc2626;
+}
+
+.promociones-installment-summary small {
+  display: block;
+  line-height: 1.35;
+  margin-top: 9px;
+}
+
 .promociones-installment-card {
   display: flex;
   flex-direction: column;
@@ -5796,6 +5905,14 @@ textarea:focus-visible {
     justify-content: flex-start;
     align-items: flex-start;
   }
+
+  .promociones-detail-actions {
+    justify-content: flex-start;
+  }
+
+  .promociones-installment-summary-grid {
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -5820,6 +5937,10 @@ textarea:focus-visible {
   }
 
   .promociones-installment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .promociones-installment-summary-grid {
     grid-template-columns: 1fr;
   }
 

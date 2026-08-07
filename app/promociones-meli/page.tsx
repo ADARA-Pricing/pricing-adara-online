@@ -4,11 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
-import { moneyWithCents, percent } from "@/lib/pricing";
+import {
+  calculatePriceSummary,
+  defaultTaxSettings,
+  mercadoLibreClassicOption,
+  moneyWithCents,
+  normalizeOption,
+  percent,
+} from "@/lib/pricing";
 import type {
+  MercadoLibreCategoryFee,
+  MercadoLibreInstallmentFee,
+  MercadoLibrePriceOption,
   MercadoLibrePromotionOpportunity,
   MercadoLibreShippingCost,
   Product,
+  ProductChannelMargin,
+  TaxSettings,
 } from "@/lib/types";
 
 type ProductPromoGroup = {
@@ -39,6 +51,17 @@ type PublicationPromoRow = {
   installmentCount: number;
   installmentLabel: string;
   bestOpportunity: MercadoLibrePromotionOpportunity | null;
+};
+
+type InstallmentSummary = {
+  label: string;
+  publication: MercadoLibreShippingCost;
+  opportunityCount: number;
+  bestOpportunity: MercadoLibrePromotionOpportunity | null;
+  bestMeliAmount: number;
+  promoPrice: number | null;
+  rentability: number | null;
+  netProfit: number | null;
 };
 
 function formatDateTime(value?: string | null) {
@@ -137,14 +160,28 @@ function publicationBranchLabel(branchKind: PublicationVariantGroup["branchKind"
   return branchKind === "catalog_listing" ? "Catalogo ML" : "Publicacion vendedor";
 }
 
-function bestOpportunity(items: MercadoLibrePromotionOpportunity[]) {
-  if (!items.length) return null;
-  return [...items].sort((a, b) => {
+function hasMeliContribution(item?: MercadoLibrePromotionOpportunity | null) {
+  return Number(item?.meli_amount || 0) > 0 || Number(item?.meli_percentage || 0) > 0;
+}
+
+function publicationHasMeliContribution(publication: MercadoLibreShippingCost) {
+  return Number(publication.meli_promo_meli_amount || 0) > 0 || Number(publication.meli_promo_meli_rate || 0) > 0;
+}
+
+function bestOpportunity(items: MercadoLibrePromotionOpportunity[], onlyWithMeliContribution = false) {
+  const filtered = onlyWithMeliContribution ? items.filter(hasMeliContribution) : items;
+  if (!filtered.length) return null;
+  return [...filtered].sort((a, b) => {
     const amountA = Number(a.meli_amount || 0);
     const amountB = Number(b.meli_amount || 0);
     if (amountA !== amountB) return amountB - amountA;
     return Number(a.promo_price || 0) - Number(b.promo_price || 0);
   })[0];
+}
+
+function optionMatchesInstallment(option: MercadoLibrePriceOption, count: number) {
+  if (count === 1) return option.code === "MC" || !option.installment_count;
+  return Number(option.installment_count || 0) === count;
 }
 
 export default function PromocionesMeliPage() {
@@ -154,10 +191,15 @@ export default function PromocionesMeliPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [opportunities, setOpportunities] = useState<MercadoLibrePromotionOpportunity[]>([]);
+  const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
+  const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
+  const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
+  const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
   const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedFamilyKey, setSelectedFamilyKey] = useState<string | null>(null);
   const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const [onlyMeliContribution, setOnlyMeliContribution] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -170,7 +212,15 @@ export default function PromocionesMeliPage() {
     setLoading(true);
     setError(null);
 
-    const [productsResponse, publicationsResponse, opportunitiesResponse] = await Promise.all([
+    const [
+      productsResponse,
+      publicationsResponse,
+      opportunitiesResponse,
+      installmentsResponse,
+      categoryFeesResponse,
+      taxesResponse,
+      marginsResponse,
+    ] = await Promise.all([
       supabase
         .from("products")
         .select("*")
@@ -186,6 +236,17 @@ export default function PromocionesMeliPage() {
         .from("mercadolibre_promotion_opportunities")
         .select("*")
         .order("meli_amount", { ascending: false }),
+      supabase
+        .from("mercadolibre_installment_fees")
+        .select("*")
+        .eq("active", true)
+        .order("code", { ascending: true }),
+      supabase
+        .from("mercadolibre_category_fees")
+        .select("*")
+        .eq("active", true),
+      supabase.from("tax_settings").select("*").eq("key", "default").single(),
+      supabase.from("product_channel_margins").select("*"),
     ]);
 
     setLoading(false);
@@ -198,6 +259,18 @@ export default function PromocionesMeliPage() {
 
     if (opportunitiesResponse.error) setError(opportunitiesResponse.error.message);
     else setOpportunities((opportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]);
+
+    if (installmentsResponse.error) setError(installmentsResponse.error.message);
+    else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
+
+    if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
+    else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
+
+    if (taxesResponse.error) setError(taxesResponse.error.message);
+    else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
+
+    if (marginsResponse.error) setError(marginsResponse.error.message);
+    else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
   }
 
   useEffect(() => {
@@ -298,6 +371,76 @@ export default function PromocionesMeliPage() {
     ? selectedGroup.opportunities.filter((item) => selectedPublicationIds.has(item.meli_item_id))
     : [];
 
+  const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
+    return [
+      mercadoLibreClassicOption(),
+      ...installments.map((item) =>
+        normalizeOption({
+          code: item.code,
+          name: item.name,
+          channel_type: item.channel_type,
+          installment_count: item.installment_count,
+          financing_fee_rate: item.financing_fee_rate,
+          applies_marketplace_fee: item.applies_marketplace_fee,
+          applies_shipping: item.applies_shipping,
+          applies_iibb: item.applies_iibb,
+          applies_idc: item.applies_idc,
+          applies_iigg: item.applies_iigg,
+          applies_structure: item.applies_structure,
+          applies_vat: item.applies_vat,
+          active: item.active,
+        }),
+      ),
+    ];
+  }, [installments]);
+
+  const selectedCategoryFee = useMemo(() => {
+    if (!selectedGroup) return null;
+    return categoryFees.find(
+      (item) => item.category?.toLowerCase() === (selectedGroup.product.category || "").toLowerCase(),
+    ) || null;
+  }, [categoryFees, selectedGroup]);
+
+  function channelSetting(productId: string | undefined, optionCode: string) {
+    return marginSettings.find(
+      (item) => item.product_id === productId && item.channel_code === optionCode,
+    );
+  }
+
+  function rentabilityForRow(row: PublicationPromoRow, salePrice?: number | null) {
+    if (!selectedGroup || !salePrice || salePrice <= 0) return null;
+    const option =
+      pricingOptions.find((item) => optionMatchesInstallment(item, row.installmentCount)) ||
+      mercadoLibreClassicOption();
+    const normalizedOption = normalizeOption({
+      ...option,
+      financing_fee_rate: Number(row.publication.meli_financing_fee_rate ?? option.financing_fee_rate ?? 0),
+    });
+    const setting = channelSetting(selectedGroup.product.id, normalizedOption.code);
+    const result = calculatePriceSummary(
+      selectedGroup.product,
+      normalizedOption,
+      normalizedOption.applies_marketplace_fee ? selectedCategoryFee : null,
+      taxes,
+      normalizedOption.applies_shipping ? row.publication : null,
+      {
+        salePrice,
+        structureAmount: Number(setting?.structure_amount || 0),
+        manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
+        salesCommissionRate: 0,
+        saleAppliesVat: setting?.sale_applies_vat ?? Boolean(normalizedOption.applies_vat),
+        costVatRate: Number(setting?.cost_vat_rate || 0),
+        roundTo: 100,
+        roundingMode: "nearest",
+      },
+    ) as { valid: boolean; marginOnNetSale?: number | null; netProfit?: number | null };
+    if (!result.valid) return null;
+    return {
+      margin: Number(result.marginOnNetSale || 0),
+      netProfit: Number(result.netProfit || 0),
+    };
+  }
+
   const publicationFamilies = useMemo<PublicationVariantGroup[]>(() => {
     if (!selectedGroup) return [];
     const opportunitiesByItem = new Map<string, MercadoLibrePromotionOpportunity[]>();
@@ -330,17 +473,28 @@ export default function PromocionesMeliPage() {
         family.itemIds.push(publication.meli_item_id);
       }
 
+      const best = bestOpportunity(rowOpportunities, onlyMeliContribution);
+      if (
+        onlyMeliContribution &&
+        !publicationHasMeliContribution(publication) &&
+        !best
+      ) {
+        families.set(key, family);
+        return;
+      }
+
       family.rows.push({
         publication,
         opportunities: rowOpportunities,
         installmentCount: count,
         installmentLabel: count === 1 ? "1 pago" : label,
-        bestOpportunity: bestOpportunity(rowOpportunities),
+        bestOpportunity: best,
       });
       families.set(key, family);
     });
 
     return [...families.values()]
+      .filter((family) => family.rows.length > 0)
       .map((family) => ({
         ...family,
         rows: [...family.rows].sort((a, b) => {
@@ -354,7 +508,7 @@ export default function PromocionesMeliPage() {
         if (aBest !== bBest) return bBest - aBest;
         return a.title.localeCompare(b.title, "es");
       });
-  }, [selectedGroup, selectedOpportunities]);
+  }, [selectedGroup, selectedOpportunities, onlyMeliContribution]);
 
   return (
     <main className="container wide promociones-meli-page">
@@ -475,14 +629,24 @@ export default function PromocionesMeliPage() {
                 <h2>Publicaciones del producto</h2>
                 <p>Elegí una publicación para ver sus variantes de 1, 3, 6, 9 y 12 cuotas.</p>
               </div>
-              <div className="promociones-detail-stats">
-                <div>
-                  <span>Precio ML desde</span>
-                  <strong>{selectedGroup.minPrice ? moneyWithCents(selectedGroup.minPrice) : "-"}</strong>
-                </div>
-                <div>
-                  <span>Mejor aporte ML</span>
-                  <strong>{selectedGroup.bestMeliAmount ? moneyWithCents(selectedGroup.bestMeliAmount) : percent(selectedGroup.bestMeliRate)}</strong>
+              <div className="promociones-detail-actions">
+                <label className="promociones-filter-toggle">
+                  <input
+                    type="checkbox"
+                    checked={onlyMeliContribution}
+                    onChange={(event) => setOnlyMeliContribution(event.target.checked)}
+                  />
+                  <span>Solo con aporte ML</span>
+                </label>
+                <div className="promociones-detail-stats">
+                  <div>
+                    <span>Precio ML desde</span>
+                    <strong>{selectedGroup.minPrice ? moneyWithCents(selectedGroup.minPrice) : "-"}</strong>
+                  </div>
+                  <div>
+                    <span>Mejor aporte ML</span>
+                    <strong>{selectedGroup.bestMeliAmount ? moneyWithCents(selectedGroup.bestMeliAmount) : percent(selectedGroup.bestMeliRate)}</strong>
+                  </div>
                 </div>
               </div>
             </div>
@@ -492,6 +656,27 @@ export default function PromocionesMeliPage() {
                 const expanded = selectedFamilyKey === family.key;
                 const bestFamilyAmount = Math.max(...family.rows.map((row) => Number(row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount || 0)));
                 const minFamilyPrice = Math.min(...family.rows.map((row) => Number(row.publication.meli_price || 0)).filter((price) => price > 0));
+                const summaries: InstallmentSummary[] = family.rows.map((row) => {
+                  const promoPrice = Number(row.bestOpportunity?.promo_price || row.publication.meli_promo_price || 0) || null;
+                  const rentability = rentabilityForRow(row, promoPrice);
+                  const currentPromoCount =
+                    row.publication.meli_promo_price &&
+                    (!onlyMeliContribution || publicationHasMeliContribution(row.publication))
+                      ? 1
+                      : 0;
+                  return {
+                    label: row.installmentLabel,
+                    publication: row.publication,
+                    opportunityCount:
+                      currentPromoCount +
+                      row.opportunities.filter((item) => !onlyMeliContribution || hasMeliContribution(item)).length,
+                    bestOpportunity: row.bestOpportunity,
+                    bestMeliAmount: Number(row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount || 0),
+                    promoPrice,
+                    rentability: rentability?.margin ?? null,
+                    netProfit: rentability?.netProfit ?? null,
+                  };
+                });
                 return (
                   <article className={`promociones-family-card ${expanded ? "expanded" : ""}`} key={family.key}>
                     <button
@@ -523,6 +708,42 @@ export default function PromocionesMeliPage() {
                     </button>
 
                     {expanded && (
+                      <>
+                      <div className="promociones-installment-summary-grid">
+                        {summaries.map((summary) => (
+                          <section className="promociones-installment-summary" key={`${summary.publication.meli_item_id}-summary`}>
+                            <div className="promociones-summary-head">
+                              <strong>{summary.label}</strong>
+                              <span>{summary.opportunityCount} promo(s)</span>
+                            </div>
+                            <div className="promociones-summary-values">
+                              <div>
+                                <span>Sin promo</span>
+                                <strong>{moneyWithCents(summary.publication.meli_price || 0)}</strong>
+                              </div>
+                              <div>
+                                <span>Mejor promo</span>
+                                <strong>{summary.promoPrice ? moneyWithCents(summary.promoPrice) : "-"}</strong>
+                              </div>
+                              <div>
+                                <span>Aporte ML</span>
+                                <strong>{summary.bestMeliAmount ? moneyWithCents(summary.bestMeliAmount) : "-"}</strong>
+                              </div>
+                              <div>
+                                <span>Rentabilidad</span>
+                                <strong className={summary.rentability !== null && summary.rentability < 0 ? "negative" : "positive"}>
+                                  {summary.rentability !== null ? percent(summary.rentability) : "-"}
+                                </strong>
+                              </div>
+                            </div>
+                            <small>
+                              {summary.bestOpportunity?.promotion_name || summary.publication.meli_promo_name || "Sin mejor promo detectada"}
+                              {summary.netProfit !== null ? ` | Neto ${moneyWithCents(summary.netProfit)}` : ""}
+                            </small>
+                          </section>
+                        ))}
+                      </div>
+
                       <div className="promociones-installment-grid">
                         {family.rows.map((row) => {
                           const activeMeliAmount = Number(row.publication.meli_promo_meli_amount || 0);
@@ -582,6 +803,7 @@ export default function PromocionesMeliPage() {
                           );
                         })}
                       </div>
+                      </>
                     )}
                   </article>
                 );
