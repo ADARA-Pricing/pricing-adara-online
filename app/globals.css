@@ -5888,6 +5888,196 @@ textarea:focus-visible {
   color: #166534;
 }
 
+.promociones-traffic-light {
+  margin-top: 18px;
+}
+
+.promociones-traffic-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.promociones-traffic-head h2 {
+  margin: 0 0 4px;
+  color: #0f172a;
+  font-size: 24px;
+}
+
+.promociones-traffic-head p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.promociones-traffic-head > span {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.promociones-traffic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.promociones-traffic-column {
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #f8fafc;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.promociones-traffic-column.green {
+  border-color: #86efac;
+}
+
+.promociones-traffic-column.red {
+  border-color: #fecaca;
+}
+
+.promociones-traffic-column.yellow {
+  border-color: #fde68a;
+}
+
+.promociones-traffic-column-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+.promociones-traffic-column-head h3 {
+  margin: 0 0 3px;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.promociones-traffic-column-head p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.promociones-traffic-column-head strong {
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  padding: 4px 9px;
+}
+
+.promociones-traffic-sku {
+  margin: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.promociones-traffic-sku-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 11px 2px;
+}
+
+.promociones-traffic-sku-head strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.promociones-traffic-sku-head span {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.promociones-traffic-sku > small {
+  display: block;
+  padding: 0 11px 10px;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+.promociones-traffic-items {
+  border-top: 1px solid #edf2f7;
+}
+
+.promociones-traffic-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 10px 11px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.promociones-traffic-item:last-child {
+  border-bottom: 0;
+}
+
+.promociones-traffic-item strong {
+  display: block;
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.promociones-traffic-item span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.3;
+  margin-top: 3px;
+}
+
+.promociones-traffic-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-end;
+  min-width: 92px;
+}
+
+.promociones-traffic-meta button {
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  cursor: copy;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0;
+}
+
+.promociones-traffic-meta button:hover {
+  text-decoration: underline;
+}
+
+.promociones-traffic-meta button.copied {
+  color: #047857;
+}
+
+.promociones-traffic-meta strong.positive {
+  color: #047857;
+}
+
+.promociones-traffic-meta strong.negative {
+  color: #dc2626;
+}
+
 .promociones-installment-card {
   display: flex;
   flex-direction: column;
@@ -6036,6 +6226,10 @@ textarea:focus-visible {
   .promociones-installment-summary-grid {
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   }
+
+  .promociones-traffic-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
@@ -6069,5 +6263,22 @@ textarea:focus-visible {
 
   .promociones-installment-prices {
     grid-template-columns: 1fr;
+  }
+
+  .promociones-traffic-head {
+    display: block;
+  }
+
+  .promociones-traffic-head > span {
+    display: inline-flex;
+    margin-top: 10px;
+  }
+
+  .promociones-traffic-item {
+    grid-template-columns: 1fr;
+  }
+
+  .promociones-traffic-meta {
+    align-items: flex-start;
   }
 }

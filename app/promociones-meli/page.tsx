@@ -80,6 +80,30 @@ type PromoComparison = {
   netProfit: number | null;
 };
 
+type PromoTrafficLightItem = {
+  key: string;
+  sku: string;
+  title: string;
+  itemId: string;
+  installmentLabel: string;
+  promotionName: string;
+  margin: number;
+  netProfit: number;
+  status: "Vigente" | "Para activar";
+};
+
+type PromoTrafficLightGroup = {
+  sku: string;
+  productName: string;
+  items: PromoTrafficLightItem[];
+};
+
+type PromoTrafficLights = {
+  green: PromoTrafficLightGroup[];
+  red: PromoTrafficLightGroup[];
+  yellow: PromoTrafficLightGroup[];
+};
+
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
   try {
@@ -99,6 +123,10 @@ function isCurrentOpportunity(item: MercadoLibrePromotionOpportunity) {
   if (/finished|expired|ended|cancel|closed|inactive/.test(status)) return false;
   const end = item.end_date ? new Date(item.end_date).getTime() : 0;
   return !end || end > Date.now();
+}
+
+function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) {
+  return /started|active/.test(`${item.item_promotion_status || ""} ${item.promotion_status || ""}`.toLowerCase());
 }
 
 function productKey(product: Product) {
@@ -638,12 +666,11 @@ export default function PromocionesMeliPage() {
     ];
   }, [installments]);
 
-  const selectedCategoryFee = useMemo(() => {
-    if (!selectedGroup) return null;
+  function categoryFeeForProduct(product: Product) {
     return categoryFees.find(
-      (item) => item.category?.toLowerCase() === (selectedGroup.product.category || "").toLowerCase(),
+      (item) => item.category?.toLowerCase() === (product.category || "").toLowerCase(),
     ) || null;
-  }, [categoryFees, selectedGroup]);
+  }
 
   function channelSetting(productId: string | undefined, optionCode: string) {
     return marginSettings.find(
@@ -651,8 +678,8 @@ export default function PromocionesMeliPage() {
     );
   }
 
-  function rentabilityForRow(row: PublicationPromoRow, salePrice?: number | null) {
-    if (!selectedGroup || !salePrice || salePrice <= 0) return null;
+  function rentabilityForProductRow(product: Product, row: PublicationPromoRow, salePrice?: number | null) {
+    if (!salePrice || salePrice <= 0) return null;
     const option =
       pricingOptions.find((item) => optionMatchesInstallment(item, row.installmentCount)) ||
       mercadoLibreClassicOption();
@@ -661,11 +688,11 @@ export default function PromocionesMeliPage() {
       ...option,
       financing_fee_rate: publicationFinancingRate ?? Number(option.financing_fee_rate || 0),
     });
-    const setting = channelSetting(selectedGroup.product.id, normalizedOption.code);
+    const setting = channelSetting(product.id, normalizedOption.code);
     const result = calculatePriceSummary(
-      selectedGroup.product,
+      product,
       normalizedOption,
-      normalizedOption.applies_marketplace_fee ? selectedCategoryFee : null,
+      normalizedOption.applies_marketplace_fee ? categoryFeeForProduct(product) : null,
       taxes,
       normalizedOption.applies_shipping ? row.publication : null,
       {
@@ -684,6 +711,11 @@ export default function PromocionesMeliPage() {
       margin: Number(result.marginOnNetSale || 0),
       netProfit: Number(result.netProfit || 0),
     };
+  }
+
+  function rentabilityForRow(row: PublicationPromoRow, salePrice?: number | null) {
+    if (!selectedGroup) return null;
+    return rentabilityForProductRow(selectedGroup.product, row, salePrice);
   }
 
   const publicationFamilies = useMemo<PublicationVariantGroup[]>(() => {
@@ -756,6 +788,133 @@ export default function PromocionesMeliPage() {
         return a.title.localeCompare(b.title, "es");
       });
   }, [selectedGroup, selectedOpportunities, onlyMeliContribution]);
+
+  const trafficLights = useMemo<PromoTrafficLights>(() => {
+    const green: PromoTrafficLightItem[] = [];
+    const red: PromoTrafficLightItem[] = [];
+    const yellow: PromoTrafficLightItem[] = [];
+
+    function addItem(bucket: PromoTrafficLightItem[], item: PromoTrafficLightItem) {
+      bucket.push(item);
+    }
+
+    groups.forEach((group) => {
+      const opportunitiesByItem = new Map<string, MercadoLibrePromotionOpportunity[]>();
+      group.opportunities.filter(isCurrentOpportunity).forEach((opportunity) => {
+        const current = opportunitiesByItem.get(opportunity.meli_item_id) || [];
+        current.push(opportunity);
+        opportunitiesByItem.set(opportunity.meli_item_id, current);
+      });
+
+      group.publications.forEach((publication) => {
+        const label = installmentLabel(publication);
+        const row: PublicationPromoRow = {
+          publication,
+          opportunities: mergeOpportunities(
+            publication.meli_item_id ? opportunitiesByItem.get(publication.meli_item_id) || [] : [],
+            rawPromotionOpportunities(publication).filter(isCurrentOpportunity),
+          ),
+          installmentCount: installmentCountFromLabel(label),
+          installmentLabel: label,
+          bestOpportunity: null,
+        };
+
+        const hasStartedOpportunity = row.opportunities.some(isActiveOpportunity);
+        const rows: PromoComparison[] = [
+          ...(publication.meli_promo_price && !hasStartedOpportunity
+            ? [{
+                key: `${publication.meli_item_id}-active-light`,
+                status: "Vigente" as const,
+                name: publication.meli_promo_name || publication.meli_promo_status || "Promo vigente",
+                promoPrice: Number(publication.meli_promo_price || 0),
+                effectiveSalePrice: effectiveSalePrice(
+                  publication.meli_promo_price,
+                  publication.meli_promo_meli_amount,
+                  publication.meli_promo_meli_rate,
+                  publication.meli_price,
+                  publication.meli_promo_seller_rate,
+                ),
+                meliAmount: Number(publication.meli_promo_meli_amount || 0),
+                meliRate: Number(publication.meli_promo_meli_rate || 0),
+                sellerAmount: Number(publication.meli_promo_seller_amount || 0),
+                sellerRate: Number(publication.meli_promo_seller_rate || 0),
+                rentability: null,
+                netProfit: null,
+              }]
+            : []),
+          ...row.opportunities.map((opportunity) => {
+            const promoEffectiveSalePrice = effectiveSalePrice(
+              opportunity.promo_price,
+              opportunity.meli_amount,
+              opportunity.meli_percentage,
+              opportunity.original_price || publication.meli_price,
+              opportunity.seller_percentage,
+            );
+            return {
+              key: opportunity.offer_id || opportunity.promotion_id || `${publication.meli_item_id}-${opportunity.promo_price}`,
+              status: isActiveOpportunity(opportunity) ? "Vigente" as const : "Para activar" as const,
+              name: opportunity.promotion_name || opportunity.promotion_id,
+              promoPrice: Number(opportunity.promo_price || 0) || null,
+              effectiveSalePrice: promoEffectiveSalePrice,
+              meliAmount: Number(opportunity.meli_amount || 0),
+              meliRate: Number(opportunity.meli_percentage || 0),
+              sellerAmount: Number(opportunity.seller_amount || 0),
+              sellerRate: Number(opportunity.seller_percentage || 0),
+              rentability: null,
+              netProfit: null,
+            };
+          }),
+        ];
+
+        dedupePromoComparisons(rows).forEach((promo) => {
+          const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice);
+          if (!rentability || rentability.margin < -100) return;
+
+          const item = {
+            key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}`,
+            sku: group.product.sku,
+            title: publication.meli_title || group.product.name,
+            itemId: publication.meli_item_id || "-",
+            installmentLabel: row.installmentCount === 1 ? "1 pago" : row.installmentLabel,
+            promotionName: promo.name,
+            margin: rentability.margin,
+            netProfit: rentability.netProfit,
+            status: promo.status,
+          };
+
+          if (promo.status === "Vigente" && rentability.margin > 5) addItem(green, item);
+          if (promo.status === "Vigente" && rentability.margin < 5) addItem(red, item);
+          if (promo.status === "Para activar" && rentability.margin > 5) addItem(yellow, item);
+        });
+      });
+    });
+
+    function groupBySku(items: PromoTrafficLightItem[]) {
+      const grouped = new Map<string, PromoTrafficLightGroup>();
+      items.forEach((item) => {
+        const current = grouped.get(item.sku) || {
+          sku: item.sku,
+          productName: products.find((product) => product.sku === item.sku)?.name || item.title,
+          items: [],
+        };
+        current.items.push(item);
+        grouped.set(item.sku, current);
+      });
+
+      return [...grouped.values()]
+        .map((group) => ({
+          ...group,
+          items: [...group.items].sort((a, b) => b.margin - a.margin),
+        }))
+        .sort((a, b) => a.sku.localeCompare(b.sku, "es"));
+    }
+
+    return {
+      green: groupBySku(green),
+      red: groupBySku(red),
+      yellow: groupBySku(yellow),
+    };
+  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings]);
 
   return (
     <main className="container wide promociones-meli-page">
@@ -1175,6 +1334,83 @@ export default function PromocionesMeliPage() {
             </button>
           </div>
         )}
+      </section>
+
+      <section className="card promociones-traffic-light">
+        <div className="promociones-traffic-head">
+          <div>
+            <h2>Semaforo de promociones</h2>
+            <p>Resumen por SKU de promociones activas y oportunidades con rentabilidad calculada.</p>
+          </div>
+          <span>Umbral 5%</span>
+        </div>
+        <div className="promociones-traffic-grid">
+          {[
+            {
+              key: "green",
+              title: "Verde",
+              subtitle: "Activas con mas de 5%",
+              groups: trafficLights.green,
+            },
+            {
+              key: "red",
+              title: "Rojo",
+              subtitle: "Activas con menos de 5%",
+              groups: trafficLights.red,
+            },
+            {
+              key: "yellow",
+              title: "Amarillo",
+              subtitle: "Para activar con mas de 5%",
+              groups: trafficLights.yellow,
+            },
+          ].map((column) => (
+            <div className={`promociones-traffic-column ${column.key}`} key={column.key}>
+              <div className="promociones-traffic-column-head">
+                <div>
+                  <h3>{column.title}</h3>
+                  <p>{column.subtitle}</p>
+                </div>
+                <strong>{column.groups.reduce((total, group) => total + group.items.length, 0)}</strong>
+              </div>
+              {column.groups.length ? (
+                column.groups.map((group) => (
+                  <article className="promociones-traffic-sku" key={`${column.key}-${group.sku}`}>
+                    <div className="promociones-traffic-sku-head">
+                      <strong>{group.sku}</strong>
+                      <span>{group.items.length}</span>
+                    </div>
+                    <small>{group.productName}</small>
+                    <div className="promociones-traffic-items">
+                      {group.items.map((item) => (
+                        <div className="promociones-traffic-item" key={item.key}>
+                          <div>
+                            <strong>{item.title}</strong>
+                            <span>{item.promotionName}</span>
+                          </div>
+                          <div className="promociones-traffic-meta">
+                            <button
+                              type="button"
+                              className={copiedItemId === item.itemId ? "copied" : ""}
+                              title="Copiar ID de publicacion"
+                              onClick={() => copyItemId(item.itemId)}
+                            >
+                              {copiedItemId === item.itemId ? "Copiado" : item.itemId}
+                            </button>
+                            <span>{item.installmentLabel}</span>
+                            <strong className={item.margin < 5 ? "negative" : "positive"}>{percent(item.margin)}</strong>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <div className="promociones-empty">Sin publicaciones en este grupo.</div>
+              )}
+            </div>
+          ))}
+        </div>
       </section>
     </main>
   );
