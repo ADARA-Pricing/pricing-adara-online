@@ -533,6 +533,12 @@ export default function PromocionesMeliPage() {
       if (!current.thumbnail && publication.meli_thumbnail) current.thumbnail = publication.meli_thumbnail;
       const sync = publication.meli_last_sync_at || publication.updated_at || null;
       if (sync && (!current.latestSync || sync > current.latestSync)) current.latestSync = sync;
+      publicationOpportunities.forEach((opportunity) => {
+        const opportunitySync = opportunity.last_sync_at || opportunity.updated_at || opportunity.created_at || null;
+        if (opportunitySync && (!current.latestSync || opportunitySync > current.latestSync)) {
+          current.latestSync = opportunitySync;
+        }
+      });
 
       map.set(key, current);
     });
@@ -659,7 +665,7 @@ export default function PromocionesMeliPage() {
         ? opportunitiesByItem.get(publication.meli_item_id) || []
         : [];
       const rawOpportunities = rawPromotionOpportunities(publication).filter(isCurrentOpportunity);
-      const rowOpportunities = rawOpportunities.length ? rawOpportunities : tableOpportunities;
+      const rowOpportunities = tableOpportunities.length ? tableOpportunities : rawOpportunities;
       const key = publicationFamilyKey(publication) || publication.meli_item_id || publication.sku || "publicacion";
       const family = families.get(key) || {
         key,
