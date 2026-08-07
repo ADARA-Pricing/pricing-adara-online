@@ -131,6 +131,8 @@ export default function PromocionesMeliPage() {
   const [opportunities, setOpportunities] = useState<MercadoLibrePromotionOpportunity[]>([]);
   const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedFamilyKey, setSelectedFamilyKey] = useState<string | null>(null);
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -262,10 +264,7 @@ export default function PromocionesMeliPage() {
     });
   }, [groups, query]);
 
-  const selectedGroup =
-    filteredGroups.find((group) => productKey(group.product) === selectedKey) ||
-    filteredGroups[0] ||
-    null;
+  const selectedGroup = groups.find((group) => productKey(group.product) === selectedKey) || null;
 
   const selectedPublicationIds = new Set(
     selectedGroup?.publications.map((item) => item.meli_item_id).filter(Boolean) || [],
@@ -334,187 +333,230 @@ export default function PromocionesMeliPage() {
 
       {error && <div className="message error">{error}</div>}
 
-      <section className="card promociones-toolbar">
-        <div className="field">
-          <label>Buscar producto o publicacion</label>
-          <input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setSelectedKey(null);
-            }}
-            placeholder="SKU, producto, marca, item ML..."
-          />
+      <section className="card promociones-workbar">
+        <div className="promociones-current-product">
+          <span className="promociones-thumb promociones-current-thumb">
+            {selectedGroup?.thumbnail ? <img src={selectedGroup.thumbnail} alt="" /> : selectedGroup?.product.sku.slice(0, 2) || "ML"}
+          </span>
+          <div>
+            <span className="small">Producto seleccionado</span>
+            <h2>{selectedGroup ? selectedGroup.product.name : "Elegí un producto para empezar"}</h2>
+            <p>
+              {selectedGroup
+                ? `${selectedGroup.product.sku} | ${selectedGroup.product.category || "Sin categoria"} | Sync ${formatDateTime(selectedGroup.latestSync)}`
+                : `${groups.length} productos con publicaciones activas disponibles`}
+            </p>
+          </div>
         </div>
-        <div className="promociones-kpis">
-          <div>
-            <span>Productos activos ML</span>
-            <strong>{groups.length}</strong>
+        <div className="promociones-workbar-actions">
+          <div className="promociones-kpis compact">
+            <div>
+              <span>Productos ML</span>
+              <strong>{groups.length}</strong>
+            </div>
+            <div>
+              <span>Publicaciones</span>
+              <strong>{selectedGroup?.publications.length || publications.length}</strong>
+            </div>
+            <div>
+              <span>Promos</span>
+              <strong>{selectedGroup ? selectedGroup.activePromotionCount + selectedGroup.opportunities.length : opportunities.filter(isCurrentOpportunity).length}</strong>
+            </div>
           </div>
-          <div>
-            <span>Publicaciones activas</span>
-            <strong>{publications.length}</strong>
-          </div>
-          <div>
-            <span>Promos detectadas</span>
-            <strong>{opportunities.filter(isCurrentOpportunity).length}</strong>
-          </div>
+          <button className="button" type="button" onClick={() => setProductPickerOpen(true)}>
+            Seleccionar producto
+          </button>
         </div>
       </section>
 
-      <section className="promociones-layout">
-        <div className="card promociones-product-list">
-          <div className="promociones-card-header">
-            <h2>Productos disponibles</h2>
-            <span>{filteredGroups.length} resultados</span>
-          </div>
-
-          {loading ? (
-            <p>Cargando publicaciones de MercadoLibre...</p>
-          ) : (
-            <div className="promociones-products">
-              {filteredGroups.map((group) => {
-                const selected = selectedGroup && productKey(selectedGroup.product) === productKey(group.product);
-                return (
-                  <button
-                    key={productKey(group.product)}
-                    type="button"
-                    className={`promociones-product-row ${selected ? "active" : ""}`}
-                    onClick={() => setSelectedKey(productKey(group.product))}
-                  >
-                    <span className="promociones-thumb">
-                      {group.thumbnail ? <img src={group.thumbnail} alt="" /> : group.product.sku.slice(0, 2)}
-                    </span>
-                    <span className="promociones-product-main">
-                      <strong>{group.product.name}</strong>
-                      <span>{group.product.sku} | {group.product.category || "Sin categoria"}</span>
-                    </span>
-                    <span className="promociones-product-meta">
-                      <strong>{group.publications.length}</strong>
-                      <span>pub.</span>
-                    </span>
-                    <span className="promociones-product-meta">
-                      <strong>{group.activePromotionCount + group.opportunities.length}</strong>
-                      <span>promos</span>
-                    </span>
-                  </button>
-                );
-              })}
-              {filteredGroups.length === 0 && (
-                <div className="promociones-empty">
-                  No hay productos con publicaciones activas sincronizadas.
-                </div>
+      {productPickerOpen && (
+        <div className="modal-backdrop promociones-picker-backdrop" onMouseDown={() => setProductPickerOpen(false)}>
+          <div className="promociones-picker-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h2>Seleccionar producto</h2>
+                <p className="small">Buscá por SKU, nombre, categoría o item de MercadoLibre.</p>
+              </div>
+              <button className="button ghost" type="button" onClick={() => setProductPickerOpen(false)}>
+                Cerrar
+              </button>
+            </div>
+            <div className="field">
+              <label>Buscar</label>
+              <input
+                autoFocus
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="SKU, producto, marca, item ML..."
+              />
+            </div>
+            <div className="promociones-picker-list">
+              {loading ? (
+                <p>Cargando publicaciones de MercadoLibre...</p>
+              ) : (
+                filteredGroups.map((group) => {
+                  const selected = selectedGroup && productKey(selectedGroup.product) === productKey(group.product);
+                  return (
+                    <button
+                      key={productKey(group.product)}
+                      type="button"
+                      className={`promociones-picker-row ${selected ? "active" : ""}`}
+                      onClick={() => {
+                        setSelectedKey(productKey(group.product));
+                        setSelectedFamilyKey(null);
+                        setProductPickerOpen(false);
+                      }}
+                    >
+                      <span className="promociones-thumb">
+                        {group.thumbnail ? <img src={group.thumbnail} alt="" /> : group.product.sku.slice(0, 2)}
+                      </span>
+                      <span className="promociones-product-main">
+                        <strong>{group.product.name}</strong>
+                        <span>{group.product.sku} | {group.product.category || "Sin categoria"}</span>
+                      </span>
+                      <span className="promociones-product-meta">
+                        <strong>{group.publications.length}</strong>
+                        <span>pub.</span>
+                      </span>
+                      <span className="promociones-product-meta">
+                        <strong>{group.activePromotionCount + group.opportunities.length}</strong>
+                        <span>promos</span>
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+              {!loading && filteredGroups.length === 0 && (
+                <div className="promociones-empty">No hay productos para esa búsqueda.</div>
               )}
             </div>
-          )}
+          </div>
         </div>
+      )}
 
-        <div className="card promociones-detail">
-          {selectedGroup ? (
-            <>
-              <div className="promociones-detail-header">
+      <section className="card promociones-detail promociones-full-detail">
+        {selectedGroup ? (
+          <>
+            <div className="promociones-detail-header">
+              <div>
+                <h2>Publicaciones del producto</h2>
+                <p>Elegí una publicación para ver sus variantes de 1, 3, 6, 9 y 12 cuotas.</p>
+              </div>
+              <div className="promociones-detail-stats">
                 <div>
-                  <h2>{selectedGroup.product.name}</h2>
-                  <p>{selectedGroup.product.sku} | {selectedGroup.product.category || "Sin categoria"} | Sync {formatDateTime(selectedGroup.latestSync)}</p>
+                  <span>Precio ML desde</span>
+                  <strong>{selectedGroup.minPrice ? moneyWithCents(selectedGroup.minPrice) : "-"}</strong>
                 </div>
-                <div className="promociones-detail-stats">
-                  <div>
-                    <span>Precio ML desde</span>
-                    <strong>{selectedGroup.minPrice ? moneyWithCents(selectedGroup.minPrice) : "-"}</strong>
-                  </div>
-                  <div>
-                    <span>Mejor aporte ML</span>
-                    <strong>{selectedGroup.bestMeliAmount ? moneyWithCents(selectedGroup.bestMeliAmount) : percent(selectedGroup.bestMeliRate)}</strong>
-                  </div>
+                <div>
+                  <span>Mejor aporte ML</span>
+                  <strong>{selectedGroup.bestMeliAmount ? moneyWithCents(selectedGroup.bestMeliAmount) : percent(selectedGroup.bestMeliRate)}</strong>
                 </div>
               </div>
-
-              <div className="promociones-family-list">
-                {publicationFamilies.map((family) => (
-                  <article className="promociones-family-card" key={family.key}>
-                    <div className="promociones-family-header">
-                      <div>
-                        <h3>{family.title}</h3>
-                        <p>{family.rows.length} variante(s) de cuotas detectadas</p>
-                      </div>
-                      <div className="promociones-family-installments">
-                        {family.rows.map((row) => (
-                          <span key={`${row.publication.meli_item_id}-pill`}>
-                            {row.installmentLabel}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="promociones-installment-grid">
-                      {family.rows.map((row) => {
-                        const activeMeliAmount = Number(row.publication.meli_promo_meli_amount || 0);
-                        const activeSellerAmount = Number(row.publication.meli_promo_seller_amount || 0);
-                        const best = row.bestOpportunity;
-                        return (
-                          <section className="promociones-installment-card" key={row.publication.id || row.publication.meli_item_id}>
-                            <div className="promociones-installment-head">
-                              <strong>{row.installmentLabel}</strong>
-                              <span>{row.publication.meli_listing_type_name || row.publication.meli_listing_type_id || "-"}</span>
-                            </div>
-
-                            <div className="promociones-installment-prices">
-                              <div>
-                                <span>Precio publicado</span>
-                                <strong>{moneyWithCents(row.publication.meli_price || 0)}</strong>
-                              </div>
-                              <div>
-                                <span>Precio promo</span>
-                                <strong>{row.publication.meli_promo_price ? moneyWithCents(row.publication.meli_promo_price) : "-"}</strong>
-                              </div>
-                            </div>
-
-                            <div className="promociones-current-promo">
-                              <span>Vigente</span>
-                              <strong>{row.publication.meli_promo_name || row.publication.meli_promo_status || "Sin promo activa"}</strong>
-                              <small>
-                                Meli {activeMeliAmount ? moneyWithCents(activeMeliAmount) : percent(row.publication.meli_promo_meli_rate || 0)}
-                                {" | "}
-                                Vendedor {activeSellerAmount ? moneyWithCents(activeSellerAmount) : percent(row.publication.meli_promo_seller_rate || 0)}
-                              </small>
-                            </div>
-
-                            <div className="promociones-best-opportunity">
-                              <span>Mejor disponible</span>
-                              {best ? (
-                                <>
-                                  <strong>{best.promotion_name || best.promotion_id}</strong>
-                                  <small>
-                                    Precio {best.promo_price ? moneyWithCents(best.promo_price) : "-"}
-                                    {" | "}
-                                    Meli {best.meli_amount ? moneyWithCents(best.meli_amount) : percent(best.meli_percentage || 0)}
-                                  </small>
-                                </>
-                              ) : (
-                                <strong>Sin promo disponible detectada</strong>
-                              )}
-                            </div>
-
-                            <div className="promociones-row-footer">
-                              <span>{row.publication.meli_item_id || "-"} | Stock {row.publication.meli_stock ?? "-"}</span>
-                              {row.publication.meli_permalink && (
-                                <a href={row.publication.meli_permalink} target="_blank" rel="noreferrer">Abrir</a>
-                              )}
-                            </div>
-                          </section>
-                        );
-                      })}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="promociones-empty">
-              Selecciona un producto para ver sus publicaciones y promociones.
             </div>
-          )}
-        </div>
+
+            <div className="promociones-family-list">
+              {publicationFamilies.map((family) => {
+                const expanded = selectedFamilyKey === family.key;
+                const bestFamilyAmount = Math.max(...family.rows.map((row) => Number(row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount || 0)));
+                const minFamilyPrice = Math.min(...family.rows.map((row) => Number(row.publication.meli_price || 0)).filter((price) => price > 0));
+                return (
+                  <article className={`promociones-family-card ${expanded ? "expanded" : ""}`} key={family.key}>
+                    <button
+                      className="promociones-family-button"
+                      type="button"
+                      onClick={() => setSelectedFamilyKey(expanded ? null : family.key)}
+                    >
+                      <span className="promociones-family-main">
+                        <strong>{family.title}</strong>
+                        <small>{family.rows.length} variante(s) de cuotas | desde {Number.isFinite(minFamilyPrice) ? moneyWithCents(minFamilyPrice) : "-"}</small>
+                      </span>
+                      <span className="promociones-family-installments">
+                        {family.rows.map((row) => (
+                          <span key={`${row.publication.meli_item_id}-pill`}>{row.installmentLabel}</span>
+                        ))}
+                      </span>
+                      <span className="promociones-family-best">
+                        <small>Mejor aporte ML</small>
+                        <strong>{bestFamilyAmount ? moneyWithCents(bestFamilyAmount) : "-"}</strong>
+                      </span>
+                      <span className="promociones-expand-label">{expanded ? "Ocultar" : "Ver cuotas"}</span>
+                    </button>
+
+                    {expanded && (
+                      <div className="promociones-installment-grid">
+                        {family.rows.map((row) => {
+                          const activeMeliAmount = Number(row.publication.meli_promo_meli_amount || 0);
+                          const activeSellerAmount = Number(row.publication.meli_promo_seller_amount || 0);
+                          const best = row.bestOpportunity;
+                          return (
+                            <section className="promociones-installment-card" key={row.publication.id || row.publication.meli_item_id}>
+                              <div className="promociones-installment-head">
+                                <strong>{row.installmentLabel}</strong>
+                                <span>{row.publication.meli_listing_type_name || row.publication.meli_listing_type_id || "-"}</span>
+                              </div>
+
+                              <div className="promociones-installment-prices">
+                                <div>
+                                  <span>Precio publicado</span>
+                                  <strong>{moneyWithCents(row.publication.meli_price || 0)}</strong>
+                                </div>
+                                <div>
+                                  <span>Precio promo</span>
+                                  <strong>{row.publication.meli_promo_price ? moneyWithCents(row.publication.meli_promo_price) : "-"}</strong>
+                                </div>
+                              </div>
+
+                              <div className="promociones-current-promo">
+                                <span>Vigente</span>
+                                <strong>{row.publication.meli_promo_name || row.publication.meli_promo_status || "Sin promo activa"}</strong>
+                                <small>
+                                  Meli {activeMeliAmount ? moneyWithCents(activeMeliAmount) : percent(row.publication.meli_promo_meli_rate || 0)}
+                                  {" | "}
+                                  Vendedor {activeSellerAmount ? moneyWithCents(activeSellerAmount) : percent(row.publication.meli_promo_seller_rate || 0)}
+                                </small>
+                              </div>
+
+                              <div className="promociones-best-opportunity">
+                                <span>Mejor disponible</span>
+                                {best ? (
+                                  <>
+                                    <strong>{best.promotion_name || best.promotion_id}</strong>
+                                    <small>
+                                      Precio {best.promo_price ? moneyWithCents(best.promo_price) : "-"}
+                                      {" | "}
+                                      Meli {best.meli_amount ? moneyWithCents(best.meli_amount) : percent(best.meli_percentage || 0)}
+                                    </small>
+                                  </>
+                                ) : (
+                                  <strong>Sin promo disponible detectada</strong>
+                                )}
+                              </div>
+
+                              <div className="promociones-row-footer">
+                                <span>{row.publication.meli_item_id || "-"} | Stock {row.publication.meli_stock ?? "-"}</span>
+                                {row.publication.meli_permalink && (
+                                  <a href={row.publication.meli_permalink} target="_blank" rel="noreferrer">Abrir</a>
+                                )}
+                              </div>
+                            </section>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="promociones-empty promociones-start-empty">
+            <strong>Seleccioná un producto para empezar</strong>
+            <span>El listado se abre en un popup para que después trabajes las promociones usando todo el ancho de pantalla.</span>
+            <button className="button" type="button" onClick={() => setProductPickerOpen(true)}>
+              Seleccionar producto
+            </button>
+          </div>
+        )}
       </section>
     </main>
   );

@@ -5270,6 +5270,106 @@ textarea:focus-visible {
   align-items: start;
 }
 
+.promociones-workbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.promociones-current-product {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.promociones-current-product h2 {
+  margin: 2px 0 4px;
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.promociones-current-product p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.promociones-current-thumb {
+  flex: 0 0 auto;
+}
+
+.promociones-workbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.promociones-kpis.compact {
+  min-width: 390px;
+}
+
+.promociones-picker-backdrop {
+  align-items: center;
+}
+
+.promociones-picker-modal {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 40px));
+  overflow: auto;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #dbe3ee;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+  padding: 22px;
+}
+
+.promociones-picker-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.promociones-picker-modal .modal-header h2 {
+  margin: 0 0 4px;
+}
+
+.promociones-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.promociones-picker-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr) 58px 68px;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.promociones-picker-row:hover,
+.promociones-picker-row.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.promociones-full-detail {
+  padding: 24px;
+}
+
 .promociones-card-header,
 .promociones-detail-header {
   display: flex;
@@ -5425,6 +5525,82 @@ textarea:focus-visible {
   border-radius: 8px;
   background: #ffffff;
   overflow: hidden;
+}
+
+.promociones-family-card.expanded {
+  border-color: #93c5fd;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.08);
+}
+
+.promociones-family-button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(260px, 0.75fr) minmax(150px, 0.35fr) 110px;
+  gap: 14px;
+  align-items: center;
+  border: 0;
+  background: #ffffff;
+  padding: 16px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.promociones-family-button:hover {
+  background: #f8fbff;
+}
+
+.promociones-family-card.expanded .promociones-family-button {
+  background: #eff6ff;
+  border-bottom: 1px solid #bfdbfe;
+}
+
+.promociones-family-main {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.promociones-family-main strong {
+  color: #0f172a;
+  font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.promociones-family-main small,
+.promociones-family-best small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.promociones-family-best {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.promociones-family-best strong {
+  color: #0f172a;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.promociones-expand-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .promociones-family-header {
@@ -5586,12 +5762,33 @@ textarea:focus-visible {
 
 @media (max-width: 1100px) {
   .promociones-toolbar,
-  .promociones-layout {
+  .promociones-layout,
+  .promociones-workbar {
     grid-template-columns: 1fr;
   }
 
   .promociones-products {
     max-height: none;
+  }
+
+  .promociones-workbar-actions {
+    justify-content: space-between;
+    align-items: stretch;
+  }
+
+  .promociones-kpis.compact {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .promociones-family-button {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .promociones-family-installments,
+  .promociones-family-best {
+    justify-content: flex-start;
+    align-items: flex-start;
   }
 }
 
@@ -5602,7 +5799,25 @@ textarea:focus-visible {
     min-width: 0;
   }
 
-  .promociones-product-row {
+  .promociones-product-row,
+  .promociones-picker-row {
     grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .promociones-workbar-actions {
+    flex-direction: column;
+  }
+
+  .promociones-kpis.compact {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .promociones-installment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .promociones-installment-prices {
+    grid-template-columns: 1fr;
   }
 }
