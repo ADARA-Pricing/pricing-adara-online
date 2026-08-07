@@ -85,6 +85,7 @@ type PromoTrafficLightItem = {
   sku: string;
   title: string;
   itemId: string;
+  installmentCount: number;
   installmentLabel: string;
   promotionName: string;
   margin: number;
@@ -875,6 +876,7 @@ export default function PromocionesMeliPage() {
             sku: group.product.sku,
             title: publication.meli_title || group.product.name,
             itemId: publication.meli_item_id || "-",
+            installmentCount: row.installmentCount,
             installmentLabel: row.installmentCount === 1 ? "1 pago" : row.installmentLabel,
             promotionName: promo.name,
             margin: rentability.margin,
@@ -897,14 +899,24 @@ export default function PromocionesMeliPage() {
           productName: products.find((product) => product.sku === item.sku)?.name || item.title,
           items: [],
         };
-        current.items.push(item);
+        const existingIndex = current.items.findIndex((currentItem) =>
+          currentItem.installmentLabel === item.installmentLabel,
+        );
+        if (existingIndex === -1) {
+          current.items.push(item);
+        } else if (item.margin > current.items[existingIndex].margin) {
+          current.items[existingIndex] = item;
+        }
         grouped.set(item.sku, current);
       });
 
       return [...grouped.values()]
         .map((group) => ({
           ...group,
-          items: [...group.items].sort((a, b) => b.margin - a.margin),
+          items: [...group.items].sort((a, b) => {
+            if (a.installmentCount !== b.installmentCount) return a.installmentCount - b.installmentCount;
+            return b.margin - a.margin;
+          }),
         }))
         .sort((a, b) => a.sku.localeCompare(b.sku, "es"));
     }
@@ -1377,17 +1389,16 @@ export default function PromocionesMeliPage() {
                 column.groups.map((group) => (
                   <article className="promociones-traffic-sku" key={`${column.key}-${group.sku}`}>
                     <div className="promociones-traffic-sku-head">
-                      <strong>{group.sku}</strong>
+                      <div>
+                        <strong>{group.sku}</strong>
+                        <small>{group.productName}</small>
+                      </div>
                       <span>{group.items.length}</span>
                     </div>
-                    <small>{group.productName}</small>
                     <div className="promociones-traffic-items">
                       {group.items.map((item) => (
                         <div className="promociones-traffic-item" key={item.key}>
-                          <div>
-                            <strong>{item.title}</strong>
-                            <span>{item.promotionName}</span>
-                          </div>
+                          <strong>{item.installmentLabel}</strong>
                           <div className="promociones-traffic-meta">
                             <button
                               type="button"
@@ -1397,7 +1408,6 @@ export default function PromocionesMeliPage() {
                             >
                               {copiedItemId === item.itemId ? "Copiado" : item.itemId}
                             </button>
-                            <span>{item.installmentLabel}</span>
                             <strong className={item.margin < 5 ? "negative" : "positive"}>{percent(item.margin)}</strong>
                           </div>
                         </div>
