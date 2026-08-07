@@ -5734,6 +5734,16 @@ textarea:focus-visible {
   font-size: 11px;
   font-weight: 800;
   margin-top: 3px;
+  cursor: copy;
+  width: fit-content;
+}
+
+.promociones-summary-item-id:hover {
+  text-decoration: underline;
+}
+
+.promociones-summary-item-id.copied {
+  color: #047857;
 }
 
 .promociones-summary-head span {

@@ -403,6 +403,7 @@ export default function PromocionesMeliPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedFamilyKey, setSelectedFamilyKey] = useState<string | null>(null);
   const [selectedInstallments, setSelectedInstallments] = useState<Record<string, string>>({});
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [onlyMeliContribution, setOnlyMeliContribution] = useState(false);
   const [syncingMeli, setSyncingMeli] = useState(false);
@@ -477,6 +478,19 @@ export default function PromocionesMeliPage() {
 
     if (marginsResponse.error) setError(marginsResponse.error.message);
     else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
+  }
+
+  async function copyItemId(itemId?: string | null) {
+    if (!itemId) return;
+    try {
+      await navigator.clipboard.writeText(itemId);
+      setCopiedItemId(itemId);
+      window.setTimeout(() => {
+        setCopiedItemId((current) => (current === itemId ? null : current));
+      }, 1800);
+    } catch {
+      setError("No se pudo copiar el ID de la publicacion.");
+    }
   }
 
   async function syncMercadoLibreData() {
@@ -1039,7 +1053,27 @@ export default function PromocionesMeliPage() {
                             <div className="promociones-summary-head">
                               <div>
                                 <strong>{summary.label}</strong>
-                                <small className="promociones-summary-item-id">{summary.publication.meli_item_id || "-"}</small>
+                                <span
+                                  className={`promociones-summary-item-id ${copiedItemId === summary.publication.meli_item_id ? "copied" : ""}`}
+                                  role="button"
+                                  tabIndex={0}
+                                  title="Copiar ID de publicacion"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    copyItemId(summary.publication.meli_item_id);
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key !== "Enter" && event.key !== " ") return;
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    copyItemId(summary.publication.meli_item_id);
+                                  }}
+                                >
+                                  {copiedItemId === summary.publication.meli_item_id
+                                    ? "Copiado"
+                                    : summary.publication.meli_item_id || "-"}
+                                </span>
                               </div>
                               <span>{summary.opportunityCount} promo(s)</span>
                             </div>
