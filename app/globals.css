@@ -5912,7 +5912,13 @@ textarea:focus-visible {
   font-size: 13px;
 }
 
-.promociones-traffic-head > span {
+.promociones-traffic-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.promociones-traffic-actions > span {
   border: 1px solid #bfdbfe;
   border-radius: 999px;
   color: #1d4ed8;
@@ -5924,7 +5930,7 @@ textarea:focus-visible {
 
 .promociones-traffic-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -5934,10 +5940,6 @@ textarea:focus-visible {
   background: #f8fafc;
   min-width: 0;
   overflow: hidden;
-}
-
-.promociones-traffic-column.green {
-  border-color: #86efac;
 }
 
 .promociones-traffic-column.red {
@@ -6272,8 +6274,9 @@ textarea:focus-visible {
     display: block;
   }
 
-  .promociones-traffic-head > span {
-    display: inline-flex;
+  .promociones-traffic-actions {
+    align-items: flex-start;
+    flex-direction: column;
     margin-top: 10px;
   }
 

@@ -100,7 +100,6 @@ type PromoTrafficLightGroup = {
 };
 
 type PromoTrafficLights = {
-  green: PromoTrafficLightGroup[];
   red: PromoTrafficLightGroup[];
   yellow: PromoTrafficLightGroup[];
 };
@@ -791,12 +790,16 @@ export default function PromocionesMeliPage() {
   }, [selectedGroup, selectedOpportunities, onlyMeliContribution]);
 
   const trafficLights = useMemo<PromoTrafficLights>(() => {
-    const green: PromoTrafficLightItem[] = [];
     const red: PromoTrafficLightItem[] = [];
     const yellow: PromoTrafficLightItem[] = [];
+    const bestActiveBySkuInstallment = new Map<string, number>();
 
     function addItem(bucket: PromoTrafficLightItem[], item: PromoTrafficLightItem) {
       bucket.push(item);
+    }
+
+    function skuInstallmentKey(sku: string, installmentLabel: string) {
+      return `${sku}|${installmentLabel}`;
     }
 
     groups.forEach((group) => {
@@ -867,9 +870,33 @@ export default function PromocionesMeliPage() {
           }),
         ];
 
-        dedupePromoComparisons(rows).forEach((promo) => {
+        const calculatedPromos = dedupePromoComparisons(rows)
+          .map((promo) => {
+            const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice);
+            if (!rentability || rentability.margin < -100) return null;
+
+            return {
+              promo,
+              margin: rentability.margin,
+              netProfit: rentability.netProfit,
+            };
+          })
+          .filter(Boolean) as Array<{ promo: PromoComparison; margin: number; netProfit: number }>;
+
+        const activePromos = calculatedPromos.filter((item) => item.promo.status === "Vigente");
+        const candidatePromos = calculatedPromos.filter((item) => item.promo.status === "Para activar");
+        const bestActive = [...activePromos].sort((a, b) => b.margin - a.margin)[0] || null;
+        const bestCandidate = [...candidatePromos].sort((a, b) => b.margin - a.margin)[0] || null;
+
+        activePromos.forEach(({ promo, margin, netProfit }) => {
           const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice);
-          if (!rentability || rentability.margin < -100) return;
+          if (!rentability) return;
+          const normalizedInstallmentLabel = row.installmentCount === 1 ? "1 pago" : row.installmentLabel;
+          const activeKey = skuInstallmentKey(group.product.sku, normalizedInstallmentLabel);
+          const currentBestActive = bestActiveBySkuInstallment.get(activeKey);
+          if (currentBestActive === undefined || margin > currentBestActive) {
+            bestActiveBySkuInstallment.set(activeKey, margin);
+          }
 
           const item = {
             key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}`,
@@ -877,17 +904,35 @@ export default function PromocionesMeliPage() {
             title: publication.meli_title || group.product.name,
             itemId: publication.meli_item_id || "-",
             installmentCount: row.installmentCount,
-            installmentLabel: row.installmentCount === 1 ? "1 pago" : row.installmentLabel,
+            installmentLabel: normalizedInstallmentLabel,
             promotionName: promo.name,
-            margin: rentability.margin,
-            netProfit: rentability.netProfit,
+            margin,
+            netProfit,
             status: promo.status,
           };
 
-          if (promo.status === "Vigente" && rentability.margin > 5) addItem(green, item);
-          if (promo.status === "Vigente" && rentability.margin < 5) addItem(red, item);
-          if (promo.status === "Para activar" && rentability.margin > 5) addItem(yellow, item);
+          if (margin < 5) addItem(red, item);
         });
+
+        if (
+          bestCandidate &&
+          bestCandidate.margin > 5 &&
+          (!bestActive || bestCandidate.margin > bestActive.margin)
+        ) {
+          const promo = bestCandidate.promo;
+          addItem(yellow, {
+            key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}`,
+            sku: group.product.sku,
+            title: publication.meli_title || group.product.name,
+            itemId: publication.meli_item_id || "-",
+            installmentCount: row.installmentCount,
+            installmentLabel: row.installmentCount === 1 ? "1 pago" : row.installmentLabel,
+            promotionName: promo.name,
+            margin: bestCandidate.margin,
+            netProfit: bestCandidate.netProfit,
+            status: promo.status,
+          });
+        }
       });
     });
 
@@ -922,9 +967,11 @@ export default function PromocionesMeliPage() {
     }
 
     return {
-      green: groupBySku(green),
       red: groupBySku(red),
-      yellow: groupBySku(yellow),
+      yellow: groupBySku(yellow.filter((item) => {
+        const bestActiveMargin = bestActiveBySkuInstallment.get(skuInstallmentKey(item.sku, item.installmentLabel));
+        return bestActiveMargin === undefined || item.margin > bestActiveMargin;
+      })),
     };
   }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings]);
 
@@ -1351,29 +1398,28 @@ export default function PromocionesMeliPage() {
       <section className="card promociones-traffic-light">
         <div className="promociones-traffic-head">
           <div>
-            <h2>Semaforo de promociones</h2>
-            <p>Resumen por SKU de promociones activas y oportunidades con rentabilidad calculada.</p>
+            <h2>Ajustes pendientes</h2>
+            <p>SKU/cuotas que requieren accion: promos activas con baja rentabilidad u oportunidades mejores para activar.</p>
           </div>
-          <span>Umbral 5%</span>
+          <div className="promociones-traffic-actions">
+            <span>Umbral 5%</span>
+            <button className="button ghost" type="button" onClick={syncMercadoLibreData} disabled={syncingMeli}>
+              {syncingMeli ? "Actualizando..." : "Refrescar"}
+            </button>
+          </div>
         </div>
         <div className="promociones-traffic-grid">
           {[
             {
-              key: "green",
-              title: "Verde",
-              subtitle: "Activas con mas de 5%",
-              groups: trafficLights.green,
-            },
-            {
               key: "red",
-              title: "Rojo",
-              subtitle: "Activas con menos de 5%",
+              title: "Revisar activas",
+              subtitle: "Vigentes con menos de 5%",
               groups: trafficLights.red,
             },
             {
               key: "yellow",
-              title: "Amarillo",
-              subtitle: "Para activar con mas de 5%",
+              title: "Conviene activar",
+              subtitle: "Mejor promo disponible con mas de 5%",
               groups: trafficLights.yellow,
             },
           ].map((column) => (
