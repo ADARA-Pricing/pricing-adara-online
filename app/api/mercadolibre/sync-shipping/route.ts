@@ -1115,7 +1115,17 @@ function marketplaceFeeRate(listingPrice: MeliListingPrice | null) {
 }
 
 function financingFeeRate(listingPrice: MeliListingPrice | null) {
-  return Number(listingPrice?.sale_fee_details?.financing_add_on_fee || 0);
+  const details = listingPrice?.sale_fee_details || {};
+  const financingAmount = positiveFeeNumber(details.financing_add_on_fee);
+  if (!financingAmount) return 0;
+
+  const baseAmount =
+    positiveFeeNumber(details.gross_amount) ||
+    positiveFeeNumber(listingPrice?.sale_fee_amount);
+  if (!baseAmount) return 0;
+
+  const rate = (financingAmount / baseAmount) * 100;
+  return Number.isFinite(rate) && rate > 0 ? rate : 0;
 }
 
 function optionCodeForInstallments(count: number | null) {

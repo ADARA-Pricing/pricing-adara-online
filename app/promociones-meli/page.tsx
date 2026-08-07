@@ -285,6 +285,11 @@ function optionMatchesInstallment(option: MercadoLibrePriceOption, count: number
   return Number(option.installment_count || 0) === count;
 }
 
+function validFinancingFeeRate(value?: number | null) {
+  const rate = Number(value || 0);
+  return Number.isFinite(rate) && rate > 0 && rate < 80 ? rate : null;
+}
+
 function promoComparisonKey(item: PromoComparison) {
   const name = item.name
     .toLowerCase()
@@ -637,9 +642,10 @@ export default function PromocionesMeliPage() {
     const option =
       pricingOptions.find((item) => optionMatchesInstallment(item, row.installmentCount)) ||
       mercadoLibreClassicOption();
+    const publicationFinancingRate = validFinancingFeeRate(row.publication.meli_financing_fee_rate);
     const normalizedOption = normalizeOption({
       ...option,
-      financing_fee_rate: Number(row.publication.meli_financing_fee_rate ?? option.financing_fee_rate ?? 0),
+      financing_fee_rate: publicationFinancingRate ?? Number(option.financing_fee_rate || 0),
     });
     const setting = channelSetting(selectedGroup.product.id, normalizedOption.code);
     const result = calculatePriceSummary(
