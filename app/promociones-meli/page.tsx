@@ -129,6 +129,10 @@ function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) {
   return /started|active/.test(`${item.item_promotion_status || ""} ${item.promotion_status || ""}`.toLowerCase());
 }
 
+function isActivePromotionStatus(value?: string | null) {
+  return /started|active|vigente/.test(String(value || "").toLowerCase());
+}
+
 function productKey(product: Product) {
   return product.id || product.sku;
 }
@@ -824,8 +828,9 @@ export default function PromocionesMeliPage() {
         };
 
         const hasStartedOpportunity = row.opportunities.some(isActiveOpportunity);
+        const hasActivePublicationPromo = isActivePromotionStatus(publication.meli_promo_status);
         const rows: PromoComparison[] = [
-          ...(publication.meli_promo_price && !hasStartedOpportunity
+          ...(publication.meli_promo_price && !hasStartedOpportunity && hasActivePublicationPromo
             ? [{
                 key: `${publication.meli_item_id}-active-light`,
                 status: "Vigente" as const,
