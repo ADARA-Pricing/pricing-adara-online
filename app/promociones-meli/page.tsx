@@ -889,7 +889,10 @@ export default function PromocionesMeliPage() {
           .filter(Boolean) as Array<{ promo: PromoComparison; margin: number; netProfit: number }>;
 
         const activePromos = calculatedPromos.filter((item) => item.promo.status === "Vigente");
-        const candidatePromos = calculatedPromos.filter((item) => item.promo.status === "Para activar");
+        const candidatePromos = calculatedPromos.filter((item) =>
+          item.promo.status === "Para activar" &&
+          (Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0),
+        );
         const bestActive = [...activePromos].sort((a, b) => b.margin - a.margin)[0] || null;
         const bestCandidate = [...candidatePromos].sort((a, b) => b.margin - a.margin)[0] || null;
 
