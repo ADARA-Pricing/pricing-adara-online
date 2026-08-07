@@ -950,7 +950,10 @@ export default function PromocionesMeliPage() {
                             }
                           >
                             <div className="promociones-summary-head">
-                              <strong>{summary.label}</strong>
+                              <div>
+                                <strong>{summary.label}</strong>
+                                <small className="promociones-summary-item-id">{summary.publication.meli_item_id || "-"}</small>
+                              </div>
                               <span>{summary.opportunityCount} promo(s)</span>
                             </div>
                             <div className="promociones-summary-values">

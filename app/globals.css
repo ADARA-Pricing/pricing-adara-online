@@ -5723,8 +5723,17 @@ textarea:focus-visible {
 }
 
 .promociones-summary-head strong {
+  display: block;
   color: #0f172a;
   font-size: 15px;
+}
+
+.promociones-summary-item-id {
+  display: block;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  margin-top: 3px;
 }
 
 .promociones-summary-head span {
