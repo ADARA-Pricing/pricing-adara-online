@@ -126,7 +126,9 @@ function isCurrentOpportunity(item: MercadoLibrePromotionOpportunity) {
 }
 
 function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) {
-  return /started|active/.test(`${item.item_promotion_status || ""} ${item.promotion_status || ""}`.toLowerCase());
+  const itemStatus = String(item.item_promotion_status || "").toLowerCase();
+  if (itemStatus) return /started|active/.test(itemStatus);
+  return /started|active/.test(String(item.promotion_status || "").toLowerCase());
 }
 
 function isActivePromotionStatus(value?: string | null) {
@@ -371,7 +373,7 @@ function promotionCountForPublication(
   onlyWithMeliContribution: boolean,
 ) {
   const hasStartedOpportunity = opportunities.some((item) =>
-    /started|active/.test(`${item.item_promotion_status || ""} ${item.promotion_status || ""}`.toLowerCase()),
+    isActiveOpportunity(item),
   );
   const activePromo =
     publication.meli_promo_price &&
@@ -401,10 +403,9 @@ function promotionCountForPublication(
   const opportunityPromos = opportunities
     .filter((item) => !onlyWithMeliContribution || hasMeliContribution(item))
     .map((item) => {
-      const statusText = `${item.item_promotion_status || ""} ${item.promotion_status || ""}`.toLowerCase();
       return {
         key: item.offer_id || item.promotion_id || `${publication.meli_item_id}-${item.promo_price}`,
-        status: /started|active/.test(statusText) ? "Vigente" as const : "Para activar" as const,
+        status: isActiveOpportunity(item) ? "Vigente" as const : "Para activar" as const,
         name: item.promotion_name || item.promotion_id,
         promoPrice: Number(item.promo_price || 0) || null,
         effectiveSalePrice: effectiveSalePrice(item.promo_price, item.meli_amount, item.meli_percentage),
@@ -1171,7 +1172,7 @@ export default function PromocionesMeliPage() {
                       (!onlyMeliContribution || publicationHasMeliContribution(selectedSummary.publication))
         ? (() => {
             const hasStartedOpportunity = selectedSummary.row.opportunities.some((item) =>
-              /started|active/.test(`${item.item_promotion_status || ""} ${item.promotion_status || ""}`.toLowerCase()),
+              isActiveOpportunity(item),
             );
             if (hasStartedOpportunity) return [];
             const activeEffectiveSalePrice = effectiveSalePrice(
@@ -1211,10 +1212,9 @@ export default function PromocionesMeliPage() {
                             item.seller_percentage,
                           );
                           const rentability = rentabilityForRow(selectedSummary.row, promoEffectiveSalePrice);
-                          const statusText = `${item.item_promotion_status || ""} ${item.promotion_status || ""}`.toLowerCase();
                           return {
                             key: item.offer_id || item.promotion_id || `${selectedSummary.publication.meli_item_id}-${item.promo_price}`,
-                            status: /started|active/.test(statusText) ? "Vigente" as const : "Para activar" as const,
+                            status: isActiveOpportunity(item) ? "Vigente" as const : "Para activar" as const,
                             name: item.promotion_name || item.promotion_id,
                             promoPrice: Number(item.promo_price || 0) || null,
                             effectiveSalePrice: promoEffectiveSalePrice,
