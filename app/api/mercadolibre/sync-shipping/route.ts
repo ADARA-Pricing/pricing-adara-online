@@ -1074,6 +1074,20 @@ function promotionSellerAmount(item: MeliPromotionItem) {
   return splitDiscountAmount(item, "seller");
 }
 
+function promotionOpportunityKey(row: {
+  promotion_id?: string | null;
+  meli_item_id?: string | null;
+  offer_id?: string | null;
+  item_promotion_status?: string | null;
+}) {
+  return [
+    row.promotion_id || "",
+    row.meli_item_id || "",
+    row.offer_id || "",
+    row.item_promotion_status || "",
+  ].join("|");
+}
+
 function itemThumbnail(item: MeliItem) {
   return item.thumbnail || item.pictures?.[0]?.secure_url || item.pictures?.[0]?.url || null;
 }
@@ -1293,13 +1307,14 @@ export async function POST(request: NextRequest) {
 
     const sellerPromotions = await getSellerPromotions(account);
     const promotionOpportunityRows: any[] = [];
+    const promotionOpportunityKeys = new Set<string>();
 
     await mapWithConcurrency(sellerPromotions, 3, async (promotion) => {
       const promotionItems = await getPromotionItems(promotion, account, matchedItemIds);
       promotionItems.forEach((item) => {
         const promoPrice = promotionPrice(item);
         const meliAmount = promotionMeliAmount(item);
-        promotionOpportunityRows.push({
+        const row = {
           promotion_id: promotion.id,
           promotion_name: promotion.name || null,
           promotion_type: promotion.type || null,
@@ -1321,7 +1336,11 @@ export async function POST(request: NextRequest) {
           raw: item,
           last_sync_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        });
+        };
+        const key = promotionOpportunityKey(row);
+        if (promotionOpportunityKeys.has(key)) return;
+        promotionOpportunityKeys.add(key);
+        promotionOpportunityRows.push(row);
       });
     });
 
