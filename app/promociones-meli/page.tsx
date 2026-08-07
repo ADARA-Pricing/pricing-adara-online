@@ -309,6 +309,25 @@ function dedupePromoComparisons(items: PromoComparison[]) {
   return [...map.values()];
 }
 
+function opportunityKey(item: MercadoLibrePromotionOpportunity) {
+  return [
+    item.promotion_id || "",
+    item.meli_item_id || "",
+    item.offer_id || "",
+    item.item_promotion_status || "",
+  ].join("|");
+}
+
+function mergeOpportunities(
+  tableOpportunities: MercadoLibrePromotionOpportunity[],
+  rawOpportunities: MercadoLibrePromotionOpportunity[],
+) {
+  const map = new Map<string, MercadoLibrePromotionOpportunity>();
+  rawOpportunities.forEach((item) => map.set(opportunityKey(item), item));
+  tableOpportunities.forEach((item) => map.set(opportunityKey(item), item));
+  return [...map.values()];
+}
+
 function promotionCountForPublication(
   publication: MercadoLibreShippingCost,
   opportunities: MercadoLibrePromotionOpportunity[],
@@ -665,7 +684,7 @@ export default function PromocionesMeliPage() {
         ? opportunitiesByItem.get(publication.meli_item_id) || []
         : [];
       const rawOpportunities = rawPromotionOpportunities(publication).filter(isCurrentOpportunity);
-      const rowOpportunities = tableOpportunities.length ? tableOpportunities : rawOpportunities;
+      const rowOpportunities = mergeOpportunities(tableOpportunities, rawOpportunities);
       const key = publicationFamilyKey(publication) || publication.meli_item_id || publication.sku || "publicacion";
       const family = families.get(key) || {
         key,
