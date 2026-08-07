@@ -259,7 +259,6 @@ function promoComparisonKey(item: PromoComparison) {
     name,
     Math.round(Number(item.promoPrice || 0) * 100),
     Math.round(Number(item.meliAmount || 0) * 100),
-    Math.round(Number(item.sellerAmount || 0) * 100),
   ].join("|");
 }
 
@@ -987,65 +986,6 @@ export default function PromocionesMeliPage() {
                         )}
                       </div>
 
-                      <div className="promociones-installment-grid">
-                        {family.rows.map((row) => {
-                          const activeMeliAmount = Number(row.publication.meli_promo_meli_amount || 0);
-                          const activeSellerAmount = Number(row.publication.meli_promo_seller_amount || 0);
-                          const best = row.bestOpportunity;
-                          return (
-                            <section className="promociones-installment-card" key={row.publication.id || row.publication.meli_item_id}>
-                              <div className="promociones-installment-head">
-                                <strong>{row.installmentLabel}</strong>
-                                <span>{row.publication.meli_listing_type_name || row.publication.meli_listing_type_id || "-"}</span>
-                              </div>
-
-                              <div className="promociones-installment-prices">
-                                <div>
-                                  <span>Precio publicado</span>
-                                  <strong>{moneyWithCents(row.publication.meli_price || 0)}</strong>
-                                </div>
-                                <div>
-                                  <span>Precio promo</span>
-                                  <strong>{row.publication.meli_promo_price ? moneyWithCents(row.publication.meli_promo_price) : "-"}</strong>
-                                </div>
-                              </div>
-
-                              <div className="promociones-current-promo">
-                                <span>Vigente</span>
-                                <strong>{row.publication.meli_promo_name || row.publication.meli_promo_status || "Sin promo activa"}</strong>
-                                <small>
-                                  Meli {activeMeliAmount ? moneyWithCents(activeMeliAmount) : percent(row.publication.meli_promo_meli_rate || 0)}
-                                  {" | "}
-                                  Vendedor {activeSellerAmount ? moneyWithCents(activeSellerAmount) : percent(row.publication.meli_promo_seller_rate || 0)}
-                                </small>
-                              </div>
-
-                              <div className="promociones-best-opportunity">
-                                <span>Mejor disponible</span>
-                                {best ? (
-                                  <>
-                                    <strong>{best.promotion_name || best.promotion_id}</strong>
-                                    <small>
-                                      Precio {best.promo_price ? moneyWithCents(best.promo_price) : "-"}
-                                      {" | "}
-                                      Meli {best.meli_amount ? moneyWithCents(best.meli_amount) : percent(best.meli_percentage || 0)}
-                                    </small>
-                                  </>
-                                ) : (
-                                  <strong>Sin promo disponible detectada</strong>
-                                )}
-                              </div>
-
-                              <div className="promociones-row-footer">
-                                <span>{row.publication.meli_item_id || "-"} | Stock {row.publication.meli_stock ?? "-"}</span>
-                                {row.publication.meli_permalink && (
-                                  <a href={row.publication.meli_permalink} target="_blank" rel="noreferrer">Abrir</a>
-                                )}
-                              </div>
-                            </section>
-                          );
-                        })}
-                      </div>
                       </>
                     )}
                   </article>
