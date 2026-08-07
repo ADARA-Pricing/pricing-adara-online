@@ -182,6 +182,56 @@ function publicationHasMeliContribution(publication: MercadoLibreShippingCost) {
   return Number(publication.meli_promo_meli_amount || 0) > 0 || Number(publication.meli_promo_meli_rate || 0) > 0;
 }
 
+function rawPromotionOpportunities(publication: MercadoLibreShippingCost): MercadoLibrePromotionOpportunity[] {
+  const raw = Array.isArray(publication.meli_promotions) ? publication.meli_promotions : [];
+  const sellerPromotionPayload = raw.find((entry) => {
+    const value = entry as { endpoint?: string; data?: unknown };
+    return value.endpoint?.includes("/seller-promotions/items/") && Array.isArray(value.data);
+  }) as { data?: unknown[] } | undefined;
+
+  if (!Array.isArray(sellerPromotionPayload?.data)) return [];
+
+  return sellerPromotionPayload.data
+    .map((item) => {
+      const promo = item as Record<string, unknown>;
+      const originalPrice = Number(promo.original_price || publication.meli_price || 0);
+      const promoPrice =
+        Number(promo.price || 0) ||
+        Number(promo.suggested_discounted_price || 0) ||
+        null;
+      const meliPercentage = Number(promo.meli_percentage || 0);
+      const sellerPercentage = Number(promo.seller_percentage || 0);
+      const meliAmount = Number(promo.meli_amount || 0) || (originalPrice && meliPercentage ? originalPrice * (meliPercentage / 100) : 0);
+      const sellerAmount =
+        Number(promo.seller_amount || 0) ||
+        Number(promo.discount_amount || 0) ||
+        (originalPrice && sellerPercentage ? originalPrice * (sellerPercentage / 100) : 0);
+
+      return {
+        promotion_id: String(promo.id || promo.ref_id || promo.type || "promo"),
+        promotion_name: String(promo.name || promo.type || "Promocion ML"),
+        promotion_type: typeof promo.type === "string" ? promo.type : null,
+        promotion_status: typeof promo.status === "string" ? promo.status : null,
+        item_promotion_status: typeof promo.status === "string" ? promo.status : null,
+        offer_id: typeof promo.ref_id === "string" ? promo.ref_id : null,
+        meli_item_id: publication.meli_item_id || "",
+        original_price: originalPrice || null,
+        promo_price: promoPrice,
+        min_discounted_price: Number(promo.min_discounted_price || 0) || null,
+        max_discounted_price: Number(promo.max_discounted_price || 0) || null,
+        suggested_discounted_price: Number(promo.suggested_discounted_price || 0) || null,
+        seller_percentage: sellerPercentage || null,
+        meli_percentage: meliPercentage || null,
+        seller_amount: sellerAmount || null,
+        meli_amount: meliAmount || null,
+        start_date: typeof promo.start_date === "string" ? promo.start_date : null,
+        end_date: typeof promo.finish_date === "string" ? promo.finish_date : typeof promo.end_date === "string" ? promo.end_date : null,
+        raw: promo,
+      };
+    })
+    .filter((item) => item.promo_price && item.promo_price > 0);
+}
+
 function bestOpportunity(items: MercadoLibrePromotionOpportunity[], onlyWithMeliContribution = false) {
   const filtered = onlyWithMeliContribution ? items.filter(hasMeliContribution) : items;
   if (!filtered.length) return null;
@@ -196,6 +246,74 @@ function bestOpportunity(items: MercadoLibrePromotionOpportunity[], onlyWithMeli
 function optionMatchesInstallment(option: MercadoLibrePriceOption, count: number) {
   if (count === 1) return option.code === "MC" || !option.installment_count;
   return Number(option.installment_count || 0) === count;
+}
+
+function promoComparisonKey(item: PromoComparison) {
+  const name = item.name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return [
+    name,
+    Math.round(Number(item.promoPrice || 0) * 100),
+    Math.round(Number(item.meliAmount || 0) * 100),
+    Math.round(Number(item.sellerAmount || 0) * 100),
+  ].join("|");
+}
+
+function dedupePromoComparisons(items: PromoComparison[]) {
+  const map = new Map<string, PromoComparison>();
+  items.forEach((item) => {
+    const key = promoComparisonKey(item);
+    const current = map.get(key);
+    if (!current || item.status === "Vigente") map.set(key, item);
+  });
+  return [...map.values()];
+}
+
+function promotionCountForPublication(
+  publication: MercadoLibreShippingCost,
+  opportunities: MercadoLibrePromotionOpportunity[],
+  onlyWithMeliContribution: boolean,
+) {
+  const activePromo =
+    publication.meli_promo_price &&
+    (!onlyWithMeliContribution || publicationHasMeliContribution(publication))
+      ? [{
+          key: `${publication.meli_item_id}-active-count`,
+          status: "Vigente" as const,
+          name: publication.meli_promo_name || publication.meli_promo_status || "Promo vigente",
+          promoPrice: Number(publication.meli_promo_price || 0),
+          meliAmount: Number(publication.meli_promo_meli_amount || 0),
+          meliRate: Number(publication.meli_promo_meli_rate || 0),
+          sellerAmount: Number(publication.meli_promo_seller_amount || 0),
+          sellerRate: Number(publication.meli_promo_seller_rate || 0),
+          rentability: null,
+          netProfit: null,
+        }]
+      : [];
+
+  const opportunityPromos = opportunities
+    .filter((item) => !onlyWithMeliContribution || hasMeliContribution(item))
+    .map((item) => {
+      const statusText = `${item.item_promotion_status || ""} ${item.promotion_status || ""}`.toLowerCase();
+      return {
+        key: item.offer_id || item.promotion_id || `${publication.meli_item_id}-${item.promo_price}`,
+        status: /started|active/.test(statusText) ? "Vigente" as const : "Para activar" as const,
+        name: item.promotion_name || item.promotion_id,
+        promoPrice: Number(item.promo_price || 0) || null,
+        meliAmount: Number(item.meli_amount || 0),
+        meliRate: Number(item.meli_percentage || 0),
+        sellerAmount: Number(item.seller_amount || 0),
+        sellerRate: Number(item.seller_percentage || 0),
+        rentability: null,
+        netProfit: null,
+      };
+    });
+
+  return dedupePromoComparisons([...activePromo, ...opportunityPromos]).length;
 }
 
 export default function PromocionesMeliPage() {
@@ -470,9 +588,11 @@ export default function PromocionesMeliPage() {
     selectedGroup.publications.forEach((publication) => {
       const label = installmentLabel(publication);
       const count = installmentCountFromLabel(label);
-      const rowOpportunities = publication.meli_item_id
+      const tableOpportunities = publication.meli_item_id
         ? opportunitiesByItem.get(publication.meli_item_id) || []
         : [];
+      const rawOpportunities = rawPromotionOpportunities(publication).filter(isCurrentOpportunity);
+      const rowOpportunities = rawOpportunities.length ? rawOpportunities : tableOpportunities;
       const key = publicationFamilyKey(publication) || publication.meli_item_id || publication.sku || "publicacion";
       const family = families.get(key) || {
         key,
@@ -675,18 +795,15 @@ export default function PromocionesMeliPage() {
                 const summaries: InstallmentSummary[] = family.rows.map((row) => {
                   const promoPrice = Number(row.bestOpportunity?.promo_price || row.publication.meli_promo_price || 0) || null;
                   const rentability = rentabilityForRow(row, promoPrice);
-                  const currentPromoCount =
-                    row.publication.meli_promo_price &&
-                    (!onlyMeliContribution || publicationHasMeliContribution(row.publication))
-                      ? 1
-                      : 0;
                   return {
                     label: row.installmentLabel,
                     publication: row.publication,
                     row,
-                    opportunityCount:
-                      currentPromoCount +
-                      row.opportunities.filter((item) => !onlyMeliContribution || hasMeliContribution(item)).length,
+                    opportunityCount: promotionCountForPublication(
+                      row.publication,
+                      row.opportunities,
+                      onlyMeliContribution,
+                    ),
                     bestOpportunity: row.bestOpportunity,
                     bestMeliAmount: Number(row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount || 0),
                     promoPrice,
@@ -700,7 +817,7 @@ export default function PromocionesMeliPage() {
                   summaries[0] ||
                   null;
                 const promoComparisons: PromoComparison[] = selectedSummary
-                  ? [
+                  ? dedupePromoComparisons([
                       ...(selectedSummary.publication.meli_promo_price &&
                       (!onlyMeliContribution || publicationHasMeliContribution(selectedSummary.publication))
                         ? (() => {
@@ -726,9 +843,10 @@ export default function PromocionesMeliPage() {
                         .filter((item) => !onlyMeliContribution || hasMeliContribution(item))
                         .map((item) => {
                           const rentability = rentabilityForRow(selectedSummary.row, item.promo_price);
+                          const statusText = `${item.item_promotion_status || ""} ${item.promotion_status || ""}`.toLowerCase();
                           return {
                             key: item.offer_id || item.promotion_id || `${selectedSummary.publication.meli_item_id}-${item.promo_price}`,
-                            status: "Para activar" as const,
+                            status: /started|active/.test(statusText) ? "Vigente" as const : "Para activar" as const,
                             name: item.promotion_name || item.promotion_id,
                             promoPrice: Number(item.promo_price || 0) || null,
                             meliAmount: Number(item.meli_amount || 0),
@@ -739,7 +857,7 @@ export default function PromocionesMeliPage() {
                             netProfit: rentability?.netProfit ?? null,
                           };
                         }),
-                    ].sort((a, b) => {
+                    ]).sort((a, b) => {
                       if (a.meliAmount !== b.meliAmount) return b.meliAmount - a.meliAmount;
                       return Number(b.rentability ?? -999) - Number(a.rentability ?? -999);
                     })
