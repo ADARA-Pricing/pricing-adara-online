@@ -5575,6 +5575,12 @@ textarea:focus-visible {
   font-size: 12px;
 }
 
+.promociones-family-main .promociones-family-meta {
+  color: #1d4ed8;
+  font-weight: 700;
+  white-space: normal;
+}
+
 .promociones-family-best {
   display: flex;
   flex-direction: column;

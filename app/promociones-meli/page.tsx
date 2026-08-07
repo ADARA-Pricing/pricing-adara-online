@@ -26,6 +26,10 @@ type ProductPromoGroup = {
 type PublicationVariantGroup = {
   key: string;
   title: string;
+  catalogProductId: string | null;
+  domainId: string | null;
+  branchKind: "catalog_listing" | "seller_listing";
+  itemIds: string[];
   rows: PublicationPromoRow[];
 };
 
@@ -101,7 +105,15 @@ function installmentCountFromLabel(label: string) {
   return 999;
 }
 
-function publicationFamilyKey(publication: MercadoLibreShippingCost) {
+function publicationTags(publication: MercadoLibreShippingCost) {
+  return Array.isArray(publication.meli_tags) ? publication.meli_tags.map((tag) => String(tag)) : [];
+}
+
+function publicationBranchKind(publication: MercadoLibreShippingCost): "catalog_listing" | "seller_listing" {
+  return publicationTags(publication).includes("user_product_listing") ? "catalog_listing" : "seller_listing";
+}
+
+function normalizedPublicationTitle(publication: MercadoLibreShippingCost) {
   return (publication.meli_title || publication.sku || publication.meli_item_id || "")
     .toLowerCase()
     .normalize("NFD")
@@ -110,6 +122,19 @@ function publicationFamilyKey(publication: MercadoLibreShippingCost) {
     .replace(/\b(clasica|premium|sin cuotas|con cuotas)\b/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function publicationFamilyKey(publication: MercadoLibreShippingCost) {
+  const sku = publication.sku || "sin-sku";
+  const branchKind = publicationBranchKind(publication);
+  const catalogKey = publication.meli_catalog_product_id
+    ? `catalog:${publication.meli_catalog_product_id}`
+    : `domain:${publication.meli_domain_id || "sin-domain"}:${normalizedPublicationTitle(publication)}`;
+  return `${sku}|${catalogKey}|${branchKind}`;
+}
+
+function publicationBranchLabel(branchKind: PublicationVariantGroup["branchKind"]) {
+  return branchKind === "catalog_listing" ? "Catalogo ML" : "Publicacion vendedor";
 }
 
 function bestOpportunity(items: MercadoLibrePromotionOpportunity[]) {
@@ -294,8 +319,16 @@ export default function PromocionesMeliPage() {
       const family = families.get(key) || {
         key,
         title: publication.meli_title || publication.meli_item_id || "Publicacion ML",
+        catalogProductId: publication.meli_catalog_product_id || null,
+        domainId: publication.meli_domain_id || null,
+        branchKind: publicationBranchKind(publication),
+        itemIds: [],
         rows: [],
       };
+
+      if (publication.meli_item_id && !family.itemIds.includes(publication.meli_item_id)) {
+        family.itemIds.push(publication.meli_item_id);
+      }
 
       family.rows.push({
         publication,
@@ -469,6 +502,13 @@ export default function PromocionesMeliPage() {
                       <span className="promociones-family-main">
                         <strong>{family.title}</strong>
                         <small>{family.rows.length} variante(s) de cuotas | desde {Number.isFinite(minFamilyPrice) ? moneyWithCents(minFamilyPrice) : "-"}</small>
+                        <small className="promociones-family-meta">
+                          {family.catalogProductId ? `Grupo ML ${family.catalogProductId}` : family.domainId || "Grupo ML sin catalogo"}
+                          {" | "}
+                          {publicationBranchLabel(family.branchKind)}
+                          {" | "}
+                          {family.itemIds.length} ID(s) asociados
+                        </small>
                       </span>
                       <span className="promociones-family-installments">
                         {family.rows.map((row) => (
