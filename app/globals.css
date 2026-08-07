@@ -5699,6 +5699,19 @@ textarea:focus-visible {
   background: #ffffff;
   padding: 12px;
   min-width: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.promociones-installment-summary:hover,
+.promociones-installment-summary.active {
+  border-color: #2563eb;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.1);
+}
+
+.promociones-installment-summary.active {
+  background: #eff6ff;
 }
 
 .promociones-summary-head {
@@ -5763,6 +5776,97 @@ textarea:focus-visible {
   display: block;
   line-height: 1.35;
   margin-top: 9px;
+}
+
+.promociones-promo-comparison {
+  margin: 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.promociones-promo-comparison-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fbff;
+}
+
+.promociones-promo-comparison-head h3 {
+  margin: 0 0 4px;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.promociones-promo-comparison-head p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.promociones-promo-comparison-head > strong {
+  color: #1d4ed8;
+  white-space: nowrap;
+}
+
+.promociones-promo-table-wrap {
+  overflow-x: auto;
+}
+
+.promociones-promo-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+}
+
+.promociones-promo-table th,
+.promociones-promo-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #edf2f7;
+  color: #334155;
+  font-size: 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.promociones-promo-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 800;
+}
+
+.promociones-promo-table td strong {
+  color: #0f172a;
+}
+
+.promociones-promo-table strong.positive {
+  color: #047857;
+}
+
+.promociones-promo-table strong.negative {
+  color: #dc2626;
+}
+
+.promo-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
+.promo-status.active {
+  background: #dcfce7;
+  color: #166534;
 }
 
 .promociones-installment-card {

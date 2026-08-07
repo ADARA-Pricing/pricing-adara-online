@@ -56,10 +56,24 @@ type PublicationPromoRow = {
 type InstallmentSummary = {
   label: string;
   publication: MercadoLibreShippingCost;
+  row: PublicationPromoRow;
   opportunityCount: number;
   bestOpportunity: MercadoLibrePromotionOpportunity | null;
   bestMeliAmount: number;
   promoPrice: number | null;
+  rentability: number | null;
+  netProfit: number | null;
+};
+
+type PromoComparison = {
+  key: string;
+  status: "Vigente" | "Para activar";
+  name: string;
+  promoPrice: number | null;
+  meliAmount: number;
+  meliRate: number;
+  sellerAmount: number;
+  sellerRate: number;
   rentability: number | null;
   netProfit: number | null;
 };
@@ -198,6 +212,7 @@ export default function PromocionesMeliPage() {
   const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedFamilyKey, setSelectedFamilyKey] = useState<string | null>(null);
+  const [selectedInstallments, setSelectedInstallments] = useState<Record<string, string>>({});
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [onlyMeliContribution, setOnlyMeliContribution] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -588,9 +603,10 @@ export default function PromocionesMeliPage() {
                       key={productKey(group.product)}
                       type="button"
                       className={`promociones-picker-row ${selected ? "active" : ""}`}
-                      onClick={() => {
+                  onClick={() => {
                         setSelectedKey(productKey(group.product));
                         setSelectedFamilyKey(null);
+                        setSelectedInstallments({});
                         setProductPickerOpen(false);
                       }}
                     >
@@ -667,6 +683,7 @@ export default function PromocionesMeliPage() {
                   return {
                     label: row.installmentLabel,
                     publication: row.publication,
+                    row,
                     opportunityCount:
                       currentPromoCount +
                       row.opportunities.filter((item) => !onlyMeliContribution || hasMeliContribution(item)).length,
@@ -677,6 +694,56 @@ export default function PromocionesMeliPage() {
                     netProfit: rentability?.netProfit ?? null,
                   };
                 });
+                const selectedInstallmentKey = selectedInstallments[family.key] || summaries[0]?.publication.meli_item_id || "";
+                const selectedSummary =
+                  summaries.find((summary) => summary.publication.meli_item_id === selectedInstallmentKey) ||
+                  summaries[0] ||
+                  null;
+                const promoComparisons: PromoComparison[] = selectedSummary
+                  ? [
+                      ...(selectedSummary.publication.meli_promo_price &&
+                      (!onlyMeliContribution || publicationHasMeliContribution(selectedSummary.publication))
+                        ? (() => {
+                            const rentability = rentabilityForRow(
+                              selectedSummary.row,
+                              selectedSummary.publication.meli_promo_price,
+                            );
+                            return [{
+                              key: `${selectedSummary.publication.meli_item_id}-active`,
+                              status: "Vigente" as const,
+                              name: selectedSummary.publication.meli_promo_name || selectedSummary.publication.meli_promo_status || "Promo vigente",
+                              promoPrice: Number(selectedSummary.publication.meli_promo_price || 0),
+                              meliAmount: Number(selectedSummary.publication.meli_promo_meli_amount || 0),
+                              meliRate: Number(selectedSummary.publication.meli_promo_meli_rate || 0),
+                              sellerAmount: Number(selectedSummary.publication.meli_promo_seller_amount || 0),
+                              sellerRate: Number(selectedSummary.publication.meli_promo_seller_rate || 0),
+                              rentability: rentability?.margin ?? null,
+                              netProfit: rentability?.netProfit ?? null,
+                            }];
+                          })()
+                        : []),
+                      ...selectedSummary.row.opportunities
+                        .filter((item) => !onlyMeliContribution || hasMeliContribution(item))
+                        .map((item) => {
+                          const rentability = rentabilityForRow(selectedSummary.row, item.promo_price);
+                          return {
+                            key: item.offer_id || item.promotion_id || `${selectedSummary.publication.meli_item_id}-${item.promo_price}`,
+                            status: "Para activar" as const,
+                            name: item.promotion_name || item.promotion_id,
+                            promoPrice: Number(item.promo_price || 0) || null,
+                            meliAmount: Number(item.meli_amount || 0),
+                            meliRate: Number(item.meli_percentage || 0),
+                            sellerAmount: Number(item.seller_amount || 0),
+                            sellerRate: Number(item.seller_percentage || 0),
+                            rentability: rentability?.margin ?? null,
+                            netProfit: rentability?.netProfit ?? null,
+                          };
+                        }),
+                    ].sort((a, b) => {
+                      if (a.meliAmount !== b.meliAmount) return b.meliAmount - a.meliAmount;
+                      return Number(b.rentability ?? -999) - Number(a.rentability ?? -999);
+                    })
+                  : [];
                 return (
                   <article className={`promociones-family-card ${expanded ? "expanded" : ""}`} key={family.key}>
                     <button
@@ -711,7 +778,17 @@ export default function PromocionesMeliPage() {
                       <>
                       <div className="promociones-installment-summary-grid">
                         {summaries.map((summary) => (
-                          <section className="promociones-installment-summary" key={`${summary.publication.meli_item_id}-summary`}>
+                          <button
+                            className={`promociones-installment-summary ${selectedSummary?.publication.meli_item_id === summary.publication.meli_item_id ? "active" : ""}`}
+                            key={`${summary.publication.meli_item_id}-summary`}
+                            type="button"
+                            onClick={() =>
+                              setSelectedInstallments((current) => ({
+                                ...current,
+                                [family.key]: summary.publication.meli_item_id || "",
+                              }))
+                            }
+                          >
                             <div className="promociones-summary-head">
                               <strong>{summary.label}</strong>
                               <span>{summary.opportunityCount} promo(s)</span>
@@ -740,8 +817,56 @@ export default function PromocionesMeliPage() {
                               {summary.bestOpportunity?.promotion_name || summary.publication.meli_promo_name || "Sin mejor promo detectada"}
                               {summary.netProfit !== null ? ` | Neto ${moneyWithCents(summary.netProfit)}` : ""}
                             </small>
-                          </section>
+                          </button>
                         ))}
+                      </div>
+
+                      <div className="promociones-promo-comparison">
+                        <div className="promociones-promo-comparison-head">
+                          <div>
+                            <h3>Promos de {selectedSummary?.label || "-"}</h3>
+                            <p>Activas y disponibles para activar en esta publicacion.</p>
+                          </div>
+                          <strong>{promoComparisons.length} promo(s)</strong>
+                        </div>
+                        {promoComparisons.length ? (
+                          <div className="promociones-promo-table-wrap">
+                            <table className="promociones-promo-table">
+                              <thead>
+                                <tr>
+                                  <th>Estado</th>
+                                  <th>Promocion</th>
+                                  <th>Precio promo</th>
+                                  <th>Aporte ML</th>
+                                  <th>Aporte vendedor</th>
+                                  <th>Rentabilidad</th>
+                                  <th>Neto</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {promoComparisons.map((promo) => (
+                                  <tr key={promo.key}>
+                                    <td><span className={`promo-status ${promo.status === "Vigente" ? "active" : ""}`}>{promo.status}</span></td>
+                                    <td><strong>{promo.name}</strong></td>
+                                    <td>{promo.promoPrice ? moneyWithCents(promo.promoPrice) : "-"}</td>
+                                    <td>
+                                      <strong>{promo.meliAmount ? moneyWithCents(promo.meliAmount) : percent(promo.meliRate)}</strong>
+                                    </td>
+                                    <td>{promo.sellerAmount ? moneyWithCents(promo.sellerAmount) : percent(promo.sellerRate)}</td>
+                                    <td>
+                                      <strong className={promo.rentability !== null && promo.rentability < 0 ? "negative" : "positive"}>
+                                        {promo.rentability !== null ? percent(promo.rentability) : "-"}
+                                      </strong>
+                                    </td>
+                                    <td>{promo.netProfit !== null ? moneyWithCents(promo.netProfit) : "-"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="promociones-empty">No hay promociones para esta cuota con el filtro actual.</div>
+                        )}
                       </div>
 
                       <div className="promociones-installment-grid">
