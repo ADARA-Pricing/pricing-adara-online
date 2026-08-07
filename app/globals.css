@@ -2896,6 +2896,26 @@ td strong {
   white-space: nowrap;
 }
 
+.saved-simulation-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 150px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.saved-simulation-link {
+  color: #1d4ed8;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.saved-simulation-link:hover {
+  text-decoration: underline;
+}
+
 .simulator-product-base-field {
   margin: 18px 0 18px;
   padding: 14px;

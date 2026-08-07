@@ -27,6 +27,7 @@ type LastEdited = "margin" | "price";
 type SimulationForm = {
   productName: string;
   category: string;
+  publicationUrl: string;
   costWithoutVat: string;
   desiredMarginRate: string;
   salePrice: string;
@@ -43,6 +44,7 @@ type SavedSimulation = {
   sale_price: number;
   vat_condition: VatCondition;
   shipping_gross: number;
+  publication_url?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -50,6 +52,7 @@ type SavedSimulation = {
 const initialForm: SimulationForm = {
   productName: 'Smart TV Enova 43" Google TV',
   category: "TV",
+  publicationUrl: "",
   costWithoutVat: "241332",
   desiredMarginRate: "12",
   salePrice: "317000",
@@ -97,6 +100,21 @@ function formatPercentInput(value?: number | null) {
 
 function vatConditionFromProduct(product: Product): VatCondition {
   return Number(product.vat_rate || 21) === 10.5 ? "iva_105" : "iva_21";
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "-";
+  try {
+    return new Intl.DateTimeFormat("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return "-";
+  }
 }
 
 export default function SimulatorPage() {
@@ -283,6 +301,7 @@ export default function SimulatorPage() {
     setForm({
       productName: "",
       category: categories[0]?.category || "",
+      publicationUrl: "",
       costWithoutVat: "",
       desiredMarginRate: "5",
       salePrice: "",
@@ -309,6 +328,7 @@ export default function SimulatorPage() {
     const payload = {
       name,
       category: form.category || null,
+      publication_url: form.publicationUrl.trim() || null,
       cost_without_vat: Number(toNumber(form.costWithoutVat) || 0),
       desired_margin_rate: Number(simulation.linkedMargin || 0),
       sale_price: Number(simulation.grossSalePrice || 0),
@@ -334,6 +354,7 @@ export default function SimulatorPage() {
     setForm({
       productName: item.name || "",
       category: item.category || "",
+      publicationUrl: item.publication_url || "",
       costWithoutVat: String(Math.round(Number(item.cost_without_vat || 0))),
       desiredMarginRate: formatPercentInput(Number(item.desired_margin_rate || 0)),
       salePrice: String(Math.round(Number(item.sale_price || 0))),
@@ -585,6 +606,19 @@ export default function SimulatorPage() {
                 onChange={(event) => update("productName", event.target.value)}
                 placeholder='Ej: Smart TV Enova 43" Google TV'
               />
+            </div>
+
+            <div className="field simulator-wide-field">
+              <label>Link publicacion</label>
+              <input
+                type="url"
+                value={form.publicationUrl}
+                onChange={(event) => update("publicationUrl", event.target.value)}
+                placeholder="https://articulo.mercadolibre.com.ar/..."
+              />
+              <span className="small">
+                Guardalo para revisar despues la publicacion junto al precio calculado.
+              </span>
             </div>
 
             <div className="field">
@@ -848,6 +882,8 @@ export default function SimulatorPage() {
                 <th>Costo sin IVA</th>
                 <th>Precio de venta</th>
                 <th>Margen</th>
+                <th>Fechas</th>
+                <th>Link</th>
                 <th>Envío c/IVA</th>
                 <th></th>
               </tr>
@@ -866,6 +902,26 @@ export default function SimulatorPage() {
                       {percent(item.desired_margin_rate || 0)}
                     </span>
                   </td>
+                  <td>
+                    <div className="saved-simulation-dates">
+                      <span>Creada: {formatDateTime(item.created_at)}</span>
+                      <span>Modificada: {formatDateTime(item.updated_at)}</span>
+                    </div>
+                  </td>
+                  <td>
+                    {item.publication_url ? (
+                      <a
+                        className="saved-simulation-link"
+                        href={item.publication_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Abrir
+                      </a>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
                   <td>{moneyWithCents(item.shipping_gross || 0)}</td>
                   <td>
                     <div className="saved-simulation-actions">
@@ -881,7 +937,7 @@ export default function SimulatorPage() {
               ))}
               {savedSimulations.length === 0 && (
                 <tr>
-                  <td colSpan={7}>Todavía no hay simulaciones guardadas.</td>
+                  <td colSpan={9}>Todavía no hay simulaciones guardadas.</td>
                 </tr>
               )}
             </tbody>
