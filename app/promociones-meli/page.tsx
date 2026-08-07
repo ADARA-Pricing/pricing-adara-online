@@ -23,6 +23,20 @@ type ProductPromoGroup = {
   latestSync: string | null;
 };
 
+type PublicationVariantGroup = {
+  key: string;
+  title: string;
+  rows: PublicationPromoRow[];
+};
+
+type PublicationPromoRow = {
+  publication: MercadoLibreShippingCost;
+  opportunities: MercadoLibrePromotionOpportunity[];
+  installmentCount: number;
+  installmentLabel: string;
+  bestOpportunity: MercadoLibrePromotionOpportunity | null;
+};
+
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
   try {
@@ -46,6 +60,66 @@ function isCurrentOpportunity(item: MercadoLibrePromotionOpportunity) {
 
 function productKey(product: Product) {
   return product.id || product.sku;
+}
+
+function installmentCampaignTag(publication?: MercadoLibreShippingCost | null) {
+  if (!publication) return null;
+  const saleTerms = Array.isArray(publication.meli_sale_terms) ? publication.meli_sale_terms : [];
+  const searchable = [
+    ...(Array.isArray(publication.meli_tags) ? publication.meli_tags : []),
+    ...saleTerms.flatMap((term) => {
+      const value = term as { id?: string; name?: string; value_name?: string; value_id?: string };
+      return [value.id, value.name, value.value_name, value.value_id];
+    }),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (searchable.includes("3x_campaign")) return "3x_campaign";
+  if (searchable.includes("9x_campaign")) return "9x_campaign";
+  if (searchable.includes("12x_campaign")) return "12x_campaign";
+  return null;
+}
+
+function installmentLabel(publication: MercadoLibreShippingCost) {
+  const campaignTag = installmentCampaignTag(publication);
+  if (campaignTag === "3x_campaign") return "3 cuotas";
+  if (campaignTag === "9x_campaign") return "9 cuotas";
+  if (campaignTag === "12x_campaign") return "12 cuotas";
+  if (publication.meli_installments_text) return publication.meli_installments_text;
+  if (publication.meli_listing_type_id === "gold_special") return "1 pago";
+  if (publication.meli_listing_type_id === "gold_pro") return "6 cuotas";
+  return "Sin dato";
+}
+
+function installmentCountFromLabel(label: string) {
+  const normalized = label.toLowerCase();
+  const match = normalized.match(/(\d{1,2})\s*(x|cuotas?)/i);
+  if (match?.[1]) return Number(match[1]);
+  if (normalized.includes("1 pago") || normalized.includes("clasica") || normalized.includes("clásica")) return 1;
+  return 999;
+}
+
+function publicationFamilyKey(publication: MercadoLibreShippingCost) {
+  return (publication.meli_title || publication.sku || publication.meli_item_id || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(1|3|6|9|12)\s*(x|cuotas?)\b/g, "")
+    .replace(/\b(clasica|premium|sin cuotas|con cuotas)\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function bestOpportunity(items: MercadoLibrePromotionOpportunity[]) {
+  if (!items.length) return null;
+  return [...items].sort((a, b) => {
+    const amountA = Number(a.meli_amount || 0);
+    const amountB = Number(b.meli_amount || 0);
+    if (amountA !== amountB) return amountB - amountA;
+    return Number(a.promo_price || 0) - Number(b.promo_price || 0);
+  })[0];
 }
 
 export default function PromocionesMeliPage() {
@@ -200,6 +274,56 @@ export default function PromocionesMeliPage() {
     ? selectedGroup.opportunities.filter((item) => selectedPublicationIds.has(item.meli_item_id))
     : [];
 
+  const publicationFamilies = useMemo<PublicationVariantGroup[]>(() => {
+    if (!selectedGroup) return [];
+    const opportunitiesByItem = new Map<string, MercadoLibrePromotionOpportunity[]>();
+    selectedOpportunities.forEach((opportunity) => {
+      const current = opportunitiesByItem.get(opportunity.meli_item_id) || [];
+      current.push(opportunity);
+      opportunitiesByItem.set(opportunity.meli_item_id, current);
+    });
+
+    const families = new Map<string, PublicationVariantGroup>();
+
+    selectedGroup.publications.forEach((publication) => {
+      const label = installmentLabel(publication);
+      const count = installmentCountFromLabel(label);
+      const rowOpportunities = publication.meli_item_id
+        ? opportunitiesByItem.get(publication.meli_item_id) || []
+        : [];
+      const key = publicationFamilyKey(publication) || publication.meli_item_id || publication.sku || "publicacion";
+      const family = families.get(key) || {
+        key,
+        title: publication.meli_title || publication.meli_item_id || "Publicacion ML",
+        rows: [],
+      };
+
+      family.rows.push({
+        publication,
+        opportunities: rowOpportunities,
+        installmentCount: count,
+        installmentLabel: count === 1 ? "1 pago" : label,
+        bestOpportunity: bestOpportunity(rowOpportunities),
+      });
+      families.set(key, family);
+    });
+
+    return [...families.values()]
+      .map((family) => ({
+        ...family,
+        rows: [...family.rows].sort((a, b) => {
+          if (a.installmentCount !== b.installmentCount) return a.installmentCount - b.installmentCount;
+          return Number(a.publication.meli_price || 0) - Number(b.publication.meli_price || 0);
+        }),
+      }))
+      .sort((a, b) => {
+        const aBest = Math.max(...a.rows.map((row) => Number(row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount || 0)));
+        const bBest = Math.max(...b.rows.map((row) => Number(row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount || 0)));
+        if (aBest !== bBest) return bBest - aBest;
+        return a.title.localeCompare(b.title, "es");
+      });
+  }, [selectedGroup, selectedOpportunities]);
+
   return (
     <main className="container wide promociones-meli-page">
       <PageHero
@@ -305,71 +429,84 @@ export default function PromocionesMeliPage() {
                 </div>
               </div>
 
-              <div className="table-wrap">
-                <table className="promociones-table">
-                  <thead>
-                    <tr>
-                      <th>Publicacion</th>
-                      <th>Precio</th>
-                      <th>Promo vigente</th>
-                      <th>Aporte vendedor</th>
-                      <th>Aporte Meli</th>
-                      <th>Disponibles detectadas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedGroup.publications.map((publication) => {
-                      const publicationOpportunities = selectedOpportunities.filter(
-                        (item) => item.meli_item_id === publication.meli_item_id,
-                      );
-                      return (
-                        <tr key={publication.id || publication.meli_item_id || publication.sku}>
-                          <td>
-                            <div className="promociones-publication-cell">
-                              <strong>{publication.meli_title || publication.meli_item_id || "Publicacion ML"}</strong>
-                              <span>{publication.meli_item_id || "-"} | Stock {publication.meli_stock ?? "-"}</span>
-                              {publication.meli_permalink && (
-                                <a href={publication.meli_permalink} target="_blank" rel="noreferrer">Abrir publicacion</a>
+              <div className="promociones-family-list">
+                {publicationFamilies.map((family) => (
+                  <article className="promociones-family-card" key={family.key}>
+                    <div className="promociones-family-header">
+                      <div>
+                        <h3>{family.title}</h3>
+                        <p>{family.rows.length} variante(s) de cuotas detectadas</p>
+                      </div>
+                      <div className="promociones-family-installments">
+                        {family.rows.map((row) => (
+                          <span key={`${row.publication.meli_item_id}-pill`}>
+                            {row.installmentLabel}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="promociones-installment-grid">
+                      {family.rows.map((row) => {
+                        const activeMeliAmount = Number(row.publication.meli_promo_meli_amount || 0);
+                        const activeSellerAmount = Number(row.publication.meli_promo_seller_amount || 0);
+                        const best = row.bestOpportunity;
+                        return (
+                          <section className="promociones-installment-card" key={row.publication.id || row.publication.meli_item_id}>
+                            <div className="promociones-installment-head">
+                              <strong>{row.installmentLabel}</strong>
+                              <span>{row.publication.meli_listing_type_name || row.publication.meli_listing_type_id || "-"}</span>
+                            </div>
+
+                            <div className="promociones-installment-prices">
+                              <div>
+                                <span>Precio publicado</span>
+                                <strong>{moneyWithCents(row.publication.meli_price || 0)}</strong>
+                              </div>
+                              <div>
+                                <span>Precio promo</span>
+                                <strong>{row.publication.meli_promo_price ? moneyWithCents(row.publication.meli_promo_price) : "-"}</strong>
+                              </div>
+                            </div>
+
+                            <div className="promociones-current-promo">
+                              <span>Vigente</span>
+                              <strong>{row.publication.meli_promo_name || row.publication.meli_promo_status || "Sin promo activa"}</strong>
+                              <small>
+                                Meli {activeMeliAmount ? moneyWithCents(activeMeliAmount) : percent(row.publication.meli_promo_meli_rate || 0)}
+                                {" | "}
+                                Vendedor {activeSellerAmount ? moneyWithCents(activeSellerAmount) : percent(row.publication.meli_promo_seller_rate || 0)}
+                              </small>
+                            </div>
+
+                            <div className="promociones-best-opportunity">
+                              <span>Mejor disponible</span>
+                              {best ? (
+                                <>
+                                  <strong>{best.promotion_name || best.promotion_id}</strong>
+                                  <small>
+                                    Precio {best.promo_price ? moneyWithCents(best.promo_price) : "-"}
+                                    {" | "}
+                                    Meli {best.meli_amount ? moneyWithCents(best.meli_amount) : percent(best.meli_percentage || 0)}
+                                  </small>
+                                </>
+                              ) : (
+                                <strong>Sin promo disponible detectada</strong>
                               )}
                             </div>
-                          </td>
-                          <td>
-                            <strong>{moneyWithCents(publication.meli_price || 0)}</strong>
-                            {publication.meli_promo_price && <span className="promociones-muted">Promo {moneyWithCents(publication.meli_promo_price)}</span>}
-                          </td>
-                          <td>
-                            {publication.meli_promo_name || publication.meli_promo_status ? (
-                              <div className="promociones-promo-current">
-                                <strong>{publication.meli_promo_name || "Promo activa"}</strong>
-                                <span>{publication.meli_promo_status || "-"}</span>
-                              </div>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
-                          <td>{publication.meli_promo_seller_amount ? moneyWithCents(publication.meli_promo_seller_amount) : percent(publication.meli_promo_seller_rate || 0)}</td>
-                          <td>{publication.meli_promo_meli_amount ? moneyWithCents(publication.meli_promo_meli_amount) : percent(publication.meli_promo_meli_rate || 0)}</td>
-                          <td>
-                            {publicationOpportunities.length ? (
-                              <div className="promociones-opportunities">
-                                {publicationOpportunities.slice(0, 3).map((item) => (
-                                  <div key={`${item.promotion_id}-${item.offer_id || ""}-${item.item_promotion_status || ""}`}>
-                                    <strong>{item.promotion_name || item.promotion_id}</strong>
-                                    <span>
-                                      Precio {item.promo_price ? moneyWithCents(item.promo_price) : "-"} | Meli {item.meli_amount ? moneyWithCents(item.meli_amount) : percent(item.meli_percentage || 0)}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              "Sin promos disponibles detectadas"
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+
+                            <div className="promociones-row-footer">
+                              <span>{row.publication.meli_item_id || "-"} | Stock {row.publication.meli_stock ?? "-"}</span>
+                              {row.publication.meli_permalink && (
+                                <a href={row.publication.meli_permalink} target="_blank" rel="noreferrer">Abrir</a>
+                              )}
+                            </div>
+                          </section>
+                        );
+                      })}
+                    </div>
+                  </article>
+                ))}
               </div>
             </>
           ) : (

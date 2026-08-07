@@ -5414,6 +5414,168 @@ textarea:focus-visible {
   padding: 8px;
 }
 
+.promociones-family-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.promociones-family-card {
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.promociones-family-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.promociones-family-header h3 {
+  margin: 0 0 5px;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.promociones-family-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.promociones-family-installments {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.promociones-family-installments span {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.promociones-installment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.promociones-installment-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  min-width: 0;
+}
+
+.promociones-installment-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
+}
+
+.promociones-installment-head,
+.promociones-row-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.promociones-installment-head strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.promociones-installment-head span,
+.promociones-row-footer span,
+.promociones-current-promo span,
+.promociones-best-opportunity span,
+.promociones-installment-prices span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.promociones-installment-prices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.promociones-installment-prices div {
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 8px;
+}
+
+.promociones-installment-prices strong {
+  display: block;
+  margin-top: 3px;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.promociones-current-promo,
+.promociones-best-opportunity {
+  border-radius: 8px;
+  padding: 9px;
+}
+
+.promociones-current-promo {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+.promociones-best-opportunity {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.promociones-current-promo strong,
+.promociones-best-opportunity strong {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  margin: 3px 0;
+}
+
+.promociones-current-promo small,
+.promociones-best-opportunity small {
+  display: block;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.promociones-row-footer {
+  margin-top: auto;
+  border-top: 1px solid #edf2f7;
+  padding-top: 8px;
+}
+
+.promociones-row-footer a {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .promociones-empty {
   border: 1px dashed #cbd5e1;
   border-radius: 8px;
