@@ -5820,7 +5820,7 @@ textarea:focus-visible {
 .promociones-promo-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 860px;
+  min-width: 980px;
 }
 
 .promociones-promo-table th,

@@ -61,6 +61,7 @@ type InstallmentSummary = {
   bestOpportunity: MercadoLibrePromotionOpportunity | null;
   bestMeliAmount: number;
   promoPrice: number | null;
+  effectiveSalePrice: number | null;
   rentability: number | null;
   netProfit: number | null;
 };
@@ -70,6 +71,7 @@ type PromoComparison = {
   status: "Vigente" | "Para activar";
   name: string;
   promoPrice: number | null;
+  effectiveSalePrice: number | null;
   meliAmount: number;
   meliRate: number;
   sellerAmount: number;
@@ -182,6 +184,29 @@ function publicationHasMeliContribution(publication: MercadoLibreShippingCost) {
   return Number(publication.meli_promo_meli_amount || 0) > 0 || Number(publication.meli_promo_meli_rate || 0) > 0;
 }
 
+function meliContributionAmount(
+  promoPrice?: number | null,
+  meliAmount?: number | null,
+  meliRate?: number | null,
+) {
+  const amount = Number(meliAmount || 0);
+  if (amount > 0) return amount;
+  const price = Number(promoPrice || 0);
+  const rate = Number(meliRate || 0);
+  if (price > 0 && rate > 0 && rate < 100) return price * (rate / (100 - rate));
+  return 0;
+}
+
+function effectiveSalePrice(
+  promoPrice?: number | null,
+  meliAmount?: number | null,
+  meliRate?: number | null,
+) {
+  const price = Number(promoPrice || 0);
+  if (!price) return null;
+  return price + meliContributionAmount(price, meliAmount, meliRate);
+}
+
 function rawPromotionOpportunities(publication: MercadoLibreShippingCost): MercadoLibrePromotionOpportunity[] {
   const raw = Array.isArray(publication.meli_promotions) ? publication.meli_promotions : [];
   const sellerPromotionPayload = raw.find((entry) => {
@@ -285,6 +310,11 @@ function promotionCountForPublication(
           status: "Vigente" as const,
           name: publication.meli_promo_name || publication.meli_promo_status || "Promo vigente",
           promoPrice: Number(publication.meli_promo_price || 0),
+          effectiveSalePrice: effectiveSalePrice(
+            publication.meli_promo_price,
+            publication.meli_promo_meli_amount,
+            publication.meli_promo_meli_rate,
+          ),
           meliAmount: Number(publication.meli_promo_meli_amount || 0),
           meliRate: Number(publication.meli_promo_meli_rate || 0),
           sellerAmount: Number(publication.meli_promo_seller_amount || 0),
@@ -303,6 +333,7 @@ function promotionCountForPublication(
         status: /started|active/.test(statusText) ? "Vigente" as const : "Para activar" as const,
         name: item.promotion_name || item.promotion_id,
         promoPrice: Number(item.promo_price || 0) || null,
+        effectiveSalePrice: effectiveSalePrice(item.promo_price, item.meli_amount, item.meli_percentage),
         meliAmount: Number(item.meli_amount || 0),
         meliRate: Number(item.meli_percentage || 0),
         sellerAmount: Number(item.seller_amount || 0),
@@ -793,7 +824,10 @@ export default function PromocionesMeliPage() {
                 const minFamilyPrice = Math.min(...family.rows.map((row) => Number(row.publication.meli_price || 0)).filter((price) => price > 0));
                 const summaries: InstallmentSummary[] = family.rows.map((row) => {
                   const promoPrice = Number(row.bestOpportunity?.promo_price || row.publication.meli_promo_price || 0) || null;
-                  const rentability = rentabilityForRow(row, promoPrice);
+                  const bestMeliAmount = Number(row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount || 0);
+                  const bestMeliRate = Number(row.bestOpportunity?.meli_percentage || row.publication.meli_promo_meli_rate || 0);
+                  const summaryEffectiveSalePrice = effectiveSalePrice(promoPrice, bestMeliAmount, bestMeliRate);
+                  const rentability = rentabilityForRow(row, summaryEffectiveSalePrice);
                   return {
                     label: row.installmentLabel,
                     publication: row.publication,
@@ -804,8 +838,9 @@ export default function PromocionesMeliPage() {
                       onlyMeliContribution,
                     ),
                     bestOpportunity: row.bestOpportunity,
-                    bestMeliAmount: Number(row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount || 0),
+                    bestMeliAmount,
                     promoPrice,
+                    effectiveSalePrice: summaryEffectiveSalePrice,
                     rentability: rentability?.margin ?? null,
                     netProfit: rentability?.netProfit ?? null,
                   };
@@ -820,15 +855,21 @@ export default function PromocionesMeliPage() {
                       ...(selectedSummary.publication.meli_promo_price &&
                       (!onlyMeliContribution || publicationHasMeliContribution(selectedSummary.publication))
                         ? (() => {
+                            const activeEffectiveSalePrice = effectiveSalePrice(
+                              selectedSummary.publication.meli_promo_price,
+                              selectedSummary.publication.meli_promo_meli_amount,
+                              selectedSummary.publication.meli_promo_meli_rate,
+                            );
                             const rentability = rentabilityForRow(
                               selectedSummary.row,
-                              selectedSummary.publication.meli_promo_price,
+                              activeEffectiveSalePrice,
                             );
                             return [{
                               key: `${selectedSummary.publication.meli_item_id}-active`,
                               status: "Vigente" as const,
                               name: selectedSummary.publication.meli_promo_name || selectedSummary.publication.meli_promo_status || "Promo vigente",
                               promoPrice: Number(selectedSummary.publication.meli_promo_price || 0),
+                              effectiveSalePrice: activeEffectiveSalePrice,
                               meliAmount: Number(selectedSummary.publication.meli_promo_meli_amount || 0),
                               meliRate: Number(selectedSummary.publication.meli_promo_meli_rate || 0),
                               sellerAmount: Number(selectedSummary.publication.meli_promo_seller_amount || 0),
@@ -841,13 +882,15 @@ export default function PromocionesMeliPage() {
                       ...selectedSummary.row.opportunities
                         .filter((item) => !onlyMeliContribution || hasMeliContribution(item))
                         .map((item) => {
-                          const rentability = rentabilityForRow(selectedSummary.row, item.promo_price);
+                          const promoEffectiveSalePrice = effectiveSalePrice(item.promo_price, item.meli_amount, item.meli_percentage);
+                          const rentability = rentabilityForRow(selectedSummary.row, promoEffectiveSalePrice);
                           const statusText = `${item.item_promotion_status || ""} ${item.promotion_status || ""}`.toLowerCase();
                           return {
                             key: item.offer_id || item.promotion_id || `${selectedSummary.publication.meli_item_id}-${item.promo_price}`,
                             status: /started|active/.test(statusText) ? "Vigente" as const : "Para activar" as const,
                             name: item.promotion_name || item.promotion_id,
                             promoPrice: Number(item.promo_price || 0) || null,
+                            effectiveSalePrice: promoEffectiveSalePrice,
                             meliAmount: Number(item.meli_amount || 0),
                             meliRate: Number(item.meli_percentage || 0),
                             sellerAmount: Number(item.seller_amount || 0),
@@ -924,6 +967,10 @@ export default function PromocionesMeliPage() {
                                 <strong>{summary.bestMeliAmount ? moneyWithCents(summary.bestMeliAmount) : "-"}</strong>
                               </div>
                               <div>
+                                <span>Venta real</span>
+                                <strong>{summary.effectiveSalePrice ? moneyWithCents(summary.effectiveSalePrice) : "-"}</strong>
+                              </div>
+                              <div>
                                 <span>Rentabilidad</span>
                                 <strong className={summary.rentability !== null && summary.rentability < 0 ? "negative" : "positive"}>
                                   {summary.rentability !== null ? percent(summary.rentability) : "-"}
@@ -954,6 +1001,7 @@ export default function PromocionesMeliPage() {
                                   <th>Estado</th>
                                   <th>Promocion</th>
                                   <th>Precio promo</th>
+                                  <th>Venta real</th>
                                   <th>Aporte ML</th>
                                   <th>Aporte vendedor</th>
                                   <th>Rentabilidad</th>
@@ -966,6 +1014,7 @@ export default function PromocionesMeliPage() {
                                     <td><span className={`promo-status ${promo.status === "Vigente" ? "active" : ""}`}>{promo.status}</span></td>
                                     <td><strong>{promo.name}</strong></td>
                                     <td>{promo.promoPrice ? moneyWithCents(promo.promoPrice) : "-"}</td>
+                                    <td><strong>{promo.effectiveSalePrice ? moneyWithCents(promo.effectiveSalePrice) : "-"}</strong></td>
                                     <td>
                                       <strong>{promo.meliAmount ? moneyWithCents(promo.meliAmount) : percent(promo.meliRate)}</strong>
                                     </td>
