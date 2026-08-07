@@ -80,24 +80,14 @@ function IconSimulator() {
   );
 }
 
-function IconProfit() {
+function IconPromotions() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sidebar-icon-svg" aria-hidden="true">
-      <path d="M4 19V5" />
-      <path d="M4 19h16" />
-      <path d="M7 15l3-3 3 2 5-7" />
-      <path d="M16 7h2v2" />
-    </svg>
-  );
-}
-
-function IconMarketAnalysis() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sidebar-icon-svg" aria-hidden="true">
-      <circle cx="10.5" cy="10.5" r="5.5" />
-      <path d="M15 15l4 4" />
-      <path d="M8.5 10.5h4" />
-      <path d="M10.5 8.5v4" />
+      <path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7" />
+      <path d="M2.5 7.5h19v4h-19z" />
+      <path d="M12 21V7.5" />
+      <path d="M12 7.5H8.5a2.5 2.5 0 1 1 2.2-3.7L12 7.5Z" />
+      <path d="M12 7.5h3.5a2.5 2.5 0 1 0-2.2-3.7L12 7.5Z" />
     </svg>
   );
 }
@@ -127,8 +117,7 @@ const mainItems: NavItem[] = [
   { href: "/envios-meli", label: "Envíos", icon: <IconShipping /> },
   { href: "/impuestos", label: "Impuestos", icon: <IconTaxes /> },
   { href: "/precios", label: "Precios", icon: <IconPrices /> },
-  { href: "/rentabilidad-meli", label: "Rentabilidad Meli", icon: <IconProfit /> },
-  { href: "/analisis-mercado", label: "Análisis de Mercado", icon: <IconMarketAnalysis /> },
+  { href: "/promociones-meli", label: "Promociones Meli", icon: <IconPromotions /> },
   { href: "/simulador", label: "Simulador", icon: <IconSimulator /> },
 ];
 

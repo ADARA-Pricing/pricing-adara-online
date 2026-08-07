@@ -46,6 +46,18 @@ function HeroSvg({ title }: { title: string }) {
     );
   }
 
+  if (normalized.includes("promoc")) {
+    return (
+      <svg {...commonProps}>
+        <path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7" />
+        <path d="M2.5 7.5h19v4h-19z" />
+        <path d="M12 21V7.5" />
+        <path d="M12 7.5H8.5a2.5 2.5 0 1 1 2.2-3.7L12 7.5Z" />
+        <path d="M12 7.5h3.5a2.5 2.5 0 1 0-2.2-3.7L12 7.5Z" />
+      </svg>
+    );
+  }
+
   if (normalized.includes("simulador")) {
     return (
       <svg {...commonProps}>

@@ -5223,3 +5223,224 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* Promociones MercadoLibre */
+.promociones-toolbar {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(360px, 0.9fr);
+  align-items: end;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.promociones-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.promociones-kpis div,
+.promociones-detail-stats div {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.promociones-kpis span,
+.promociones-detail-stats span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.promociones-kpis strong,
+.promociones-detail-stats strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 20px;
+}
+
+.promociones-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.8fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.promociones-card-header,
+.promociones-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.promociones-card-header h2,
+.promociones-detail-header h2 {
+  margin: 0;
+}
+
+.promociones-card-header span,
+.promociones-detail-header p,
+.promociones-muted {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.promociones-products {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 68vh;
+  overflow: auto;
+}
+
+.promociones-product-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 52px 62px;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.promociones-product-row:hover,
+.promociones-product-row.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.promociones-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #1d4ed8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  overflow: hidden;
+}
+
+.promociones-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.promociones-product-main,
+.promociones-publication-cell,
+.promociones-promo-current,
+.promociones-opportunities {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.promociones-product-main strong,
+.promociones-publication-cell strong {
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.promociones-product-main span,
+.promociones-product-meta span,
+.promociones-publication-cell span,
+.promociones-promo-current span,
+.promociones-opportunities span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.promociones-product-meta {
+  text-align: center;
+}
+
+.promociones-product-meta strong {
+  display: block;
+  color: #1d4ed8;
+}
+
+.promociones-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: 10px;
+  min-width: 300px;
+}
+
+.promociones-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.promociones-table th,
+.promociones-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+  font-size: 13px;
+}
+
+.promociones-table th {
+  color: #475569;
+  font-size: 12px;
+  text-align: left;
+  background: #f8fafc;
+}
+
+.promociones-publication-cell a {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.promociones-opportunities div {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 8px;
+}
+
+.promociones-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #64748b;
+  padding: 18px;
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .promociones-toolbar,
+  .promociones-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .promociones-products {
+    max-height: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .promociones-kpis,
+  .promociones-detail-stats {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .promociones-product-row {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+}
