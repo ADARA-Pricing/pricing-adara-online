@@ -1051,16 +1051,27 @@ function promotionPrice(item: MeliPromotionItem) {
   return Number(item.price || item.suggested_discounted_price || 0) || null;
 }
 
-function promotionMeliAmount(item: MeliPromotionItem) {
+function splitDiscountAmount(
+  item: MeliPromotionItem,
+  side: "meli" | "seller",
+) {
   const original = Number(item.original_price || 0);
-  const rate = Number(item.meli_percentage || 0);
-  return original > 0 && rate > 0 ? (original * rate) / 100 : null;
+  const promoPrice = Number(promotionPrice(item) || 0);
+  const sellerRate = Number(item.seller_percentage || 0);
+  const meliRate = Number(item.meli_percentage || 0);
+  const totalRate = sellerRate + meliRate;
+  const totalDiscount = original > 0 && promoPrice > 0 ? Math.max(original - promoPrice, 0) : 0;
+  if (!totalDiscount || !totalRate) return null;
+  const rate = side === "meli" ? meliRate : sellerRate;
+  return rate > 0 ? (totalDiscount * rate) / totalRate : null;
+}
+
+function promotionMeliAmount(item: MeliPromotionItem) {
+  return splitDiscountAmount(item, "meli");
 }
 
 function promotionSellerAmount(item: MeliPromotionItem) {
-  const original = Number(item.original_price || 0);
-  const rate = Number(item.seller_percentage || 0);
-  return original > 0 && rate > 0 ? (original * rate) / 100 : null;
+  return splitDiscountAmount(item, "seller");
 }
 
 function itemThumbnail(item: MeliItem) {
