@@ -6053,9 +6053,28 @@ textarea:focus-visible {
 .promociones-traffic-sku-head {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  align-items: flex-start;
+  gap: 10px;
+  align-items: center;
   padding: 10px 11px;
+  width: 100%;
+  border: 0;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.promociones-traffic-sku-head:hover {
+  background: #f8fafc;
+}
+
+.promociones-traffic-sku.expanded .promociones-traffic-sku-head {
+  background: #f8fafc;
+}
+
+.promociones-traffic-sku-title {
+  min-width: 0;
+  flex: 1;
 }
 
 .promociones-traffic-sku-head strong {
@@ -6070,12 +6089,41 @@ textarea:focus-visible {
   font-size: 12px;
   line-height: 1.25;
   margin-top: 3px;
+  overflow-wrap: anywhere;
 }
 
-.promociones-traffic-sku-head span {
+.promociones-traffic-sku-summary {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  min-width: 96px;
+}
+
+.promociones-traffic-sku-summary span {
   color: #1d4ed8;
   font-size: 12px;
   font-weight: 800;
+}
+
+.promociones-traffic-sku-summary small {
+  margin: 0;
+  font-size: 10px;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.promociones-traffic-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 900;
+  flex: 0 0 auto;
 }
 
 .promociones-traffic-items {
@@ -6332,6 +6380,14 @@ textarea:focus-visible {
   .promociones-product-row,
   .promociones-picker-row {
     grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .promociones-traffic-sku-head {
+    align-items: flex-start;
+  }
+
+  .promociones-traffic-sku-summary {
+    min-width: 78px;
   }
 
   .promociones-workbar-actions {

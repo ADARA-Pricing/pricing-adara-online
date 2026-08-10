@@ -578,6 +578,7 @@ export default function PromocionesMeliPage() {
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [onlyMeliContribution, setOnlyMeliContribution] = useState(false);
   const [onlySharedFuture, setOnlySharedFuture] = useState(false);
+  const [expandedTrafficSkus, setExpandedTrafficSkus] = useState<Record<string, boolean>>({});
   const [redThreshold, setRedThreshold] = useState(5);
   const [yellowThreshold, setYellowThreshold] = useState(5);
   const [syncingMeli, setSyncingMeli] = useState(false);
@@ -1298,6 +1299,27 @@ export default function PromocionesMeliPage() {
     };
   }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold]);
 
+  function trafficGroupSummary(group: PromoTrafficLightGroup) {
+    const bestMargin = Math.max(...group.items.map((item) => item.margin));
+    const bestBuyerPrice = Math.min(...group.items.map((item) => Number(item.promoPrice || 0)).filter((price) => price > 0));
+    const installmentLabels = [...new Set(group.items.map((item) => item.installmentLabel))];
+    const shownInstallments = installmentLabels.slice(0, 3).join(", ");
+    const extraInstallments = installmentLabels.length > 3 ? ` +${installmentLabels.length - 3}` : "";
+
+    return {
+      bestMargin,
+      bestBuyerPrice: Number.isFinite(bestBuyerPrice) ? bestBuyerPrice : null,
+      installmentText: `${shownInstallments}${extraInstallments}`,
+    };
+  }
+
+  function toggleTrafficSku(key: string) {
+    setExpandedTrafficSkus((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  }
+
   return (
     <main className="container wide promociones-meli-page">
       <PageHero
@@ -1810,53 +1832,72 @@ export default function PromocionesMeliPage() {
                 <strong>{column.groups.reduce((total, group) => total + group.items.length, 0)}</strong>
               </div>
               {column.groups.length ? (
-                column.groups.map((group) => (
-                  <article className="promociones-traffic-sku" key={`${column.key}-${group.sku}`}>
-                    <div className="promociones-traffic-sku-head">
-                      <div>
-                        <strong>{group.sku}</strong>
-                        <small>{group.productName}</small>
-                      </div>
-                      <span>{group.items.length}</span>
-                    </div>
-                    <div className="promociones-traffic-items">
-                      {group.items.map((item) => (
-                        <div className="promociones-traffic-item" key={item.key}>
-                          <div className="promociones-traffic-main">
-                            <strong>{item.installmentLabel}</strong>
-                            <span>{item.promotionName}</span>
-                            {futureStartLabel(item.startDate) && (
-                              <span className="promo-date-badge">{futureStartLabel(item.startDate)}</span>
-                            )}
-                            <span>
-                              Comprador {item.promoPrice ? moneyWithCents(item.promoPrice) : "-"} | Venta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
-                            </span>
-                            <span>
-                              ML {item.meliAmount ? moneyWithCents(item.meliAmount) : percent(item.meliRate)} | Vendedor {item.sellerAmount ? moneyWithCents(item.sellerAmount) : percent(item.sellerRate)}
-                            </span>
-                            {item.activeMargin !== null && item.activeMargin !== undefined && item.activeMargin >= item.margin && (
-                              <span className="promo-active-winner-badge">
-                                Vigente gana margen {percent(item.activeMargin)}
-                                {item.activeEffectiveSalePrice ? ` | Venta vigente ${moneyWithCents(item.activeEffectiveSalePrice)}` : ""}
-                              </span>
-                            )}
-                          </div>
-                          <div className="promociones-traffic-meta">
-                            <button
-                              type="button"
-                              className={copiedItemId === item.itemId ? "copied" : ""}
-                              title="Copiar ID de publicacion"
-                              onClick={() => copyItemId(item.itemId)}
-                            >
-                              {copiedItemId === item.itemId ? "Copiado" : item.itemId}
-                            </button>
-                            <strong className={item.margin < redThreshold ? "negative" : "positive"}>{percent(item.margin)}</strong>
-                          </div>
+                column.groups.map((group) => {
+                  const groupKey = `${column.key}-${group.sku}`;
+                  const expanded = Boolean(expandedTrafficSkus[groupKey]);
+                  const summary = trafficGroupSummary(group);
+
+                  return (
+                    <article className={`promociones-traffic-sku ${expanded ? "expanded" : ""}`} key={groupKey}>
+                      <button
+                        className="promociones-traffic-sku-head"
+                        type="button"
+                        aria-expanded={expanded}
+                        onClick={() => toggleTrafficSku(groupKey)}
+                      >
+                        <div className="promociones-traffic-sku-title">
+                          <strong>{group.sku}</strong>
+                          <small>{group.productName}</small>
                         </div>
-                      ))}
-                    </div>
-                  </article>
-                ))
+                        <div className="promociones-traffic-sku-summary">
+                          <span>{group.items.length}</span>
+                          <small>{summary.installmentText}</small>
+                          <small>Mejor {percent(summary.bestMargin)}</small>
+                          {summary.bestBuyerPrice && <small>Desde {moneyWithCents(summary.bestBuyerPrice)}</small>}
+                        </div>
+                        <span className="promociones-traffic-toggle">{expanded ? "v" : ">"}</span>
+                      </button>
+                      {expanded && (
+                        <div className="promociones-traffic-items">
+                          {group.items.map((item) => (
+                            <div className="promociones-traffic-item" key={item.key}>
+                              <div className="promociones-traffic-main">
+                                <strong>{item.installmentLabel}</strong>
+                                <span>{item.promotionName}</span>
+                                {futureStartLabel(item.startDate) && (
+                                  <span className="promo-date-badge">{futureStartLabel(item.startDate)}</span>
+                                )}
+                                <span>
+                                  Comprador {item.promoPrice ? moneyWithCents(item.promoPrice) : "-"} | Venta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
+                                </span>
+                                <span>
+                                  ML {item.meliAmount ? moneyWithCents(item.meliAmount) : percent(item.meliRate)} | Vendedor {item.sellerAmount ? moneyWithCents(item.sellerAmount) : percent(item.sellerRate)}
+                                </span>
+                                {item.activeMargin !== null && item.activeMargin !== undefined && item.activeMargin >= item.margin && (
+                                  <span className="promo-active-winner-badge">
+                                    Vigente gana margen {percent(item.activeMargin)}
+                                    {item.activeEffectiveSalePrice ? ` | Venta vigente ${moneyWithCents(item.activeEffectiveSalePrice)}` : ""}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="promociones-traffic-meta">
+                                <button
+                                  type="button"
+                                  className={copiedItemId === item.itemId ? "copied" : ""}
+                                  title="Copiar ID de publicacion"
+                                  onClick={() => copyItemId(item.itemId)}
+                                >
+                                  {copiedItemId === item.itemId ? "Copiado" : item.itemId}
+                                </button>
+                                <strong className={item.margin < redThreshold ? "negative" : "positive"}>{percent(item.margin)}</strong>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })
               ) : (
                 <div className="promociones-empty">Sin publicaciones en este grupo.</div>
               )}
