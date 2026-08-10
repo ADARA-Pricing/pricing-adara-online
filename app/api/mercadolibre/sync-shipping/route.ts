@@ -1390,13 +1390,6 @@ export async function POST(request: NextRequest) {
       promotionOpportunityRows.push(row);
     }
 
-    await mapWithConcurrency(sellerPromotions, 3, async (promotion) => {
-      const promotionItems = await getPromotionItems(promotion, account, matchedItemIds);
-      promotionItems.forEach((item) => {
-        pushPromotionOpportunityRow(promotionOpportunityRowFromItem(item, promotion, item.id || ""));
-      });
-    });
-
     matchedItemsForFetch.forEach((item) => {
       const promotionSummary = promotionsByItem.get(item.id);
       const rawResponses = Array.isArray(promotionSummary?.raw) ? promotionSummary.raw : [];
