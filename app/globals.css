@@ -6272,9 +6272,7 @@ textarea:focus-visible {
 }
 
 .promociones-traffic-item-active .promociones-traffic-meta {
-  align-self: start;
-  flex-direction: column;
-  gap: 6px;
+  align-self: center;
 }
 
 .promociones-traffic-item:last-child {
@@ -6307,19 +6305,6 @@ textarea:focus-visible {
   margin-top: 4px;
 }
 
-.promo-active-status {
-  display: inline-flex;
-  width: fit-content;
-  border-radius: 999px;
-  background: #dcfce7;
-  color: #166534 !important;
-  font-size: 10px !important;
-  font-weight: 900;
-  margin: 0 0 0 6px !important;
-  padding: 1px 6px;
-  vertical-align: middle;
-}
-
 .promociones-traffic-main .promo-active-winner-badge {
   display: inline-flex;
   width: fit-content;
@@ -6333,11 +6318,12 @@ textarea:focus-visible {
 }
 
 .promociones-traffic-meta {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(92px, 1fr) auto;
   gap: 10px;
   align-items: center;
   justify-content: flex-end;
-  min-width: 150px;
+  min-width: 160px;
 }
 
 .promociones-traffic-meta button {
@@ -6349,6 +6335,7 @@ textarea:focus-visible {
   font-size: 11px;
   font-weight: 800;
   padding: 0;
+  text-align: center;
 }
 
 .promociones-traffic-meta button:hover {

@@ -2146,7 +2146,6 @@ export default function PromocionesMeliPage() {
                                   </span>
                                 </div>
                                 <div className="promociones-traffic-meta">
-                                  <span className="promo-active-status">Vigente</span>
                                   <button
                                     type="button"
                                     className={copiedItemId === item.itemId ? "copied" : ""}
