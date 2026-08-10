@@ -5916,16 +5916,38 @@ textarea:focus-visible {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
-.promociones-traffic-actions > span {
+.promociones-traffic-actions label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid #bfdbfe;
   border-radius: 999px;
   color: #1d4ed8;
   font-size: 12px;
   font-weight: 800;
-  padding: 8px 12px;
+  padding: 6px 10px;
   white-space: nowrap;
+}
+
+.promociones-traffic-actions label input {
+  width: 58px;
+  border: 0;
+  border-bottom: 1px solid #bfdbfe;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  outline: none;
+  text-align: right;
+}
+
+.promociones-traffic-actions label input:focus {
+  border-bottom-color: #2563eb;
 }
 
 .promociones-traffic-grid {

@@ -449,6 +449,8 @@ export default function PromocionesMeliPage() {
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [onlyMeliContribution, setOnlyMeliContribution] = useState(false);
+  const [redThreshold, setRedThreshold] = useState(5);
+  const [yellowThreshold, setYellowThreshold] = useState(5);
   const [syncingMeli, setSyncingMeli] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -826,6 +828,7 @@ export default function PromocionesMeliPage() {
       });
 
       group.publications.forEach((publication) => {
+        const isActivePublication = String(publication.meli_status || "").toLowerCase() === "active";
         const label = installmentLabel(publication);
         const row: PublicationPromoRow = {
           publication,
@@ -934,12 +937,13 @@ export default function PromocionesMeliPage() {
             status: promo.status,
           };
 
-          if (margin < 5) addItem(red, item);
+          if (margin < redThreshold) addItem(red, item);
         });
 
         if (
+          isActivePublication &&
           bestCandidate &&
-          bestCandidate.margin > 5 &&
+          bestCandidate.margin > yellowThreshold &&
           (!bestActive || bestCandidate.margin > bestActive.margin)
         ) {
           const promo = bestCandidate.promo;
@@ -998,7 +1002,7 @@ export default function PromocionesMeliPage() {
         return bestActiveMargin === undefined || item.margin > bestActiveMargin;
       })),
     };
-  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings]);
+  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold]);
 
   return (
     <main className="container wide promociones-meli-page">
@@ -1426,7 +1430,30 @@ export default function PromocionesMeliPage() {
             <p>SKU/cuotas que requieren accion: promos activas con baja rentabilidad u oportunidades mejores para activar.</p>
           </div>
           <div className="promociones-traffic-actions">
-            <span>Umbral 5%</span>
+            <label>
+              Rojo
+              <input
+                type="number"
+                min="-100"
+                max="100"
+                step="0.5"
+                value={redThreshold}
+                onChange={(event) => setRedThreshold(Number(event.target.value) || 0)}
+              />
+              <span>%</span>
+            </label>
+            <label>
+              Amarillo
+              <input
+                type="number"
+                min="-100"
+                max="100"
+                step="0.5"
+                value={yellowThreshold}
+                onChange={(event) => setYellowThreshold(Number(event.target.value) || 0)}
+              />
+              <span>%</span>
+            </label>
             <button className="button ghost" type="button" onClick={syncMercadoLibreData} disabled={syncingMeli}>
               {syncingMeli ? "Actualizando..." : "Refrescar"}
             </button>
@@ -1437,13 +1464,13 @@ export default function PromocionesMeliPage() {
             {
               key: "red",
               title: "Revisar activas",
-              subtitle: "Vigentes con menos de 5%",
+              subtitle: `Vigentes con menos de ${percent(redThreshold)}`,
               groups: trafficLights.red,
             },
             {
               key: "yellow",
               title: "Conviene activar",
-              subtitle: "Mejor promo disponible con mas de 5%",
+              subtitle: `Publicaciones activas con mas de ${percent(yellowThreshold)}`,
               groups: trafficLights.yellow,
             },
           ].map((column) => (
@@ -1486,7 +1513,7 @@ export default function PromocionesMeliPage() {
                             >
                               {copiedItemId === item.itemId ? "Copiado" : item.itemId}
                             </button>
-                            <strong className={item.margin < 5 ? "negative" : "positive"}>{percent(item.margin)}</strong>
+                            <strong className={item.margin < redThreshold ? "negative" : "positive"}>{percent(item.margin)}</strong>
                           </div>
                         </div>
                       ))}
