@@ -81,6 +81,7 @@ type PromoComparison = {
   netProfit: number | null;
   startDate?: string | null;
   endDate?: string | null;
+  joined?: boolean;
   scheduled?: boolean;
 };
 
@@ -160,6 +161,12 @@ function isScheduledOpportunity(item: MercadoLibrePromotionOpportunity) {
   if (/program|scheduled|pending/.test(status)) return true;
   const start = item.start_date ? new Date(item.start_date).getTime() : 0;
   return Boolean(start && Number.isFinite(start) && start > Date.now());
+}
+
+function isJoinedOpportunity(item: MercadoLibrePromotionOpportunity) {
+  const status = String(item.item_promotion_status || "").toLowerCase();
+  if (/started|active|pending|program/.test(status)) return true;
+  return String(item.offer_id || "").toUpperCase().startsWith("OFFER");
 }
 
 function productKey(product: Product) {
@@ -998,6 +1005,7 @@ export default function PromocionesMeliPage() {
               netProfit: null,
               startDate: opportunity.start_date || null,
               endDate: opportunity.end_date || null,
+              joined: isJoinedOpportunity(opportunity),
               scheduled: isScheduledOpportunity(opportunity),
             };
           }),
@@ -1020,12 +1028,14 @@ export default function PromocionesMeliPage() {
         const candidatePromos = calculatedPromos.filter((item) =>
           item.promo.status === "Para activar" &&
           !item.promo.scheduled &&
+          !item.promo.joined &&
           !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)) &&
           (Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0),
         );
         const scheduledPromos = calculatedPromos.filter((item) =>
           item.promo.status === "Para activar" &&
           item.promo.scheduled &&
+          !item.promo.joined &&
           !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)) &&
           (Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0),
         );
