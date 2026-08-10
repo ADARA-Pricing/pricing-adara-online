@@ -91,6 +91,10 @@ type PromoTrafficLightItem = {
   promotionName: string;
   promoPrice: number | null;
   effectiveSalePrice: number | null;
+  meliAmount: number;
+  meliRate: number;
+  sellerAmount: number;
+  sellerRate: number;
   margin: number;
   netProfit: number;
   status: "Vigente" | "Para activar";
@@ -948,6 +952,10 @@ export default function PromocionesMeliPage() {
             promotionName: promo.name,
             promoPrice: promo.promoPrice,
             effectiveSalePrice: promo.effectiveSalePrice,
+            meliAmount: promo.meliAmount,
+            meliRate: promo.meliRate,
+            sellerAmount: promo.sellerAmount,
+            sellerRate: promo.sellerRate,
             margin,
             netProfit,
             status: promo.status,
@@ -973,6 +981,10 @@ export default function PromocionesMeliPage() {
             promotionName: promo.name,
             promoPrice: promo.promoPrice,
             effectiveSalePrice: promo.effectiveSalePrice,
+            meliAmount: promo.meliAmount,
+            meliRate: promo.meliRate,
+            sellerAmount: promo.sellerAmount,
+            sellerRate: promo.sellerRate,
             margin: bestCandidate.margin,
             netProfit: bestCandidate.netProfit,
             status: promo.status,
@@ -1516,11 +1528,12 @@ export default function PromocionesMeliPage() {
                           <div className="promociones-traffic-main">
                             <strong>{item.installmentLabel}</strong>
                             <span>{item.promotionName}</span>
-                            {column.key === "yellow" && (
-                              <span>
-                                Promo {item.promoPrice ? moneyWithCents(item.promoPrice) : "-"} | Venta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
-                              </span>
-                            )}
+                            <span>
+                              Comprador {item.promoPrice ? moneyWithCents(item.promoPrice) : "-"} | Venta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
+                            </span>
+                            <span>
+                              ML {item.meliAmount ? moneyWithCents(item.meliAmount) : percent(item.meliRate)} | Vendedor {item.sellerAmount ? moneyWithCents(item.sellerAmount) : percent(item.sellerRate)}
+                            </span>
                           </div>
                           <div className="promociones-traffic-meta">
                             <button
