@@ -148,6 +148,27 @@ function formatDateTime(value?: string | null) {
   }
 }
 
+function formatDateShort(value?: string | null) {
+  if (!value) return null;
+  try {
+    return new Intl.DateTimeFormat("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return null;
+  }
+}
+
+function promoValidityLabel(startDate?: string | null, endDate?: string | null) {
+  const start = formatDateShort(startDate);
+  const end = formatDateShort(endDate);
+  if (start && end) return `Vigencia ${start} al ${end}`;
+  if (start) return `Vigencia desde ${start}`;
+  if (end) return `Vigencia hasta ${end}`;
+  return null;
+}
+
 function hasFutureStart(value?: string | null) {
   if (!value) return false;
   const date = new Date(value);
@@ -2062,7 +2083,9 @@ export default function PromocionesMeliPage() {
                       </button>
                       {expanded && (
                         <div className="promociones-traffic-items">
-                          {group.items.map((item) => (
+                          {group.items.map((item) => {
+                            const validity = promoValidityLabel(item.startDate, item.endDate);
+                            return (
                             <div className="promociones-traffic-item" key={item.key}>
                               <div className="promociones-traffic-main">
                                 <strong>{item.installmentLabel}</strong>
@@ -2075,6 +2098,7 @@ export default function PromocionesMeliPage() {
                                 </span>
                                 <span>
                                   ML {item.meliAmount ? moneyWithCents(item.meliAmount) : percent(item.meliRate)} | Vendedor {item.sellerAmount ? moneyWithCents(item.sellerAmount) : percent(item.sellerRate)}
+                                  {validity ? ` | ${validity}` : ""}
                                 </span>
                                 {item.activeMargin !== null && item.activeMargin !== undefined && item.activeMargin >= item.margin && (
                                   <span className="promo-active-winner-badge">
@@ -2095,7 +2119,8 @@ export default function PromocionesMeliPage() {
                                 <strong className={item.margin < redThreshold ? "negative" : "positive"}>{percent(item.margin)}</strong>
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </article>
