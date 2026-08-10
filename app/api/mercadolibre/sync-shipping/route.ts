@@ -113,10 +113,13 @@ type MeliSellerPromotion = {
 
 type MeliPromotionItem = {
   id?: string;
+  type?: string | null;
+  name?: string | null;
   status?: string | null;
   price?: number | null;
   original_price?: number | null;
   offer_id?: string | null;
+  ref_id?: string | null;
   meli_percentage?: number | null;
   seller_percentage?: number | null;
   boosted_offer?: boolean | null;
@@ -1115,6 +1118,39 @@ function promotionOpportunityKey(row: {
   ].join("|");
 }
 
+function promotionOpportunityRowFromItem(
+  item: MeliPromotionItem,
+  promotion: MeliSellerPromotion | null,
+  itemId: string,
+) {
+  const promoPrice = promotionPrice(item);
+  const row = {
+    promotion_id: promotion?.id || item.id || item.ref_id || item.type || "promo",
+    promotion_name: promotion?.name || (item as { name?: string | null }).name || null,
+    promotion_type: promotion?.type || (item as { type?: string | null }).type || null,
+    promotion_status: promotion?.status || null,
+    item_promotion_status: item.status || null,
+    offer_id: item.offer_id || item.ref_id || null,
+    meli_item_id: itemId,
+    original_price: Number(item.original_price || 0) || null,
+    promo_price: promoPrice,
+    min_discounted_price: Number(item.min_discounted_price || 0) || null,
+    max_discounted_price: Number(item.max_discounted_price || 0) || null,
+    suggested_discounted_price: Number(item.suggested_discounted_price || 0) || null,
+    seller_percentage: Number(item.seller_percentage || 0) || null,
+    meli_percentage: Number(item.meli_percentage || 0) || null,
+    seller_amount: promotionSellerAmount(item),
+    meli_amount: promotionMeliAmount(item),
+    start_date: promotionDate(item.start_date || promotion?.start_date),
+    end_date: promotionDate(item.end_date || promotion?.finish_date),
+    raw: item,
+    last_sync_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  return row;
+}
+
 function itemThumbnail(item: MeliItem) {
   return item.thumbnail || item.pictures?.[0]?.secure_url || item.pictures?.[0]?.url || null;
 }
@@ -1343,41 +1379,36 @@ export async function POST(request: NextRequest) {
     });
 
     const sellerPromotions = await getSellerPromotions(account);
+    const sellerPromotionsById = new Map(sellerPromotions.map((promotion) => [promotion.id, promotion]));
     const promotionOpportunityRows: any[] = [];
     const promotionOpportunityKeys = new Set<string>();
+
+    function pushPromotionOpportunityRow(row: any) {
+      const key = promotionOpportunityKey(row);
+      if (promotionOpportunityKeys.has(key)) return;
+      promotionOpportunityKeys.add(key);
+      promotionOpportunityRows.push(row);
+    }
 
     await mapWithConcurrency(sellerPromotions, 3, async (promotion) => {
       const promotionItems = await getPromotionItems(promotion, account, matchedItemIds);
       promotionItems.forEach((item) => {
-        const promoPrice = promotionPrice(item);
-        const meliAmount = promotionMeliAmount(item);
-        const row = {
-          promotion_id: promotion.id,
-          promotion_name: promotion.name || null,
-          promotion_type: promotion.type || null,
-          promotion_status: promotion.status || null,
-          item_promotion_status: item.status || null,
-          offer_id: item.offer_id || null,
-          meli_item_id: item.id,
-          original_price: Number(item.original_price || 0) || null,
-          promo_price: promoPrice,
-          min_discounted_price: Number(item.min_discounted_price || 0) || null,
-          max_discounted_price: Number(item.max_discounted_price || 0) || null,
-          suggested_discounted_price: Number(item.suggested_discounted_price || 0) || null,
-          seller_percentage: Number(item.seller_percentage || 0) || null,
-          meli_percentage: Number(item.meli_percentage || 0) || null,
-          seller_amount: promotionSellerAmount(item),
-          meli_amount: meliAmount,
-          start_date: promotionDate(item.start_date || promotion.start_date),
-          end_date: promotionDate(item.end_date || promotion.finish_date),
-          raw: item,
-          last_sync_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        const key = promotionOpportunityKey(row);
-        if (promotionOpportunityKeys.has(key)) return;
-        promotionOpportunityKeys.add(key);
-        promotionOpportunityRows.push(row);
+        pushPromotionOpportunityRow(promotionOpportunityRowFromItem(item, promotion, item.id || ""));
+      });
+    });
+
+    matchedItemsForFetch.forEach((item) => {
+      const promotionSummary = promotionsByItem.get(item.id);
+      const rawResponses = Array.isArray(promotionSummary?.raw) ? promotionSummary.raw : [];
+      rawResponses.forEach((entry) => {
+        const payload = entry as { endpoint?: string; data?: unknown };
+        if (!payload.endpoint?.includes(`/seller-promotions/items/${item.id}`) || !Array.isArray(payload.data)) return;
+        payload.data.forEach((rawPromotion) => {
+          const promotionItem = rawPromotion as MeliPromotionItem & { type?: string | null; name?: string | null };
+          if (!promotionItem.id || !promotionItem.status) return;
+          const promotion = sellerPromotionsById.get(String(promotionItem.id)) || null;
+          pushPromotionOpportunityRow(promotionOpportunityRowFromItem(promotionItem, promotion, item.id));
+        });
       });
     });
 

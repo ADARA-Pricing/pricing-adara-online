@@ -68,6 +68,7 @@ type InstallmentSummary = {
 
 type PromoComparison = {
   key: string;
+  promotionId?: string | null;
   status: "Vigente" | "Para activar";
   name: string;
   promoPrice: number | null;
@@ -419,6 +420,22 @@ function promoComparisonKey(item: PromoComparison) {
     Math.round(Number(item.promoPrice || 0) * 100),
     Math.round(Number(item.meliAmount || 0) * 100),
   ].join("|");
+}
+
+function normalizePromoIdentity(value?: string | null) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function samePromotionIdentity(left: PromoComparison, right: PromoComparison) {
+  if (left.promotionId && right.promotionId && left.promotionId === right.promotionId) return true;
+  const leftName = normalizePromoIdentity(left.name);
+  const rightName = normalizePromoIdentity(right.name);
+  return Boolean(leftName && rightName && leftName === rightName);
 }
 
 function dedupePromoComparisons(items: PromoComparison[]) {
@@ -937,6 +954,7 @@ export default function PromocionesMeliPage() {
           ...(publication.meli_promo_price && !hasStartedOpportunity && hasActivePublicationPromo
             ? [{
                 key: `${publication.meli_item_id}-active-light`,
+                promotionId: null,
                 status: "Vigente" as const,
                 name: publication.meli_promo_name || publication.meli_promo_status || "Promo vigente",
                 promoPrice: Number(publication.meli_promo_price || 0),
@@ -967,6 +985,7 @@ export default function PromocionesMeliPage() {
             );
             return {
               key: opportunity.offer_id || opportunity.promotion_id || `${publication.meli_item_id}-${opportunity.promo_price}`,
+              promotionId: opportunity.promotion_id || null,
               status: isActiveOpportunity(opportunity) ? "Vigente" as const : "Para activar" as const,
               name: opportunity.promotion_name || opportunity.promotion_id,
               promoPrice: Number(opportunity.promo_price || 0) || null,
@@ -1001,11 +1020,13 @@ export default function PromocionesMeliPage() {
         const candidatePromos = calculatedPromos.filter((item) =>
           item.promo.status === "Para activar" &&
           !item.promo.scheduled &&
+          !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)) &&
           (Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0),
         );
         const scheduledPromos = calculatedPromos.filter((item) =>
           item.promo.status === "Para activar" &&
           item.promo.scheduled &&
+          !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)) &&
           (Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0),
         );
         const bestActive = [...activePromos].sort((a, b) => b.margin - a.margin)[0] || null;
@@ -1352,6 +1373,7 @@ export default function PromocionesMeliPage() {
                             );
                             return [{
                               key: `${selectedSummary.publication.meli_item_id}-active`,
+                              promotionId: null,
                               status: "Vigente" as const,
                               name: selectedSummary.publication.meli_promo_name || selectedSummary.publication.meli_promo_status || "Promo vigente",
                               promoPrice: Number(selectedSummary.publication.meli_promo_price || 0),
@@ -1380,6 +1402,7 @@ export default function PromocionesMeliPage() {
                           const rentability = rentabilityForRow(selectedSummary.row, promoEffectiveSalePrice);
                           return {
                             key: item.offer_id || item.promotion_id || `${selectedSummary.publication.meli_item_id}-${item.promo_price}`,
+                            promotionId: item.promotion_id || null,
                             status: isActiveOpportunity(item) ? "Vigente" as const : "Para activar" as const,
                             name: item.promotion_name || item.promotion_id,
                             promoPrice: Number(item.promo_price || 0) || null,
