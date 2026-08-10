@@ -481,7 +481,16 @@ function mergeOpportunities(
 ) {
   const map = new Map<string, MercadoLibrePromotionOpportunity>();
   rawOpportunities.forEach((item) => map.set(opportunityKey(item), item));
-  tableOpportunities.forEach((item) => map.set(opportunityKey(item), item));
+  tableOpportunities.forEach((item) => {
+    const key = opportunityKey(item);
+    const current = map.get(key);
+    map.set(key, {
+      ...current,
+      ...item,
+      start_date: item.start_date || current?.start_date || null,
+      end_date: item.end_date || current?.end_date || null,
+    });
+  });
   return [...map.values()];
 }
 
@@ -1005,6 +1014,13 @@ export default function PromocionesMeliPage() {
               opportunity.original_price || publication.meli_price,
               opportunity.seller_percentage,
             );
+            const opportunityDates = publicationPromotionDates(
+              publication,
+              opportunity.promotion_name || opportunity.promotion_id,
+              Number(opportunity.promo_price || 0) || null,
+            );
+            const startDate = opportunity.start_date || opportunityDates.startDate;
+            const endDate = opportunity.end_date || opportunityDates.endDate;
             return {
               key: opportunity.offer_id || opportunity.promotion_id || `${publication.meli_item_id}-${opportunity.promo_price}`,
               promotionId: opportunity.promotion_id || null,
@@ -1018,10 +1034,10 @@ export default function PromocionesMeliPage() {
               sellerRate: Number(opportunity.seller_percentage || 0),
               rentability: null,
               netProfit: null,
-              startDate: opportunity.start_date || null,
-              endDate: opportunity.end_date || null,
+              startDate,
+              endDate,
               joined: isJoinedOpportunity(opportunity),
-              scheduled: isScheduledOpportunity(opportunity),
+              scheduled: isScheduledOpportunity({ ...opportunity, start_date: startDate, end_date: endDate }),
             };
           }),
         ];
