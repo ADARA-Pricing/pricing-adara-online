@@ -579,6 +579,10 @@ export default function PromocionesMeliPage() {
   const [onlyMeliContribution, setOnlyMeliContribution] = useState(false);
   const [onlySharedFuture, setOnlySharedFuture] = useState(false);
   const [expandedTrafficSkus, setExpandedTrafficSkus] = useState<Record<string, boolean>>({});
+  const [desktopAlertsEnabled, setDesktopAlertsEnabled] = useState(false);
+  const [desktopAlertPermission, setDesktopAlertPermission] = useState<NotificationPermission>("default");
+  const [desktopAlertMeliAmount, setDesktopAlertMeliAmount] = useState(10000);
+  const [desktopAlertInterval, setDesktopAlertInterval] = useState(30);
   const [redThreshold, setRedThreshold] = useState(5);
   const [yellowThreshold, setYellowThreshold] = useState(5);
   const [syncingMeli, setSyncingMeli] = useState(false);
@@ -699,8 +703,63 @@ export default function PromocionesMeliPage() {
     }
   }
 
+  function desktopAlertKey(item: PromoTrafficLightItem) {
+    return [
+      item.itemId,
+      item.installmentLabel,
+      normalizePromoIdentity(item.promotionName),
+      Math.round(Number(item.promoPrice || 0) * 100),
+      Math.round(Number(item.meliAmount || 0) * 100),
+    ].join("|");
+  }
+
+  function readNotifiedDesktopAlertKeys() {
+    try {
+      return new Set(JSON.parse(window.localStorage.getItem("promos-meli-alerts-notified") || "[]") as string[]);
+    } catch {
+      return new Set<string>();
+    }
+  }
+
+  function saveNotifiedDesktopAlertKeys(keys: Set<string>) {
+    window.localStorage.setItem("promos-meli-alerts-notified", JSON.stringify([...keys].slice(-500)));
+  }
+
+  async function enableDesktopAlerts() {
+    if (!("Notification" in window)) {
+      setError("Este navegador no soporta notificaciones de escritorio.");
+      return;
+    }
+
+    const permission = Notification.permission === "granted"
+      ? "granted"
+      : await Notification.requestPermission();
+    setDesktopAlertPermission(permission);
+
+    if (permission !== "granted") {
+      setDesktopAlertsEnabled(false);
+      window.localStorage.setItem("promos-meli-alerts-enabled", "false");
+      setError("No se habilitaron las notificaciones del navegador.");
+      return;
+    }
+
+    setDesktopAlertsEnabled(true);
+    window.localStorage.setItem("promos-meli-alerts-enabled", "true");
+    const knownKeys = new Set(desktopAlertCandidates.map(desktopAlertKey));
+    saveNotifiedDesktopAlertKeys(knownKeys);
+  }
+
+  function disableDesktopAlerts() {
+    setDesktopAlertsEnabled(false);
+    window.localStorage.setItem("promos-meli-alerts-enabled", "false");
+  }
+
   useEffect(() => {
     checkSession();
+    if ("Notification" in window) setDesktopAlertPermission(Notification.permission);
+    setDesktopAlertsEnabled(window.localStorage.getItem("promos-meli-alerts-enabled") === "true");
+    setDesktopAlertMeliAmount(Number(window.localStorage.getItem("promos-meli-alerts-meli-amount") || 10000) || 10000);
+    setDesktopAlertInterval(Number(window.localStorage.getItem("promos-meli-alerts-interval") || 30) || 30);
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1299,6 +1358,52 @@ export default function PromocionesMeliPage() {
     };
   }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold]);
 
+  const desktopAlertCandidates = useMemo(() => {
+    const flatten = (groups: PromoTrafficLightGroup[]) => groups.flatMap((group) => group.items);
+    return [
+      ...flatten(trafficLights.yellow),
+      ...flatten(trafficLights.scheduledShared),
+    ].filter((item) => Number(item.meliAmount || 0) >= desktopAlertMeliAmount);
+  }, [trafficLights, desktopAlertMeliAmount]);
+
+  useEffect(() => {
+    window.localStorage.setItem("promos-meli-alerts-meli-amount", String(desktopAlertMeliAmount));
+  }, [desktopAlertMeliAmount]);
+
+  useEffect(() => {
+    window.localStorage.setItem("promos-meli-alerts-interval", String(desktopAlertInterval));
+  }, [desktopAlertInterval]);
+
+  useEffect(() => {
+    if (!desktopAlertsEnabled || desktopAlertPermission !== "granted" || !desktopAlertCandidates.length) return;
+
+    const notifiedKeys = readNotifiedDesktopAlertKeys();
+    const newItems = desktopAlertCandidates.filter((item) => !notifiedKeys.has(desktopAlertKey(item)));
+    if (!newItems.length) return;
+
+    newItems.forEach((item) => notifiedKeys.add(desktopAlertKey(item)));
+    saveNotifiedDesktopAlertKeys(notifiedKeys);
+
+    const best = [...newItems].sort((a, b) => Number(b.meliAmount || 0) - Number(a.meliAmount || 0))[0];
+    const extraCount = newItems.length > 1 ? ` y ${newItems.length - 1} mas` : "";
+    const notification = new Notification(`Promo Meli con aporte alto${extraCount}`, {
+      body: `${best.sku} ${best.installmentLabel}: ${best.promotionName} | ML ${moneyWithCents(best.meliAmount)} | Comprador ${best.promoPrice ? moneyWithCents(best.promoPrice) : "-"}`,
+      tag: `promos-meli-${desktopAlertKey(best)}`,
+    });
+    notification.onclick = () => window.focus();
+  }, [desktopAlertsEnabled, desktopAlertPermission, desktopAlertCandidates]);
+
+  useEffect(() => {
+    if (!desktopAlertsEnabled || desktopAlertPermission !== "granted") return;
+    const minutes = Math.max(5, desktopAlertInterval);
+    const interval = window.setInterval(() => {
+      if (!syncingMeli) syncMercadoLibreData();
+    }, minutes * 60 * 1000);
+
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopAlertsEnabled, desktopAlertPermission, desktopAlertInterval, syncingMeli]);
+
   function trafficGroupSummary(group: PromoTrafficLightGroup) {
     const bestMargin = Math.max(...group.items.map((item) => item.margin));
     const bestBuyerPrice = Math.min(...group.items.map((item) => Number(item.promoPrice || 0)).filter((price) => price > 0));
@@ -1788,6 +1893,36 @@ export default function PromocionesMeliPage() {
               />
               <span>%</span>
             </label>
+            <label title="Avisa cuando aparece una promo nueva con aporte de MercadoLibre igual o superior a este valor.">
+              Alerta ML
+              <input
+                type="number"
+                min="0"
+                step="1000"
+                value={desktopAlertMeliAmount}
+                onChange={(event) => setDesktopAlertMeliAmount(Number(event.target.value) || 0)}
+              />
+              <span>$</span>
+            </label>
+            <label title="Cada cuantos minutos sincronizar automaticamente mientras esta pantalla este abierta.">
+              Cada
+              <input
+                type="number"
+                min="5"
+                max="240"
+                step="5"
+                value={desktopAlertInterval}
+                onChange={(event) => setDesktopAlertInterval(Number(event.target.value) || 5)}
+              />
+              <span>min</span>
+            </label>
+            <button
+              className={`button ghost ${desktopAlertsEnabled ? "active" : ""}`}
+              type="button"
+              onClick={desktopAlertsEnabled ? disableDesktopAlerts : enableDesktopAlerts}
+            >
+              {desktopAlertsEnabled ? "Alertas ON" : "Alertas escritorio"}
+            </button>
             <button className="button ghost" type="button" onClick={syncMercadoLibreData} disabled={syncingMeli}>
               {syncingMeli ? "Sincronizando..." : "Sincronizar ML"}
             </button>

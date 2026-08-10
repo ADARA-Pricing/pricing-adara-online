@@ -5966,6 +5966,12 @@ textarea:focus-visible {
   border-bottom-color: #2563eb;
 }
 
+.promociones-traffic-actions .button.active {
+  border-color: #16a34a;
+  background: #dcfce7;
+  color: #166534;
+}
+
 .promociones-traffic-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
