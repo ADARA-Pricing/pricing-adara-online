@@ -105,13 +105,24 @@ type PromoTrafficLightItem = {
   netProfit: number;
   status: "Vigente" | "Para activar";
   activeMargin?: number | null;
-  activeEffectiveSalePrice?: number | null;
+  activePromoPrice?: number | null;
 };
 
 type PromoTrafficLightGroup = {
   sku: string;
   productName: string;
   items: PromoTrafficLightItem[];
+};
+
+type MissingPromoGroup = {
+  sku: string;
+  productName: string;
+  items: Array<{
+    key: string;
+    itemId: string;
+    installmentLabel: string;
+    title: string;
+  }>;
 };
 
 type PromoTrafficLights = {
@@ -583,6 +594,7 @@ export default function PromocionesMeliPage() {
   const [desktopAlertPermission, setDesktopAlertPermission] = useState<NotificationPermission>("default");
   const [desktopAlertMeliAmount, setDesktopAlertMeliAmount] = useState(10000);
   const [desktopAlertInterval, setDesktopAlertInterval] = useState(30);
+  const [missingPromoModalOpen, setMissingPromoModalOpen] = useState(false);
   const [redThreshold, setRedThreshold] = useState(5);
   const [yellowThreshold, setYellowThreshold] = useState(5);
   const [syncingMeli, setSyncingMeli] = useState(false);
@@ -711,6 +723,17 @@ export default function PromocionesMeliPage() {
       Math.round(Number(item.promoPrice || 0) * 100),
       Math.round(Number(item.meliAmount || 0) * 100),
     ].join("|");
+  }
+
+  function isIdealDesktopAlertItem(item: PromoTrafficLightItem) {
+    return Boolean(
+      item.activeMargin !== null &&
+      item.activeMargin !== undefined &&
+      item.activePromoPrice &&
+      item.promoPrice &&
+      item.margin > item.activeMargin &&
+      item.promoPrice < item.activePromoPrice,
+    );
   }
 
   function readNotifiedDesktopAlertKeys() {
@@ -1260,7 +1283,7 @@ export default function PromocionesMeliPage() {
                 netProfit: candidate.netProfit,
                 status: promo.status,
                 activeMargin: bestActive?.margin ?? null,
-                activeEffectiveSalePrice: bestActive?.promo.effectiveSalePrice ?? null,
+                activePromoPrice: bestActive?.promo.promoPrice ?? null,
               });
             });
         }
@@ -1363,8 +1386,51 @@ export default function PromocionesMeliPage() {
     return [
       ...flatten(trafficLights.yellow),
       ...flatten(trafficLights.scheduledShared),
-    ].filter((item) => Number(item.meliAmount || 0) >= desktopAlertMeliAmount);
+    ].filter((item) => Number(item.meliAmount || 0) >= desktopAlertMeliAmount || isIdealDesktopAlertItem(item));
   }, [trafficLights, desktopAlertMeliAmount]);
+
+  const missingPromoGroups = useMemo<MissingPromoGroup[]>(() => {
+    const result = new Map<string, MissingPromoGroup>();
+
+    groups.forEach((group) => {
+      group.publications.forEach((publication) => {
+        const label = installmentLabel(publication);
+        const count = installmentCountFromLabel(label);
+        const tableOpportunities = publication.meli_item_id
+          ? group.opportunities.filter((item) => item.meli_item_id === publication.meli_item_id)
+          : [];
+        const rowOpportunities = mergeOpportunities(
+          tableOpportunities,
+          rawPromotionOpportunities(publication).filter(isCurrentOpportunity),
+        );
+        const hasActivePromo =
+          (isActivePromotionStatus(publication.meli_promo_status) && Number(publication.meli_promo_price || 0) > 0) ||
+          rowOpportunities.some(isActiveOpportunity);
+
+        if (hasActivePromo) return;
+
+        const current = result.get(group.product.sku) || {
+          sku: group.product.sku,
+          productName: group.product.name,
+          items: [],
+        };
+        current.items.push({
+          key: `${publication.meli_item_id || publication.id || publication.sku}-${label}`,
+          itemId: publication.meli_item_id || "-",
+          installmentLabel: count === 1 ? "1 pago" : label,
+          title: publication.meli_title || group.product.name,
+        });
+        result.set(group.product.sku, current);
+      });
+    });
+
+    return [...result.values()]
+      .map((group) => ({
+        ...group,
+        items: [...group.items].sort((a, b) => installmentCountFromLabel(a.installmentLabel) - installmentCountFromLabel(b.installmentLabel)),
+      }))
+      .sort((a, b) => b.items.length - a.items.length || a.sku.localeCompare(b.sku, "es"));
+  }, [groups]);
 
   useEffect(() => {
     window.localStorage.setItem("promos-meli-alerts-meli-amount", String(desktopAlertMeliAmount));
@@ -1384,10 +1450,14 @@ export default function PromocionesMeliPage() {
     newItems.forEach((item) => notifiedKeys.add(desktopAlertKey(item)));
     saveNotifiedDesktopAlertKeys(notifiedKeys);
 
-    const best = [...newItems].sort((a, b) => Number(b.meliAmount || 0) - Number(a.meliAmount || 0))[0];
+    const idealItems = newItems.filter(isIdealDesktopAlertItem);
+    const best = [...(idealItems.length ? idealItems : newItems)].sort((a, b) => Number(b.meliAmount || 0) - Number(a.meliAmount || 0))[0];
     const extraCount = newItems.length > 1 ? ` y ${newItems.length - 1} mas` : "";
-    const notification = new Notification(`Promo Meli con aporte alto${extraCount}`, {
-      body: `${best.sku} ${best.installmentLabel}: ${best.promotionName} | ML ${moneyWithCents(best.meliAmount)} | Comprador ${best.promoPrice ? moneyWithCents(best.promoPrice) : "-"}`,
+    const idealText = isIdealDesktopAlertItem(best)
+      ? ` | Comprador ${moneyWithCents(best.activePromoPrice || 0)} -> ${moneyWithCents(best.promoPrice || 0)} | Margen ${percent(best.activeMargin || 0)} -> ${percent(best.margin)}`
+      : "";
+    const notification = new Notification(`${isIdealDesktopAlertItem(best) ? "Promo ideal Meli" : "Promo Meli con aporte alto"}${extraCount}`, {
+      body: `${best.sku} ${best.installmentLabel}: ${best.promotionName} | ML ${moneyWithCents(best.meliAmount)} | Comprador ${best.promoPrice ? moneyWithCents(best.promoPrice) : "-"}${idealText}`,
       tag: `promos-meli-${desktopAlertKey(best)}`,
     });
     notification.onclick = () => window.focus();
@@ -1923,6 +1993,9 @@ export default function PromocionesMeliPage() {
             >
               {desktopAlertsEnabled ? "Alertas ON" : "Alertas escritorio"}
             </button>
+            <button className="button ghost" type="button" onClick={() => setMissingPromoModalOpen(true)}>
+              Sin promo {missingPromoGroups.reduce((total, group) => total + group.items.length, 0)}
+            </button>
             <button className="button ghost" type="button" onClick={syncMercadoLibreData} disabled={syncingMeli}>
               {syncingMeli ? "Sincronizando..." : "Sincronizar ML"}
             </button>
@@ -2011,7 +2084,7 @@ export default function PromocionesMeliPage() {
                                 {item.activeMargin !== null && item.activeMargin !== undefined && item.activeMargin >= item.margin && (
                                   <span className="promo-active-winner-badge">
                                     Vigente gana margen {percent(item.activeMargin)}
-                                    {item.activeEffectiveSalePrice ? ` | Venta vigente ${moneyWithCents(item.activeEffectiveSalePrice)}` : ""}
+                                    {item.activePromoPrice ? ` | Comprador vigente ${moneyWithCents(item.activePromoPrice)}` : ""}
                                   </span>
                                 )}
                               </div>
@@ -2040,6 +2113,47 @@ export default function PromocionesMeliPage() {
           ))}
         </div>
       </section>
+
+      {missingPromoModalOpen && (
+        <div className="modal-backdrop promociones-picker-backdrop" onMouseDown={() => setMissingPromoModalOpen(false)}>
+          <div className="promociones-picker-modal promociones-missing-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h2>SKUs sin promo vigente</h2>
+                <p>Cuotas/publicaciones activas que no tienen una promo aplicada ahora.</p>
+              </div>
+              <button className="button ghost" type="button" onClick={() => setMissingPromoModalOpen(false)}>Cerrar</button>
+            </div>
+            <div className="promociones-missing-list">
+              {missingPromoGroups.length ? missingPromoGroups.map((group) => (
+                <article className="promociones-missing-card" key={group.sku}>
+                  <div>
+                    <strong>{group.sku}</strong>
+                    <small>{group.productName}</small>
+                  </div>
+                  <div className="promociones-missing-items">
+                    {group.items.map((item) => (
+                      <button
+                        type="button"
+                        key={item.key}
+                        className={copiedItemId === item.itemId ? "copied" : ""}
+                        title="Copiar ID de publicacion"
+                        onClick={() => copyItemId(item.itemId)}
+                      >
+                        <strong>{item.installmentLabel}</strong>
+                        <small>{item.title}</small>
+                        <span>{copiedItemId === item.itemId ? "Copiado" : item.itemId}</span>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              )) : (
+                <div className="promociones-empty">Todas las publicaciones activas tienen promo vigente.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
