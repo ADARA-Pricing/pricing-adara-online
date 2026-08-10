@@ -463,6 +463,10 @@ function samePromotionEconomics(left: PromoComparison, right: PromoComparison) {
   );
 }
 
+function promoBuyerPrice(item: PromoComparison) {
+  return Number(item.promoPrice || item.effectiveSalePrice || 0);
+}
+
 function dedupePromoComparisons(items: PromoComparison[]) {
   const map = new Map<string, PromoComparison>();
   items.forEach((item) => {
@@ -1064,6 +1068,11 @@ export default function PromocionesMeliPage() {
           !item.promo.joined &&
           !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)) &&
           !activePromos.some((activeItem) => samePromotionEconomics(activeItem.promo, item.promo)) &&
+          (!activePromos.length || activePromos.some((activeItem) =>
+            promoBuyerPrice(item.promo) > 0 &&
+            promoBuyerPrice(activeItem.promo) > 0 &&
+            promoBuyerPrice(item.promo) < promoBuyerPrice(activeItem.promo)
+          )) &&
           !calculatedPromos.some((scheduledItem) =>
             scheduledItem.promo.status === "Para activar" &&
             scheduledItem.promo.scheduled &&
