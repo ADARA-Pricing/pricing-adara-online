@@ -119,6 +119,10 @@ type MeliPromotionItem = {
   offer_id?: string | null;
   meli_percentage?: number | null;
   seller_percentage?: number | null;
+  boosted_offer?: boolean | null;
+  discount_meli_boosted_percentage?: number | null;
+  discount_meli_boost_amount?: number | null;
+  total_price_for_boosted_offer?: number | null;
   min_discounted_price?: number | null;
   max_discounted_price?: number | null;
   suggested_discounted_price?: number | null;
@@ -539,6 +543,7 @@ function isExpiredPromotion(value: any) {
 }
 
 const PROMO_PRICE_KEYS = [
+  "total_price_for_boosted_offer",
   "promo_price",
   "promotion_price",
   "discounted_price",
@@ -588,6 +593,7 @@ const MELI_AMOUNT_KEYS = [
   "platform_funded_amount",
   "platform_contribution_amount",
 ];
+const MELI_BOOST_AMOUNT_KEYS = ["discount_meli_boost_amount", "discount_meli_boosted_amount"];
 
 function candidateOriginalPrice(value: any, itemPrice?: number | null) {
   return pickNumber(value, ORIGINAL_PRICE_KEYS) || Number(itemPrice || 0) || null;
@@ -614,9 +620,14 @@ function candidateSellerAmount(value: any) {
 
 function candidateMeliAmount(value: any) {
   return pickNumber(value, MELI_AMOUNT_KEYS) || pickNumberDeep(value, MELI_AMOUNT_KEYS) || pickNumberByKeyPattern(value, (key) =>
+    !/boost/.test(key) &&
     /(meli|marketplace|mercado_libre|mercadolibre|platform)/.test(key) &&
     /(amount|discount|fund|funded|funding|contribution|benefit|value)/.test(key)
   ) || pickMeliAmountFromTaggedObject(value);
+}
+
+function candidateMeliBoostAmount(value: any) {
+  return pickNumber(value, MELI_BOOST_AMOUNT_KEYS) || pickNumberDeep(value, MELI_BOOST_AMOUNT_KEYS);
 }
 
 function pickMeliAmountFromTaggedObject(source: unknown): number | null {
@@ -756,6 +767,7 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null, 
   const promoPrice = candidatePromoPrice(best, itemPrice);
   const sellerAmount = candidateSellerAmount(best);
   const rawMeliAmount = candidateMeliAmount(best);
+  const boostMeliAmount = candidateMeliBoostAmount(best);
   const commissionBasePrice = candidateCommissionBasePrice(best);
   const rawMeliRate =
     pickNumber(best, [
@@ -796,11 +808,15 @@ function summarizePromotion(rawResponses: unknown[], itemPrice?: number | null, 
     !rawMeliAmount && originalPrice && rawMeliRate
       ? (originalPrice * rawMeliRate) / 100
       : null;
-  const meliAmount =
+  const baseMeliAmount =
     rawMeliAmount ||
     (derivedMeliAmount && derivedMeliAmount > 0.5 ? derivedMeliAmount : null) ||
     (derivedMeliAmountFromBase && derivedMeliAmountFromBase > 0.5 ? derivedMeliAmountFromBase : null) ||
     (derivedMeliAmountFromRate && derivedMeliAmountFromRate > 0.5 ? derivedMeliAmountFromRate : null);
+  const meliAmount =
+    baseMeliAmount || boostMeliAmount
+      ? Number(baseMeliAmount || 0) + Number(boostMeliAmount || 0)
+      : null;
   const receiveAmount = pickNumber(best, [
     "receive_amount",
     "seller_receives_amount",
@@ -851,6 +867,11 @@ function summarizeItemSalePrice(item: MeliItem): PromotionSummary | null {
 
   const discountAmount = originalPrice - promoPrice;
   const metadata = salePrice?.metadata || {};
+  const metadataMeliAmount = pickNumber(metadata, ["meli_discount_amount", "marketplace_discount_amount", "meli_amount", "funding_amount"]);
+  const metadataBoostAmount = pickNumber(metadata, MELI_BOOST_AMOUNT_KEYS);
+  const meliAmount = metadataMeliAmount || metadataBoostAmount
+    ? Number(metadataMeliAmount || 0) + Number(metadataBoostAmount || 0)
+    : null;
 
   return {
     originalPrice,
@@ -861,7 +882,7 @@ function summarizeItemSalePrice(item: MeliItem): PromotionSummary | null {
     discountRate: (discountAmount / originalPrice) * 100,
     sellerAmount: pickNumber(metadata, ["seller_discount_amount", "seller_amount", "seller_funded_amount", "discount_seller_amount"]),
     sellerRate: pickNumber(metadata, ["seller_percentage", "seller_percent", "seller_discount_rate"]),
-    meliAmount: pickNumber(metadata, ["meli_discount_amount", "marketplace_discount_amount", "meli_amount", "funding_amount"]),
+    meliAmount,
     meliRate: pickNumber(metadata, ["meli_percentage", "marketplace_percentage", "meli_discount_rate"]),
     receiveAmount: pickNumber(metadata, ["receive_amount", "seller_receives_amount", "seller_receive_amount", "net_amount"]),
     raw: [{ endpoint: "item.sale_price", data: salePrice }],
@@ -1048,6 +1069,10 @@ function promotionDate(value?: string | null) {
 }
 
 function promotionPrice(item: MeliPromotionItem) {
+  return Number(item.total_price_for_boosted_offer || item.price || item.suggested_discounted_price || 0) || null;
+}
+
+function promotionBasePrice(item: MeliPromotionItem) {
   return Number(item.price || item.suggested_discounted_price || 0) || null;
 }
 
@@ -1056,7 +1081,7 @@ function splitDiscountAmount(
   side: "meli" | "seller",
 ) {
   const original = Number(item.original_price || 0);
-  const promoPrice = Number(promotionPrice(item) || 0);
+  const promoPrice = Number(promotionBasePrice(item) || promotionPrice(item) || 0);
   const sellerRate = Number(item.seller_percentage || 0);
   const meliRate = Number(item.meli_percentage || 0);
   const totalRate = sellerRate + meliRate;
@@ -1067,7 +1092,9 @@ function splitDiscountAmount(
 }
 
 function promotionMeliAmount(item: MeliPromotionItem) {
-  return splitDiscountAmount(item, "meli");
+  const baseAmount = splitDiscountAmount(item, "meli");
+  const boostAmount = Number(item.discount_meli_boost_amount || 0);
+  return baseAmount || boostAmount ? Number(baseAmount || 0) + boostAmount : null;
 }
 
 function promotionSellerAmount(item: MeliPromotionItem) {

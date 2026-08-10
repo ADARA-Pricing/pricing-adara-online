@@ -272,21 +272,26 @@ function rawPromotionOpportunities(publication: MercadoLibreShippingCost): Merca
     .map((item) => {
       const promo = item as Record<string, unknown>;
       const originalPrice = Number(promo.original_price || publication.meli_price || 0);
-      const promoPrice =
+      const basePromoPrice =
         Number(promo.price || 0) ||
         Number(promo.suggested_discounted_price || 0) ||
         null;
+      const promoPrice =
+        Number(promo.total_price_for_boosted_offer || 0) ||
+        basePromoPrice ||
+        null;
       const meliPercentage = Number(promo.meli_percentage || 0);
       const sellerPercentage = Number(promo.seller_percentage || 0);
-      const totalDiscount = originalPrice && promoPrice ? Math.max(originalPrice - promoPrice, 0) : 0;
+      const baseDiscount = originalPrice && basePromoPrice ? Math.max(originalPrice - basePromoPrice, 0) : 0;
       const totalContributionRate = meliPercentage + sellerPercentage;
+      const boostMeliAmount = Number(promo.discount_meli_boost_amount || promo.discount_meli_boosted_amount || 0);
       const meliAmount =
         Number(promo.meli_amount || 0) ||
-        (totalDiscount && totalContributionRate && meliPercentage ? (totalDiscount * meliPercentage) / totalContributionRate : 0);
+        (baseDiscount && totalContributionRate && meliPercentage ? (baseDiscount * meliPercentage) / totalContributionRate : 0);
       const sellerAmount =
         Number(promo.seller_amount || 0) ||
         Number(promo.discount_amount || 0) ||
-        (totalDiscount && totalContributionRate && sellerPercentage ? (totalDiscount * sellerPercentage) / totalContributionRate : 0);
+        (baseDiscount && totalContributionRate && sellerPercentage ? (baseDiscount * sellerPercentage) / totalContributionRate : 0);
 
       return {
         promotion_id: String(promo.id || promo.ref_id || promo.type || "promo"),
@@ -304,7 +309,7 @@ function rawPromotionOpportunities(publication: MercadoLibreShippingCost): Merca
         seller_percentage: sellerPercentage || null,
         meli_percentage: meliPercentage || null,
         seller_amount: sellerAmount || null,
-        meli_amount: meliAmount || null,
+        meli_amount: meliAmount || boostMeliAmount ? Number(meliAmount || 0) + boostMeliAmount : null,
         start_date: typeof promo.start_date === "string" ? promo.start_date : null,
         end_date: typeof promo.finish_date === "string" ? promo.finish_date : typeof promo.end_date === "string" ? promo.end_date : null,
         raw: promo,
