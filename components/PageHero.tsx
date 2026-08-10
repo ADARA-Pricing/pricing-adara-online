@@ -124,11 +124,15 @@ export function PageHero({
   title,
   description,
   onRefresh,
+  refreshLabel = "Actualizar",
+  refreshDisabled = false,
   icon,
 }: {
   title: string;
   description: ReactNode;
   onRefresh?: () => void;
+  refreshLabel?: string;
+  refreshDisabled?: boolean;
   onLogout?: () => void;
   icon?: ReactNode;
 }) {
@@ -143,8 +147,8 @@ export function PageHero({
       </div>
       <div className="page-hero-actions">
         {onRefresh && (
-          <button className="button ghost page-refresh-button" onClick={onRefresh} type="button">
-            Actualizar
+          <button className="button ghost page-refresh-button" onClick={onRefresh} type="button" disabled={refreshDisabled}>
+            {refreshLabel}
           </button>
         )}
       </div>

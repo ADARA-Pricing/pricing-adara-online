@@ -544,10 +544,16 @@ export default function PromocionesMeliPage() {
   }
 
   async function syncMercadoLibreData() {
+    if (syncingMeli) return;
     setSyncingMeli(true);
     setError(null);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 120000);
     try {
-      const response = await fetch("/api/mercadolibre/sync-shipping", { method: "POST" });
+      const response = await fetch("/api/mercadolibre/sync-shipping", {
+        method: "POST",
+        signal: controller.signal,
+      });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         setError(data?.error || "No se pudo sincronizar MercadoLibre.");
@@ -555,8 +561,13 @@ export default function PromocionesMeliPage() {
       }
       await loadData();
     } catch (syncError) {
-      setError(syncError instanceof Error ? syncError.message : "No se pudo sincronizar MercadoLibre.");
+      setError(
+        syncError instanceof DOMException && syncError.name === "AbortError"
+          ? "La sincronizacion de MercadoLibre tardo mas de 2 minutos. Proba de nuevo o sincroniza por SKU desde Productos."
+          : syncError instanceof Error ? syncError.message : "No se pudo sincronizar MercadoLibre.",
+      );
     } finally {
+      window.clearTimeout(timeout);
       setSyncingMeli(false);
     }
   }
@@ -1015,6 +1026,8 @@ export default function PromocionesMeliPage() {
         title="Promociones Meli"
         description={syncingMeli ? "Sincronizando publicaciones y promociones desde MercadoLibre..." : "Revisa productos activos en MercadoLibre, sus publicaciones y las promociones disponibles o vigentes detectadas en la ultima sincronizacion."}
         onRefresh={syncMercadoLibreData}
+        refreshLabel={syncingMeli ? "Sincronizando..." : "Sincronizar ML"}
+        refreshDisabled={syncingMeli}
       />
 
       {error && <div className="message error">{error}</div>}
@@ -1460,7 +1473,7 @@ export default function PromocionesMeliPage() {
               <span>%</span>
             </label>
             <button className="button ghost" type="button" onClick={syncMercadoLibreData} disabled={syncingMeli}>
-              {syncingMeli ? "Actualizando..." : "Refrescar"}
+              {syncingMeli ? "Sincronizando..." : "Sincronizar ML"}
             </button>
           </div>
         </div>

@@ -127,14 +127,28 @@ export async function refreshAccessToken(account: MercadoLibreAccount) {
 export async function meliFetch(path: string, account: MercadoLibreAccount, init?: RequestInit) {
   const refreshed = await refreshAccessToken(account);
   const url = path.startsWith("http") ? path : `https://api.mercadolibre.com${path}`;
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      ...(init?.headers || {}),
-      Authorization: `Bearer ${refreshed.access_token}`,
-      Accept: "application/json",
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      ...init,
+      signal: init?.signal || controller.signal,
+      headers: {
+        ...(init?.headers || {}),
+        Authorization: `Bearer ${refreshed.access_token}`,
+        Accept: "application/json",
+      },
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`Timeout MercadoLibre: ${path}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const data = await response.json().catch(() => null);
   if (!response.ok) {
