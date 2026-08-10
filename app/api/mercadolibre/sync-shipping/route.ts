@@ -1492,12 +1492,14 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      for (const batch of chunk(updateRows, 100)) {
+      await mapWithConcurrency(updateRows, 8, async (row) => {
+        const { id, ...payload } = row;
         const { error: updateError } = await supabase
           .from("mercadolibre_shipping_costs")
-          .upsert(batch, { onConflict: "id" });
+          .update(payload)
+          .eq("id", id);
         if (updateError) throw new Error(updateError.message);
-      }
+      });
 
       return NextResponse.json({
         ok: true,
