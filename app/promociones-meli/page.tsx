@@ -135,10 +135,15 @@ function formatDateTime(value?: string | null) {
   }
 }
 
-function futureStartLabel(value?: string | null) {
-  if (!value) return null;
+function hasFutureStart(value?: string | null) {
+  if (!value) return false;
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) return null;
+  if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) return false;
+  return true;
+}
+
+function futureStartLabel(value?: string | null) {
+  if (!hasFutureStart(value)) return null;
   return `Arranca ${formatDateTime(value)}`;
 }
 
@@ -1230,7 +1235,7 @@ export default function PromocionesMeliPage() {
       const selected: PromoTrafficLightItem[] = [];
       const bySkuInstallment = new Map<string, PromoTrafficLightItem[]>();
 
-      items.forEach((item) => {
+      items.filter((item) => !hasFutureStart(item.startDate)).forEach((item) => {
         const key = `${item.sku}|${item.installmentLabel}`;
         bySkuInstallment.set(key, [...(bySkuInstallment.get(key) || []), item]);
       });
