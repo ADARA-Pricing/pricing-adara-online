@@ -165,7 +165,7 @@ function isScheduledOpportunity(item: MercadoLibrePromotionOpportunity) {
 function isJoinedOpportunity(item: MercadoLibrePromotionOpportunity) {
   const status = String(item.item_promotion_status || "").toLowerCase();
   if (/started|active/.test(status)) return true;
-  return String(item.offer_id || "").toUpperCase().startsWith("OFFER");
+  return false;
 }
 
 function productKey(product: Product) {
@@ -442,6 +442,14 @@ function samePromotionIdentity(left: PromoComparison, right: PromoComparison) {
   const leftName = normalizePromoIdentity(left.name);
   const rightName = normalizePromoIdentity(right.name);
   return Boolean(leftName && rightName && leftName === rightName);
+}
+
+function samePromotionEconomics(left: PromoComparison, right: PromoComparison) {
+  return (
+    samePrice(left.promoPrice, right.promoPrice) &&
+    samePrice(left.meliAmount, right.meliAmount) &&
+    samePrice(left.sellerAmount, right.sellerAmount)
+  );
 }
 
 function dedupePromoComparisons(items: PromoComparison[]) {
@@ -1033,6 +1041,11 @@ export default function PromocionesMeliPage() {
           !item.promo.scheduled &&
           !item.promo.joined &&
           !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)) &&
+          !calculatedPromos.some((scheduledItem) =>
+            scheduledItem.promo.status === "Para activar" &&
+            scheduledItem.promo.scheduled &&
+            samePromotionEconomics(scheduledItem.promo, item.promo)
+          ) &&
           (Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0),
         );
         const scheduledPromos = calculatedPromos.filter((item) =>
