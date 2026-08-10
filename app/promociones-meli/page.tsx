@@ -1036,8 +1036,7 @@ export default function PromocionesMeliPage() {
           item.promo.status === "Para activar" &&
           item.promo.scheduled &&
           !item.promo.joined &&
-          !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)) &&
-          (Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0),
+          !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)),
         );
         const bestActive = [...activePromos].sort((a, b) => b.margin - a.margin)[0] || null;
         const bestCandidate = [...candidatePromos].sort((a, b) => b.margin - a.margin)[0] || null;
