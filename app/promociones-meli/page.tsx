@@ -2089,7 +2089,10 @@ export default function PromocionesMeliPage() {
                             <div className="promociones-traffic-item" key={item.key}>
                               <div className="promociones-traffic-main">
                                 <strong>{item.installmentLabel}</strong>
-                                <span>{item.promotionName}</span>
+                                <span>
+                                  {item.promotionName}
+                                  {column.key === "yellow" && validity ? ` | ${validity}` : ""}
+                                </span>
                                 {futureStartLabel(item.startDate) && (
                                   <span className="promo-date-badge">{futureStartLabel(item.startDate)}</span>
                                 )}
@@ -2098,7 +2101,7 @@ export default function PromocionesMeliPage() {
                                 </span>
                                 <span>
                                   ML {item.meliAmount ? moneyWithCents(item.meliAmount) : percent(item.meliRate)} | Vendedor {item.sellerAmount ? moneyWithCents(item.sellerAmount) : percent(item.sellerRate)}
-                                  {validity ? ` | ${validity}` : ""}
+                                  {column.key !== "yellow" && validity ? ` | ${validity}` : ""}
                                 </span>
                                 {item.activeMargin !== null && item.activeMargin !== undefined && item.activeMargin >= item.margin && (
                                   <span className="promo-active-winner-badge">
