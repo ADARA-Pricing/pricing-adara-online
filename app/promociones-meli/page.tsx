@@ -157,15 +157,13 @@ function isActivePromotionStatus(value?: string | null) {
 }
 
 function isScheduledOpportunity(item: MercadoLibrePromotionOpportunity) {
-  const status = `${item.promotion_status || ""} ${item.item_promotion_status || ""}`.toLowerCase();
-  if (/program|scheduled|pending/.test(status)) return true;
   const start = item.start_date ? new Date(item.start_date).getTime() : 0;
   return Boolean(start && Number.isFinite(start) && start > Date.now());
 }
 
 function isJoinedOpportunity(item: MercadoLibrePromotionOpportunity) {
   const status = String(item.item_promotion_status || "").toLowerCase();
-  if (/started|active|pending|program/.test(status)) return true;
+  if (/started|active/.test(status)) return true;
   return String(item.offer_id || "").toUpperCase().startsWith("OFFER");
 }
 
