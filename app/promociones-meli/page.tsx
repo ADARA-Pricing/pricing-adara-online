@@ -116,6 +116,7 @@ type PromoTrafficLights = {
   red: PromoTrafficLightGroup[];
   yellow: PromoTrafficLightGroup[];
   scheduled: PromoTrafficLightGroup[];
+  scheduledShared: PromoTrafficLightGroup[];
 };
 
 function formatDateTime(value?: string | null) {
@@ -919,6 +920,7 @@ export default function PromocionesMeliPage() {
     const red: PromoTrafficLightItem[] = [];
     const yellow: PromoTrafficLightItem[] = [];
     const scheduled: PromoTrafficLightItem[] = [];
+    const scheduledShared: PromoTrafficLightItem[] = [];
     const bestActiveBySkuInstallment = new Map<string, number>();
 
     function addItem(bucket: PromoTrafficLightItem[], item: PromoTrafficLightItem) {
@@ -1042,6 +1044,9 @@ export default function PromocionesMeliPage() {
         const bestActive = [...activePromos].sort((a, b) => b.margin - a.margin)[0] || null;
         const bestCandidate = [...candidatePromos].sort((a, b) => b.margin - a.margin)[0] || null;
         const bestScheduled = [...scheduledPromos].sort((a, b) => b.margin - a.margin)[0] || null;
+        const bestSharedScheduled = [...scheduledPromos]
+          .filter((item) => Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0)
+          .sort((a, b) => b.margin - a.margin)[0] || null;
 
         activePromos.forEach(({ promo, margin, netProfit }) => {
           const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice);
@@ -1097,6 +1102,30 @@ export default function PromocionesMeliPage() {
             endDate: promo.endDate,
             margin: bestScheduled.margin,
             netProfit: bestScheduled.netProfit,
+            status: promo.status,
+          });
+        }
+
+        if (isActivePublication && bestSharedScheduled && bestSharedScheduled.margin > yellowThreshold) {
+          const promo = bestSharedScheduled.promo;
+          addItem(scheduledShared, {
+            key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}-scheduled-shared`,
+            sku: group.product.sku,
+            title: publication.meli_title || group.product.name,
+            itemId: publication.meli_item_id || "-",
+            installmentCount: row.installmentCount,
+            installmentLabel: row.installmentCount === 1 ? "1 pago" : row.installmentLabel,
+            promotionName: promo.name,
+            promoPrice: promo.promoPrice,
+            effectiveSalePrice: promo.effectiveSalePrice,
+            meliAmount: promo.meliAmount,
+            meliRate: promo.meliRate,
+            sellerAmount: promo.sellerAmount,
+            sellerRate: promo.sellerRate,
+            startDate: promo.startDate,
+            endDate: promo.endDate,
+            margin: bestSharedScheduled.margin,
+            netProfit: bestSharedScheduled.netProfit,
             status: promo.status,
           });
         }
@@ -1169,6 +1198,7 @@ export default function PromocionesMeliPage() {
         return bestActiveMargin === undefined || item.margin > bestActiveMargin;
       })),
       scheduled: groupBySku(scheduled),
+      scheduledShared: groupBySku(scheduledShared),
     };
   }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold]);
 
@@ -1663,14 +1693,7 @@ export default function PromocionesMeliPage() {
               key: "scheduled",
               title: "Futuras",
               subtitle: onlySharedFuture ? "Promos futuras con aporte compartido" : "Promos futuras con fecha de inicio",
-              groups: onlySharedFuture
-                ? trafficLights.scheduled
-                  .map((group) => ({
-                    ...group,
-                    items: group.items.filter((item) => Number(item.meliAmount || 0) > 0 || Number(item.meliRate || 0) > 0),
-                  }))
-                  .filter((group) => group.items.length > 0)
-                : trafficLights.scheduled,
+              groups: onlySharedFuture ? trafficLights.scheduledShared : trafficLights.scheduled,
             },
           ].map((column) => (
             <div className={`promociones-traffic-column ${column.key}`} key={column.key}>
