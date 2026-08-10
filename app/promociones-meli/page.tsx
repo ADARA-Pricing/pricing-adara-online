@@ -544,6 +544,7 @@ export default function PromocionesMeliPage() {
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [onlyMeliContribution, setOnlyMeliContribution] = useState(false);
+  const [onlySharedFuture, setOnlySharedFuture] = useState(false);
   const [redThreshold, setRedThreshold] = useState(5);
   const [yellowThreshold, setYellowThreshold] = useState(5);
   const [syncingMeli, setSyncingMeli] = useState(false);
@@ -1661,8 +1662,15 @@ export default function PromocionesMeliPage() {
             {
               key: "scheduled",
               title: "Futuras",
-              subtitle: "Promos futuras con fecha de inicio",
-              groups: trafficLights.scheduled,
+              subtitle: onlySharedFuture ? "Promos futuras con aporte compartido" : "Promos futuras con fecha de inicio",
+              groups: onlySharedFuture
+                ? trafficLights.scheduled
+                  .map((group) => ({
+                    ...group,
+                    items: group.items.filter((item) => Number(item.meliAmount || 0) > 0 || Number(item.meliRate || 0) > 0),
+                  }))
+                  .filter((group) => group.items.length > 0)
+                : trafficLights.scheduled,
             },
           ].map((column) => (
             <div className={`promociones-traffic-column ${column.key}`} key={column.key}>
@@ -1670,6 +1678,15 @@ export default function PromocionesMeliPage() {
                 <div>
                   <h3>{column.title}</h3>
                   <p>{column.subtitle}</p>
+                  {column.key === "scheduled" && (
+                    <button
+                      className={`promociones-column-filter ${onlySharedFuture ? "active" : ""}`}
+                      type="button"
+                      onClick={() => setOnlySharedFuture((current) => !current)}
+                    >
+                      {onlySharedFuture ? "Ver todas" : "Solo compartidas"}
+                    </button>
+                  )}
                 </div>
                 <strong>{column.groups.reduce((total, group) => total + group.items.length, 0)}</strong>
               </div>
