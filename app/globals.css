@@ -6266,6 +6266,11 @@ textarea:focus-visible {
   border-bottom: 1px solid #edf2f7;
 }
 
+.promociones-traffic-item-active {
+  background: #f0fdf4;
+  border-left: 3px solid #22c55e;
+}
+
 .promociones-traffic-item:last-child {
   border-bottom: 0;
 }
@@ -6294,6 +6299,19 @@ textarea:focus-visible {
   display: inline-flex;
   color: #c2410c;
   margin-top: 4px;
+}
+
+.promo-active-status {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534 !important;
+  font-size: 10px !important;
+  font-weight: 900;
+  margin: 0 0 0 6px !important;
+  padding: 1px 6px;
+  vertical-align: middle;
 }
 
 .promociones-traffic-main .promo-active-winner-badge {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
@@ -108,6 +108,21 @@ type PromoTrafficLightItem = {
   status: "Vigente" | "Para activar";
   activeMargin?: number | null;
   activePromoPrice?: number | null;
+  activeComparison?: {
+    key: string;
+    promotionName: string;
+    promoPrice: number | null;
+    effectiveSalePrice: number | null;
+    originalPrice?: number | null;
+    meliAmount: number;
+    meliRate: number;
+    sellerAmount: number;
+    sellerRate: number;
+    startDate?: string | null;
+    endDate?: string | null;
+    margin: number;
+    netProfit: number;
+  } | null;
 };
 
 type PromoTrafficLightGroup = {
@@ -1323,6 +1338,21 @@ export default function PromocionesMeliPage() {
                 status: promo.status,
                 activeMargin: bestActive?.margin ?? null,
                 activePromoPrice: bestActive?.promo.promoPrice ?? null,
+                activeComparison: bestActive ? {
+                  key: `${group.product.sku}-${publication.meli_item_id}-${bestActive.promo.key}-${promo.key}-active-comparison`,
+                  promotionName: bestActive.promo.name,
+                  promoPrice: bestActive.promo.promoPrice,
+                  effectiveSalePrice: bestActive.promo.effectiveSalePrice,
+                  originalPrice: bestActive.promo.originalPrice,
+                  meliAmount: bestActive.promo.meliAmount,
+                  meliRate: bestActive.promo.meliRate,
+                  sellerAmount: bestActive.promo.sellerAmount,
+                  sellerRate: bestActive.promo.sellerRate,
+                  startDate: bestActive.promo.startDate,
+                  endDate: bestActive.promo.endDate,
+                  margin: bestActive.margin,
+                  netProfit: bestActive.netProfit,
+                } : null,
               });
             });
         }
@@ -2086,7 +2116,37 @@ export default function PromocionesMeliPage() {
                           {group.items.map((item) => {
                             const validity = promoValidityLabel(item.startDate, item.endDate);
                             return (
-                            <div className="promociones-traffic-item" key={item.key}>
+                            <Fragment key={item.key}>
+                            {column.key === "yellow" && item.activeComparison && (
+                              <div className="promociones-traffic-item promociones-traffic-item-active" key={item.activeComparison.key}>
+                                <div className="promociones-traffic-main">
+                                  <strong>{item.installmentLabel}</strong>
+                                  <span>
+                                    {item.activeComparison.promotionName}
+                                    <span className="promo-active-status">Vigente</span>
+                                    {promoValidityLabel(item.activeComparison.startDate, item.activeComparison.endDate) ? ` | ${promoValidityLabel(item.activeComparison.startDate, item.activeComparison.endDate)}` : ""}
+                                  </span>
+                                  <span>
+                                    Comprador {item.activeComparison.promoPrice ? moneyWithCents(item.activeComparison.promoPrice) : "-"} | Venta {item.activeComparison.effectiveSalePrice ? moneyWithCents(item.activeComparison.effectiveSalePrice) : "-"}
+                                  </span>
+                                  <span>
+                                    ML {item.activeComparison.meliAmount ? moneyWithCents(item.activeComparison.meliAmount) : percent(item.activeComparison.meliRate)} | Vendedor {item.activeComparison.sellerAmount ? moneyWithCents(item.activeComparison.sellerAmount) : percent(item.activeComparison.sellerRate)}
+                                  </span>
+                                </div>
+                                <div className="promociones-traffic-meta">
+                                  <button
+                                    type="button"
+                                    className={copiedItemId === item.itemId ? "copied" : ""}
+                                    title="Copiar ID de publicacion"
+                                    onClick={() => copyItemId(item.itemId)}
+                                  >
+                                    {copiedItemId === item.itemId ? "Copiado" : item.itemId}
+                                  </button>
+                                  <strong className={item.activeComparison.margin < redThreshold ? "negative" : "positive"}>{percent(item.activeComparison.margin)}</strong>
+                                </div>
+                              </div>
+                            )}
+                            <div className="promociones-traffic-item">
                               <div className="promociones-traffic-main">
                                 <strong>{item.installmentLabel}</strong>
                                 <span>
@@ -2103,12 +2163,6 @@ export default function PromocionesMeliPage() {
                                   ML {item.meliAmount ? moneyWithCents(item.meliAmount) : percent(item.meliRate)} | Vendedor {item.sellerAmount ? moneyWithCents(item.sellerAmount) : percent(item.sellerRate)}
                                   {column.key !== "yellow" && validity ? ` | ${validity}` : ""}
                                 </span>
-                                {item.activeMargin !== null && item.activeMargin !== undefined && item.activeMargin >= item.margin && (
-                                  <span className="promo-active-winner-badge">
-                                    Vigente gana margen {percent(item.activeMargin)}
-                                    {item.activePromoPrice ? ` | Comprador vigente ${moneyWithCents(item.activePromoPrice)}` : ""}
-                                  </span>
-                                )}
                               </div>
                               <div className="promociones-traffic-meta">
                                 <button
@@ -2122,6 +2176,7 @@ export default function PromocionesMeliPage() {
                                 <strong className={item.margin < redThreshold ? "negative" : "positive"}>{percent(item.margin)}</strong>
                               </div>
                             </div>
+                            </Fragment>
                             );
                           })}
                         </div>
