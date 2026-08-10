@@ -158,6 +158,10 @@ function isActivePromotionStatus(value?: string | null) {
 }
 
 function isScheduledOpportunity(item: MercadoLibrePromotionOpportunity) {
+  const status = `${item.promotion_status || ""} ${item.item_promotion_status || ""}`.toLowerCase();
+  const offerId = String(item.offer_id || "").toUpperCase();
+  if (/program|scheduled/.test(status)) return true;
+  if (/pending/.test(status) && offerId.startsWith("OFFER")) return true;
   const start = item.start_date ? new Date(item.start_date).getTime() : 0;
   return Boolean(start && Number.isFinite(start) && start > Date.now());
 }
