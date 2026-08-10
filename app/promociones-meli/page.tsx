@@ -78,6 +78,7 @@ type PromoComparison = {
   sellerRate: number;
   rentability: number | null;
   netProfit: number | null;
+  scheduled?: boolean;
 };
 
 type PromoTrafficLightItem = {
@@ -88,6 +89,8 @@ type PromoTrafficLightItem = {
   installmentCount: number;
   installmentLabel: string;
   promotionName: string;
+  promoPrice: number | null;
+  effectiveSalePrice: number | null;
   margin: number;
   netProfit: number;
   status: "Vigente" | "Para activar";
@@ -133,6 +136,13 @@ function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) {
 
 function isActivePromotionStatus(value?: string | null) {
   return /started|active|vigente/.test(String(value || "").toLowerCase());
+}
+
+function isScheduledOpportunity(item: MercadoLibrePromotionOpportunity) {
+  const status = `${item.promotion_status || ""} ${item.item_promotion_status || ""}`.toLowerCase();
+  if (/program|scheduled|pending/.test(status)) return true;
+  const start = item.start_date ? new Date(item.start_date).getTime() : 0;
+  return Boolean(start && Number.isFinite(start) && start > Date.now());
 }
 
 function productKey(product: Product) {
@@ -872,6 +882,7 @@ export default function PromocionesMeliPage() {
               sellerRate: Number(opportunity.seller_percentage || 0),
               rentability: null,
               netProfit: null,
+              scheduled: isScheduledOpportunity(opportunity),
             };
           }),
         ];
@@ -892,6 +903,7 @@ export default function PromocionesMeliPage() {
         const activePromos = calculatedPromos.filter((item) => item.promo.status === "Vigente");
         const candidatePromos = calculatedPromos.filter((item) =>
           item.promo.status === "Para activar" &&
+          !item.promo.scheduled &&
           (Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0),
         );
         const bestActive = [...activePromos].sort((a, b) => b.margin - a.margin)[0] || null;
@@ -915,6 +927,8 @@ export default function PromocionesMeliPage() {
             installmentCount: row.installmentCount,
             installmentLabel: normalizedInstallmentLabel,
             promotionName: promo.name,
+            promoPrice: promo.promoPrice,
+            effectiveSalePrice: promo.effectiveSalePrice,
             margin,
             netProfit,
             status: promo.status,
@@ -937,6 +951,8 @@ export default function PromocionesMeliPage() {
             installmentCount: row.installmentCount,
             installmentLabel: row.installmentCount === 1 ? "1 pago" : row.installmentLabel,
             promotionName: promo.name,
+            promoPrice: promo.promoPrice,
+            effectiveSalePrice: promo.effectiveSalePrice,
             margin: bestCandidate.margin,
             netProfit: bestCandidate.netProfit,
             status: promo.status,
@@ -1452,7 +1468,15 @@ export default function PromocionesMeliPage() {
                     <div className="promociones-traffic-items">
                       {group.items.map((item) => (
                         <div className="promociones-traffic-item" key={item.key}>
-                          <strong>{item.installmentLabel}</strong>
+                          <div className="promociones-traffic-main">
+                            <strong>{item.installmentLabel}</strong>
+                            <span>{item.promotionName}</span>
+                            {column.key === "yellow" && (
+                              <span>
+                                Promo {item.promoPrice ? moneyWithCents(item.promoPrice) : "-"} | Venta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
+                              </span>
+                            )}
+                          </div>
                           <div className="promociones-traffic-meta">
                             <button
                               type="button"
