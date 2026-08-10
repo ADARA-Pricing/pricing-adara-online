@@ -5976,6 +5976,57 @@ textarea:focus-visible {
   max-width: 760px;
 }
 
+.promociones-alerts-modal {
+  max-width: 560px;
+}
+
+.promociones-alerts-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.promociones-alerts-panel label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 10px;
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.promociones-alerts-panel input {
+  width: 100%;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 8px 9px;
+  color: #0f172a;
+  font: inherit;
+  font-weight: 800;
+  text-align: right;
+}
+
+.promociones-alerts-note {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.promociones-alerts-note strong {
+  color: #0f172a;
+}
+
+.promociones-alerts-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .promociones-missing-list {
   display: grid;
   gap: 10px;
@@ -6472,6 +6523,10 @@ textarea:focus-visible {
 
   .promociones-missing-items {
     justify-content: flex-start;
+  }
+
+  .promociones-alerts-panel label {
+    grid-template-columns: 1fr;
   }
 
   .promociones-workbar-actions {

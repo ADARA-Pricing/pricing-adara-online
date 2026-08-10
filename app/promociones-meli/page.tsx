@@ -73,6 +73,7 @@ type PromoComparison = {
   name: string;
   promoPrice: number | null;
   effectiveSalePrice: number | null;
+  originalPrice?: number | null;
   meliAmount: number;
   meliRate: number;
   sellerAmount: number;
@@ -95,6 +96,7 @@ type PromoTrafficLightItem = {
   promotionName: string;
   promoPrice: number | null;
   effectiveSalePrice: number | null;
+  originalPrice?: number | null;
   meliAmount: number;
   meliRate: number;
   sellerAmount: number;
@@ -478,6 +480,15 @@ function promoBuyerPrice(item: PromoComparison) {
   return Number(item.promoPrice || item.effectiveSalePrice || 0);
 }
 
+function meliContributionRateForItem(item: PromoTrafficLightItem) {
+  const directRate = Number(item.meliRate || 0);
+  if (directRate > 0) return directRate;
+  const meliAmount = Number(item.meliAmount || 0);
+  const originalPrice = Number(item.originalPrice || 0);
+  if (meliAmount > 0 && originalPrice > 0) return (meliAmount / originalPrice) * 100;
+  return 0;
+}
+
 function dedupePromoComparisons(items: PromoComparison[]) {
   const map = new Map<string, PromoComparison>();
   items.forEach((item) => {
@@ -592,7 +603,8 @@ export default function PromocionesMeliPage() {
   const [expandedTrafficSkus, setExpandedTrafficSkus] = useState<Record<string, boolean>>({});
   const [desktopAlertsEnabled, setDesktopAlertsEnabled] = useState(false);
   const [desktopAlertPermission, setDesktopAlertPermission] = useState<NotificationPermission>("default");
-  const [desktopAlertMeliAmount, setDesktopAlertMeliAmount] = useState(10000);
+  const [desktopAlertsModalOpen, setDesktopAlertsModalOpen] = useState(false);
+  const [desktopAlertMeliRate, setDesktopAlertMeliRate] = useState(3);
   const [desktopAlertInterval, setDesktopAlertInterval] = useState(30);
   const [missingPromoModalOpen, setMissingPromoModalOpen] = useState(false);
   const [redThreshold, setRedThreshold] = useState(5);
@@ -781,7 +793,7 @@ export default function PromocionesMeliPage() {
     checkSession();
     if ("Notification" in window) setDesktopAlertPermission(Notification.permission);
     setDesktopAlertsEnabled(window.localStorage.getItem("promos-meli-alerts-enabled") === "true");
-    setDesktopAlertMeliAmount(Number(window.localStorage.getItem("promos-meli-alerts-meli-amount") || 10000) || 10000);
+    setDesktopAlertMeliRate(Number(window.localStorage.getItem("promos-meli-alerts-meli-rate") || 3) || 3);
     setDesktopAlertInterval(Number(window.localStorage.getItem("promos-meli-alerts-interval") || 30) || 30);
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1078,6 +1090,7 @@ export default function PromocionesMeliPage() {
                 status: "Vigente" as const,
                 name: publication.meli_promo_name || publication.meli_promo_status || "Promo vigente",
                 promoPrice: Number(publication.meli_promo_price || 0),
+                originalPrice: Number(publication.meli_original_price || publication.meli_price || 0) || null,
                 effectiveSalePrice: effectiveSalePrice(
                   publication.meli_promo_price,
                   publication.meli_promo_meli_amount,
@@ -1116,6 +1129,7 @@ export default function PromocionesMeliPage() {
               status: isActiveOpportunity(opportunity) ? "Vigente" as const : "Para activar" as const,
               name: opportunity.promotion_name || opportunity.promotion_id,
               promoPrice: Number(opportunity.promo_price || 0) || null,
+              originalPrice: Number(opportunity.original_price || publication.meli_price || 0) || null,
               effectiveSalePrice: promoEffectiveSalePrice,
               meliAmount: Number(opportunity.meli_amount || 0),
               meliRate: Number(opportunity.meli_percentage || 0),
@@ -1190,6 +1204,7 @@ export default function PromocionesMeliPage() {
             promotionName: promo.name,
             promoPrice: promo.promoPrice,
             effectiveSalePrice: promo.effectiveSalePrice,
+            originalPrice: promo.originalPrice,
             meliAmount: promo.meliAmount,
             meliRate: promo.meliRate,
             sellerAmount: promo.sellerAmount,
@@ -1216,6 +1231,7 @@ export default function PromocionesMeliPage() {
             promotionName: promo.name,
             promoPrice: promo.promoPrice,
             effectiveSalePrice: promo.effectiveSalePrice,
+            originalPrice: promo.originalPrice,
             meliAmount: promo.meliAmount,
             meliRate: promo.meliRate,
             sellerAmount: promo.sellerAmount,
@@ -1240,6 +1256,7 @@ export default function PromocionesMeliPage() {
             promotionName: promo.name,
             promoPrice: promo.promoPrice,
             effectiveSalePrice: promo.effectiveSalePrice,
+            originalPrice: promo.originalPrice,
             meliAmount: promo.meliAmount,
             meliRate: promo.meliRate,
             sellerAmount: promo.sellerAmount,
@@ -1273,6 +1290,7 @@ export default function PromocionesMeliPage() {
                 promotionName: promo.name,
                 promoPrice: promo.promoPrice,
                 effectiveSalePrice: promo.effectiveSalePrice,
+                originalPrice: promo.originalPrice,
                 meliAmount: promo.meliAmount,
                 meliRate: promo.meliRate,
                 sellerAmount: promo.sellerAmount,
@@ -1386,8 +1404,8 @@ export default function PromocionesMeliPage() {
     return [
       ...flatten(trafficLights.yellow),
       ...flatten(trafficLights.scheduledShared),
-    ].filter((item) => Number(item.meliAmount || 0) >= desktopAlertMeliAmount || isIdealDesktopAlertItem(item));
-  }, [trafficLights, desktopAlertMeliAmount]);
+    ].filter((item) => meliContributionRateForItem(item) >= desktopAlertMeliRate || isIdealDesktopAlertItem(item));
+  }, [trafficLights, desktopAlertMeliRate]);
 
   const missingPromoGroups = useMemo<MissingPromoGroup[]>(() => {
     const result = new Map<string, MissingPromoGroup>();
@@ -1433,8 +1451,8 @@ export default function PromocionesMeliPage() {
   }, [groups]);
 
   useEffect(() => {
-    window.localStorage.setItem("promos-meli-alerts-meli-amount", String(desktopAlertMeliAmount));
-  }, [desktopAlertMeliAmount]);
+    window.localStorage.setItem("promos-meli-alerts-meli-rate", String(desktopAlertMeliRate));
+  }, [desktopAlertMeliRate]);
 
   useEffect(() => {
     window.localStorage.setItem("promos-meli-alerts-interval", String(desktopAlertInterval));
@@ -1457,7 +1475,7 @@ export default function PromocionesMeliPage() {
       ? ` | Comprador ${moneyWithCents(best.activePromoPrice || 0)} -> ${moneyWithCents(best.promoPrice || 0)} | Margen ${percent(best.activeMargin || 0)} -> ${percent(best.margin)}`
       : "";
     const notification = new Notification(`${isIdealDesktopAlertItem(best) ? "Promo ideal Meli" : "Promo Meli con aporte alto"}${extraCount}`, {
-      body: `${best.sku} ${best.installmentLabel}: ${best.promotionName} | ML ${moneyWithCents(best.meliAmount)} | Comprador ${best.promoPrice ? moneyWithCents(best.promoPrice) : "-"}${idealText}`,
+      body: `${best.sku} ${best.installmentLabel}: ${best.promotionName} | ML ${percent(meliContributionRateForItem(best))} (${moneyWithCents(best.meliAmount)}) | Comprador ${best.promoPrice ? moneyWithCents(best.promoPrice) : "-"}${idealText}`,
       tag: `promos-meli-${desktopAlertKey(best)}`,
     });
     notification.onclick = () => window.focus();
@@ -1963,35 +1981,12 @@ export default function PromocionesMeliPage() {
               />
               <span>%</span>
             </label>
-            <label title="Avisa cuando aparece una promo nueva con aporte de MercadoLibre igual o superior a este valor.">
-              Alerta ML
-              <input
-                type="number"
-                min="0"
-                step="1000"
-                value={desktopAlertMeliAmount}
-                onChange={(event) => setDesktopAlertMeliAmount(Number(event.target.value) || 0)}
-              />
-              <span>$</span>
-            </label>
-            <label title="Cada cuantos minutos sincronizar automaticamente mientras esta pantalla este abierta.">
-              Cada
-              <input
-                type="number"
-                min="5"
-                max="240"
-                step="5"
-                value={desktopAlertInterval}
-                onChange={(event) => setDesktopAlertInterval(Number(event.target.value) || 5)}
-              />
-              <span>min</span>
-            </label>
             <button
               className={`button ghost ${desktopAlertsEnabled ? "active" : ""}`}
               type="button"
-              onClick={desktopAlertsEnabled ? disableDesktopAlerts : enableDesktopAlerts}
+              onClick={() => setDesktopAlertsModalOpen(true)}
             >
-              {desktopAlertsEnabled ? "Alertas ON" : "Alertas escritorio"}
+              {desktopAlertsEnabled ? "Alertas ON" : "Alertas"}
             </button>
             <button className="button ghost" type="button" onClick={() => setMissingPromoModalOpen(true)}>
               Sin promo {missingPromoGroups.reduce((total, group) => total + group.items.length, 0)}
@@ -2113,6 +2108,60 @@ export default function PromocionesMeliPage() {
           ))}
         </div>
       </section>
+
+      {desktopAlertsModalOpen && (
+        <div className="modal-backdrop promociones-picker-backdrop" onMouseDown={() => setDesktopAlertsModalOpen(false)}>
+          <div className="promociones-picker-modal promociones-alerts-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h2>Alertas</h2>
+                <p>Notificaciones de escritorio mientras esta pantalla este abierta.</p>
+              </div>
+              <button className="button ghost" type="button" onClick={() => setDesktopAlertsModalOpen(false)}>Cerrar</button>
+            </div>
+            <div className="promociones-alerts-panel">
+              <label>
+                Aporte ML minimo
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={desktopAlertMeliRate}
+                  onChange={(event) => setDesktopAlertMeliRate(Number(event.target.value) || 0)}
+                />
+                <span>%</span>
+              </label>
+              <label>
+                Sincronizar cada
+                <input
+                  type="number"
+                  min="5"
+                  max="240"
+                  step="5"
+                  value={desktopAlertInterval}
+                  onChange={(event) => setDesktopAlertInterval(Number(event.target.value) || 5)}
+                />
+                <span>min</span>
+              </label>
+              <div className="promociones-alerts-note">
+                <strong>{desktopAlertsEnabled ? "Activas" : "Inactivas"}</strong>
+                <span>Tambien avisa cuando una promo mejora margen y baja comprador contra la vigente.</span>
+                <span>Permiso navegador: {desktopAlertPermission}</span>
+              </div>
+              <div className="promociones-alerts-actions">
+                <button
+                  className={`button ${desktopAlertsEnabled ? "ghost" : ""}`}
+                  type="button"
+                  onClick={desktopAlertsEnabled ? disableDesktopAlerts : enableDesktopAlerts}
+                >
+                  {desktopAlertsEnabled ? "Desactivar alertas" : "Activar alertas"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {missingPromoModalOpen && (
         <div className="modal-backdrop promociones-picker-backdrop" onMouseDown={() => setMissingPromoModalOpen(false)}>
