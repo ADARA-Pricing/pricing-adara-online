@@ -1439,7 +1439,7 @@ export async function POST(request: NextRequest) {
       const now = new Date().toISOString();
       const currentRowsByItem = new Map<string, { id: string; product_id: string; meli_item_id: string }[]>();
       const updateRows: any[] = [];
-      let skippedWithoutRow = 0;
+      const insertRows: any[] = [];
 
       for (const ids of chunk([...matchedItemIds], 100)) {
         const { data: currentRows, error: currentRowsError } = await supabase
@@ -1464,13 +1464,7 @@ export async function POST(request: NextRequest) {
           if (!product?.id) continue;
 
           const current = (currentRowsByItem.get(item.id) || []).find((row) => row.product_id === product.id);
-          if (!current) {
-            skippedWithoutRow += 1;
-            continue;
-          }
-
-          updateRows.push({
-            id: current.id,
+          const promoPayload = {
             meli_price: Number(item.price ?? 0) || null,
             meli_original_price: promotionResult.originalPrice,
             meli_promo_price: promotionResult.promoPrice,
@@ -1488,6 +1482,40 @@ export async function POST(request: NextRequest) {
             meli_stock: Number(item.available_quantity ?? 0),
             meli_last_sync_at: now,
             updated_at: now,
+          };
+
+          if (!current) {
+            insertRows.push({
+              product_id: product.id,
+              sku: product.sku,
+              fixed_fee_amount: 0,
+              shipping_cost_amount: 0,
+              free_shipping: Boolean(item.shipping?.free_shipping ?? true),
+              shipping_method: item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
+              notes: `Sincronizado desde MercadoLibre ${item.id} · promos`,
+              active: true,
+              meli_item_id: item.id,
+              meli_thumbnail: itemThumbnail(item),
+              meli_title: item.title || null,
+              meli_permalink: item.permalink || null,
+              meli_currency_id: item.currency_id || null,
+              meli_listing_type_id: item.listing_type_id || null,
+              meli_sale_terms: item.sale_terms || [],
+              meli_tags: item.tags || [],
+              meli_free_shipping: Boolean(item.shipping?.free_shipping),
+              meli_shipping_mode: item.shipping?.mode || null,
+              meli_logistic_type: item.shipping?.logistic_type || null,
+              meli_catalog_listing: Boolean(item.catalog_listing),
+              meli_catalog_product_id: item.catalog_product_id || null,
+              meli_domain_id: item.domain_id || null,
+              ...promoPayload,
+            });
+            continue;
+          }
+
+          updateRows.push({
+            id: current.id,
+            ...promoPayload,
           });
         }
       }
@@ -1501,6 +1529,13 @@ export async function POST(request: NextRequest) {
         if (updateError) throw new Error(updateError.message);
       });
 
+      for (const batch of chunk(insertRows, 100)) {
+        const { error: insertError } = await supabase
+          .from("mercadolibre_shipping_costs")
+          .insert(batch);
+        if (insertError) throw new Error(insertError.message);
+      }
+
       return NextResponse.json({
         ok: true,
         scope: "promotions",
@@ -1509,7 +1544,7 @@ export async function POST(request: NextRequest) {
         totals_by_status: totalsByStatus,
         matched: matchedItemsForFetch.length,
         updated: updateRows.length,
-        skipped_without_row: skippedWithoutRow,
+        inserted: insertRows.length,
         target_skus: targetSkus,
         targeted_sync: targetSkus.length > 0,
         sku_searches: skuSearches,
