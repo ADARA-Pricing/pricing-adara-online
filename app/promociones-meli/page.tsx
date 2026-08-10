@@ -1046,7 +1046,7 @@ export default function PromocionesMeliPage() {
           if (margin < redThreshold) addItem(red, item);
         });
 
-        if (isActivePublication && bestScheduled) {
+        if (isActivePublication && bestScheduled && bestScheduled.margin > yellowThreshold) {
           const promo = bestScheduled.promo;
           addItem(scheduled, {
             key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}-scheduled`,
