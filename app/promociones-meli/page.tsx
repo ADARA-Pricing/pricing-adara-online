@@ -363,8 +363,8 @@ function rawPromotionOpportunities(publication: MercadoLibreShippingCost): Merca
         Number(promo.suggested_discounted_price || 0) ||
         null;
       const promoPrice =
-        Number(promo.total_price_for_boosted_offer || 0) ||
         basePromoPrice ||
+        Number(promo.total_price_for_boosted_offer || 0) ||
         null;
       const meliPercentage = Number(promo.meli_percentage || 0);
       const sellerPercentage = Number(promo.seller_percentage || 0);
@@ -1063,6 +1063,7 @@ export default function PromocionesMeliPage() {
           !item.promo.scheduled &&
           !item.promo.joined &&
           !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)) &&
+          !activePromos.some((activeItem) => samePromotionEconomics(activeItem.promo, item.promo)) &&
           !calculatedPromos.some((scheduledItem) =>
             scheduledItem.promo.status === "Para activar" &&
             scheduledItem.promo.scheduled &&

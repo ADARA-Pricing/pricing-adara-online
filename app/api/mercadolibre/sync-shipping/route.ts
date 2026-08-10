@@ -546,13 +546,13 @@ function isExpiredPromotion(value: any) {
 }
 
 const PROMO_PRICE_KEYS = [
-  "total_price_for_boosted_offer",
   "promo_price",
   "promotion_price",
   "discounted_price",
   "final_price",
   "deal_price",
   "price",
+  "total_price_for_boosted_offer",
 ];
 
 const ORIGINAL_PRICE_KEYS = ["original_price", "regular_price", "standard_price", "list_price", "base_price"];
@@ -1078,7 +1078,7 @@ function promotionDate(value?: string | null) {
 }
 
 function promotionPrice(item: MeliPromotionItem) {
-  return Number(item.total_price_for_boosted_offer || item.price || item.suggested_discounted_price || 0) || null;
+  return Number(item.price || item.suggested_discounted_price || item.total_price_for_boosted_offer || 0) || null;
 }
 
 function promotionBasePrice(item: MeliPromotionItem) {
