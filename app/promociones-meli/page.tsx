@@ -104,6 +104,8 @@ type PromoTrafficLightItem = {
   margin: number;
   netProfit: number;
   status: "Vigente" | "Para activar";
+  activeMargin?: number | null;
+  activeEffectiveSalePrice?: number | null;
 };
 
 type PromoTrafficLightGroup = {
@@ -942,14 +944,9 @@ export default function PromocionesMeliPage() {
     const yellow: PromoTrafficLightItem[] = [];
     const scheduled: PromoTrafficLightItem[] = [];
     const scheduledShared: PromoTrafficLightItem[] = [];
-    const bestActiveBySkuInstallment = new Map<string, number>();
 
     function addItem(bucket: PromoTrafficLightItem[], item: PromoTrafficLightItem) {
       bucket.push(item);
-    }
-
-    function skuInstallmentKey(sku: string, installmentLabel: string) {
-      return `${sku}|${installmentLabel}`;
     }
 
     groups.forEach((group) => {
@@ -1075,7 +1072,6 @@ export default function PromocionesMeliPage() {
           !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)),
         );
         const bestActive = [...activePromos].sort((a, b) => b.margin - a.margin)[0] || null;
-        const bestCandidate = [...candidatePromos].sort((a, b) => b.margin - a.margin)[0] || null;
         const bestScheduled = [...scheduledPromos].sort((a, b) => b.margin - a.margin)[0] || null;
         const bestSharedScheduled = [...scheduledPromos]
           .filter((item) => Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0)
@@ -1085,11 +1081,6 @@ export default function PromocionesMeliPage() {
           const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice);
           if (!rentability) return;
           const normalizedInstallmentLabel = row.installmentCount === 1 ? "1 pago" : row.installmentLabel;
-          const activeKey = skuInstallmentKey(group.product.sku, normalizedInstallmentLabel);
-          const currentBestActive = bestActiveBySkuInstallment.get(activeKey);
-          if (currentBestActive === undefined || margin > currentBestActive) {
-            bestActiveBySkuInstallment.set(activeKey, margin);
-          }
 
           const item = {
             key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}`,
@@ -1163,38 +1154,45 @@ export default function PromocionesMeliPage() {
           });
         }
 
-        if (
-          isActivePublication &&
-          bestCandidate &&
-          bestCandidate.margin > yellowThreshold &&
-          (!bestActive || bestCandidate.margin > bestActive.margin)
-        ) {
-          const promo = bestCandidate.promo;
-          addItem(yellow, {
-            key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}`,
-            sku: group.product.sku,
-            title: publication.meli_title || group.product.name,
-            itemId: publication.meli_item_id || "-",
-            installmentCount: row.installmentCount,
-            installmentLabel: row.installmentCount === 1 ? "1 pago" : row.installmentLabel,
-            promotionName: promo.name,
-            promoPrice: promo.promoPrice,
-            effectiveSalePrice: promo.effectiveSalePrice,
-            meliAmount: promo.meliAmount,
-            meliRate: promo.meliRate,
-            sellerAmount: promo.sellerAmount,
-            sellerRate: promo.sellerRate,
-            startDate: promo.startDate,
-            endDate: promo.endDate,
-            margin: bestCandidate.margin,
-            netProfit: bestCandidate.netProfit,
-            status: promo.status,
-          });
+        if (isActivePublication) {
+          candidatePromos
+            .filter((candidate) => candidate.margin > yellowThreshold)
+            .sort((a, b) => {
+              const priceA = Number(a.promo.effectiveSalePrice || a.promo.promoPrice || 0);
+              const priceB = Number(b.promo.effectiveSalePrice || b.promo.promoPrice || 0);
+              if (priceA && priceB && priceA !== priceB) return priceA - priceB;
+              return b.margin - a.margin;
+            })
+            .forEach((candidate) => {
+              const promo = candidate.promo;
+              addItem(yellow, {
+                key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}`,
+                sku: group.product.sku,
+                title: publication.meli_title || group.product.name,
+                itemId: publication.meli_item_id || "-",
+                installmentCount: row.installmentCount,
+                installmentLabel: row.installmentCount === 1 ? "1 pago" : row.installmentLabel,
+                promotionName: promo.name,
+                promoPrice: promo.promoPrice,
+                effectiveSalePrice: promo.effectiveSalePrice,
+                meliAmount: promo.meliAmount,
+                meliRate: promo.meliRate,
+                sellerAmount: promo.sellerAmount,
+                sellerRate: promo.sellerRate,
+                startDate: promo.startDate,
+                endDate: promo.endDate,
+                margin: candidate.margin,
+                netProfit: candidate.netProfit,
+                status: promo.status,
+                activeMargin: bestActive?.margin ?? null,
+                activeEffectiveSalePrice: bestActive?.promo.effectiveSalePrice ?? null,
+              });
+            });
         }
       });
     });
 
-    function groupBySku(items: PromoTrafficLightItem[]) {
+    function groupBySku(items: PromoTrafficLightItem[], keepSameInstallmentItems = false) {
       const grouped = new Map<string, PromoTrafficLightGroup>();
       items.forEach((item) => {
         const current = grouped.get(item.sku) || {
@@ -1202,6 +1200,11 @@ export default function PromocionesMeliPage() {
           productName: products.find((product) => product.sku === item.sku)?.name || item.title,
           items: [],
         };
+        if (keepSameInstallmentItems) {
+          current.items.push(item);
+          grouped.set(item.sku, current);
+          return;
+        }
         const existingIndex = current.items.findIndex((currentItem) =>
           currentItem.installmentLabel === item.installmentLabel,
         );
@@ -1226,10 +1229,7 @@ export default function PromocionesMeliPage() {
 
     return {
       red: groupBySku(red),
-      yellow: groupBySku(yellow.filter((item) => {
-        const bestActiveMargin = bestActiveBySkuInstallment.get(skuInstallmentKey(item.sku, item.installmentLabel));
-        return bestActiveMargin === undefined || item.margin > bestActiveMargin;
-      })),
+      yellow: groupBySku(yellow, true),
       scheduled: groupBySku(scheduled),
       scheduledShared: groupBySku(scheduledShared),
     };
@@ -1771,6 +1771,12 @@ export default function PromocionesMeliPage() {
                             <span>
                               ML {item.meliAmount ? moneyWithCents(item.meliAmount) : percent(item.meliRate)} | Vendedor {item.sellerAmount ? moneyWithCents(item.sellerAmount) : percent(item.sellerRate)}
                             </span>
+                            {item.activeMargin !== null && item.activeMargin !== undefined && item.activeMargin >= item.margin && (
+                              <span className="promo-active-winner-badge">
+                                Vigente gana margen {percent(item.activeMargin)}
+                                {item.activeEffectiveSalePrice ? ` | Venta vigente ${moneyWithCents(item.activeEffectiveSalePrice)}` : ""}
+                              </span>
+                            )}
                           </div>
                           <div className="promociones-traffic-meta">
                             <button

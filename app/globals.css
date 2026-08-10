@@ -6121,6 +6121,18 @@ textarea:focus-visible {
   margin-top: 4px;
 }
 
+.promociones-traffic-main .promo-active-winner-badge {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font-weight: 700;
+  margin-top: 5px;
+}
+
 .promociones-traffic-meta {
   display: flex;
   gap: 10px;
