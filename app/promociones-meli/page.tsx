@@ -1192,7 +1192,7 @@ export default function PromocionesMeliPage() {
       });
     });
 
-    function groupBySku(items: PromoTrafficLightItem[], keepSameInstallmentItems = false) {
+    function groupBySku(items: PromoTrafficLightItem[]) {
       const grouped = new Map<string, PromoTrafficLightGroup>();
       items.forEach((item) => {
         const current = grouped.get(item.sku) || {
@@ -1200,11 +1200,6 @@ export default function PromocionesMeliPage() {
           productName: products.find((product) => product.sku === item.sku)?.name || item.title,
           items: [],
         };
-        if (keepSameInstallmentItems) {
-          current.items.push(item);
-          grouped.set(item.sku, current);
-          return;
-        }
         const existingIndex = current.items.findIndex((currentItem) =>
           currentItem.installmentLabel === item.installmentLabel,
         );
@@ -1227,9 +1222,62 @@ export default function PromocionesMeliPage() {
         .sort((a, b) => a.sku.localeCompare(b.sku, "es"));
     }
 
+    function buyerPrice(item: PromoTrafficLightItem) {
+      return Number(item.promoPrice || item.effectiveSalePrice || 0);
+    }
+
+    function groupYellowBySku(items: PromoTrafficLightItem[]) {
+      const selected: PromoTrafficLightItem[] = [];
+      const bySkuInstallment = new Map<string, PromoTrafficLightItem[]>();
+
+      items.forEach((item) => {
+        const key = `${item.sku}|${item.installmentLabel}`;
+        bySkuInstallment.set(key, [...(bySkuInstallment.get(key) || []), item]);
+      });
+
+      bySkuInstallment.forEach((sameInstallmentItems) => {
+        const marginWinner = [...sameInstallmentItems].sort((a, b) => b.margin - a.margin)[0];
+        if (!marginWinner) return;
+        selected.push(marginWinner);
+
+        const winnerBuyerPrice = buyerPrice(marginWinner);
+        const lowerBuyerPrice = sameInstallmentItems
+          .filter((item) => item.key !== marginWinner.key && buyerPrice(item) > 0 && buyerPrice(item) < winnerBuyerPrice)
+          .sort((a, b) => {
+            const priceDiff = buyerPrice(a) - buyerPrice(b);
+            if (priceDiff !== 0) return priceDiff;
+            return b.margin - a.margin;
+          })[0];
+
+        if (lowerBuyerPrice) selected.push(lowerBuyerPrice);
+      });
+
+      const grouped = new Map<string, PromoTrafficLightGroup>();
+      selected.forEach((item) => {
+        const current = grouped.get(item.sku) || {
+          sku: item.sku,
+          productName: products.find((product) => product.sku === item.sku)?.name || item.title,
+          items: [],
+        };
+        current.items.push(item);
+        grouped.set(item.sku, current);
+      });
+
+      return [...grouped.values()]
+        .map((group) => ({
+          ...group,
+          items: [...group.items].sort((a, b) => {
+            if (a.installmentCount !== b.installmentCount) return a.installmentCount - b.installmentCount;
+            if (a.installmentLabel === b.installmentLabel) return b.margin - a.margin;
+            return b.margin - a.margin;
+          }),
+        }))
+        .sort((a, b) => a.sku.localeCompare(b.sku, "es"));
+    }
+
     return {
       red: groupBySku(red),
-      yellow: groupBySku(yellow, true),
+      yellow: groupYellowBySku(yellow),
       scheduled: groupBySku(scheduled),
       scheduledShared: groupBySku(scheduledShared),
     };
