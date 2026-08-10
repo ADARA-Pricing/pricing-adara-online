@@ -642,6 +642,8 @@ export default function PromocionesMeliPage() {
     try {
       const response = await fetch("/api/mercadolibre/sync-shipping", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "promotions" }),
         signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
@@ -1659,7 +1661,7 @@ export default function PromocionesMeliPage() {
             },
             {
               key: "scheduled",
-              title: "Programadas",
+              title: "Futuras",
               subtitle: "Promos futuras con fecha de inicio",
               groups: trafficLights.scheduled,
             },

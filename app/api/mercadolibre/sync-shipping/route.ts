@@ -897,13 +897,19 @@ function sameMoney(left?: number | null, right?: number | null) {
   return Math.abs(Number(left) - Number(right)) < 1;
 }
 
-async function getPromotionSummaryForItem(item: MeliItem, account: any) {
+async function getPromotionSummaryForItem(
+  item: MeliItem,
+  account: any,
+  options: { lightweight?: boolean } = {},
+) {
   const salePriceSummary = summarizeItemSalePrice(item);
-  const endpoints = [
-    `/items/${item.id}/prices`,
-    `/seller-promotions/items/${item.id}?app_version=v2`,
-    `/seller-promotions/items/${item.id}/offers?app_version=v2`,
-  ];
+  const endpoints = options.lightweight
+    ? [`/seller-promotions/items/${item.id}?app_version=v2`]
+    : [
+      `/items/${item.id}/prices`,
+      `/seller-promotions/items/${item.id}?app_version=v2`,
+      `/seller-promotions/items/${item.id}/offers?app_version=v2`,
+    ];
   const rawResponses = await Promise.all(endpoints.map(async (endpoint) => {
     try {
       const data = await meliFetch(endpoint, account);
@@ -1233,12 +1239,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const targetSkus = normalizeSkuList(body?.skus);
+    const promotionsOnly = body?.scope === "promotions";
     const account = await getConnectedMeliAccount();
     if (!account) {
       return NextResponse.json({ error: "Primero conectá MercadoLibre." }, { status: 400 });
     }
 
-    const listingTypeNames = await getListingTypeNames(account);
+    const listingTypeNames = promotionsOnly ? new Map<string, string>() : await getListingTypeNames(account);
 
     let productsQuery = supabase.from("products").select("*");
     productsQuery = targetSkus.length
@@ -1249,10 +1256,12 @@ export async function POST(request: NextRequest) {
 
     if (productsError) throw new Error(productsError.message);
 
-    const { data: currentInstallmentFees, error: installmentFeesError } = await supabase
-      .from("mercadolibre_installment_fees")
-      .select("code, installment_count, financing_fee_rate")
-      .eq("channel_type", "mercadolibre");
+    const { data: currentInstallmentFees, error: installmentFeesError } = promotionsOnly
+      ? { data: [], error: null }
+      : await supabase
+        .from("mercadolibre_installment_fees")
+        .select("code, installment_count, financing_fee_rate")
+        .eq("channel_type", "mercadolibre");
 
     if (installmentFeesError) throw new Error(installmentFeesError.message);
 
@@ -1325,9 +1334,11 @@ export async function POST(request: NextRequest) {
       const cached = promotionsByItem.get(item.id);
       if (cached) return cached;
 
-      const detailedItem = detailedItemsByItem.get(item.id) || await getDetailedItemForPricing(item, account);
+      const detailedItem = promotionsOnly
+        ? item
+        : detailedItemsByItem.get(item.id) || await getDetailedItemForPricing(item, account);
       detailedItemsByItem.set(item.id, detailedItem);
-      const result = await getPromotionSummaryForItem(detailedItem, account);
+      const result = await getPromotionSummaryForItem(detailedItem, account, { lightweight: promotionsOnly });
       promotionsByItem.set(item.id, result);
       return result;
     }
@@ -1367,7 +1378,13 @@ export async function POST(request: NextRequest) {
     );
     const matchedItemIds = new Set(matchedItemsForFetch.map((item) => item.id));
 
-    await mapWithConcurrency(matchedItemsForFetch, 4, async (item) => {
+    await mapWithConcurrency(matchedItemsForFetch, promotionsOnly ? 8 : 4, async (item) => {
+      if (promotionsOnly) {
+        detailedItemsByItem.set(item.id, item);
+        await promotionForMatchedItem(item);
+        return;
+      }
+
       const detailedItem = await getDetailedItemForPricing(item, account);
       detailedItemsByItem.set(item.id, detailedItem);
       await Promise.all([
@@ -1416,6 +1433,89 @@ export async function POST(request: NextRequest) {
     for (const batch of chunk(promotionOpportunityRows, 200)) {
       const { error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch);
       if (promoSaveError) throw new Error(promoSaveError.message);
+    }
+
+    if (promotionsOnly) {
+      const now = new Date().toISOString();
+      const currentRowsByItem = new Map<string, { id: string; product_id: string; meli_item_id: string }[]>();
+      const updateRows: any[] = [];
+      let skippedWithoutRow = 0;
+
+      for (const ids of chunk([...matchedItemIds], 100)) {
+        const { data: currentRows, error: currentRowsError } = await supabase
+          .from("mercadolibre_shipping_costs")
+          .select("id, product_id, meli_item_id")
+          .in("meli_item_id", ids);
+
+        if (currentRowsError) throw new Error(currentRowsError.message);
+
+        (currentRows || []).forEach((row: { id: string; product_id: string; meli_item_id: string }) => {
+          const rows = currentRowsByItem.get(row.meli_item_id) || [];
+          rows.push(row);
+          currentRowsByItem.set(row.meli_item_id, rows);
+        });
+      }
+
+      for (const item of matchedItemsForFetch) {
+        const promotionResult = await promotionForMatchedItem(item);
+
+        for (const sku of getItemSkus(item)) {
+          const product = productsBySku.get(sku);
+          if (!product?.id) continue;
+
+          const current = (currentRowsByItem.get(item.id) || []).find((row) => row.product_id === product.id);
+          if (!current) {
+            skippedWithoutRow += 1;
+            continue;
+          }
+
+          updateRows.push({
+            id: current.id,
+            meli_price: Number(item.price ?? 0) || null,
+            meli_original_price: promotionResult.originalPrice,
+            meli_promo_price: promotionResult.promoPrice,
+            meli_promo_name: promotionResult.name,
+            meli_promo_status: promotionResult.status,
+            meli_promo_discount_amount: promotionResult.discountAmount,
+            meli_promo_discount_rate: promotionResult.discountRate,
+            meli_promo_seller_amount: promotionResult.sellerAmount,
+            meli_promo_seller_rate: promotionResult.sellerRate,
+            meli_promo_meli_amount: promotionResult.meliAmount,
+            meli_promo_meli_rate: promotionResult.meliRate,
+            meli_promo_receive_amount: promotionResult.receiveAmount,
+            meli_promotions: promotionResult.raw,
+            meli_status: item.status || null,
+            meli_stock: Number(item.available_quantity ?? 0),
+            meli_last_sync_at: now,
+            updated_at: now,
+          });
+        }
+      }
+
+      for (const batch of chunk(updateRows, 100)) {
+        const { error: updateError } = await supabase
+          .from("mercadolibre_shipping_costs")
+          .upsert(batch, { onConflict: "id" });
+        if (updateError) throw new Error(updateError.message);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        scope: "promotions",
+        total_items: items.length,
+        statuses_synced: statusesToSync,
+        totals_by_status: totalsByStatus,
+        matched: matchedItemsForFetch.length,
+        updated: updateRows.length,
+        skipped_without_row: skippedWithoutRow,
+        target_skus: targetSkus,
+        targeted_sync: targetSkus.length > 0,
+        sku_searches: skuSearches,
+        duration_ms: Date.now() - startedAt,
+        promotion_queries: promotionsByItem.size,
+        seller_promotions: sellerPromotions.length,
+        promotion_opportunities: promotionOpportunityRows.length,
+      });
     }
 
     const logs: any[] = [];
