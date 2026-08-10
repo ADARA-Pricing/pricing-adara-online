@@ -661,7 +661,6 @@ export default function PromocionesMeliPage() {
     const [
       productsResponse,
       publicationsResponse,
-      opportunitiesResponse,
       installmentsResponse,
       categoryFeesResponse,
       taxesResponse,
@@ -679,10 +678,6 @@ export default function PromocionesMeliPage() {
         .eq("meli_status", "active")
         .order("updated_at", { ascending: false }),
       supabase
-        .from("mercadolibre_promotion_opportunities")
-        .select("*")
-        .order("meli_amount", { ascending: false }),
-      supabase
         .from("mercadolibre_installment_fees")
         .select("*")
         .eq("active", true)
@@ -695,6 +690,24 @@ export default function PromocionesMeliPage() {
       supabase.from("product_channel_margins").select("*"),
     ]);
 
+    const allOpportunities: MercadoLibrePromotionOpportunity[] = [];
+    let opportunitiesError: string | null = null;
+    for (let from = 0; ; from += 1000) {
+      const to = from + 999;
+      const response = await supabase
+        .from("mercadolibre_promotion_opportunities")
+        .select("*")
+        .order("meli_amount", { ascending: false })
+        .range(from, to);
+      if (response.error) {
+        opportunitiesError = response.error.message;
+        break;
+      }
+      const rows = (response.data || []) as MercadoLibrePromotionOpportunity[];
+      allOpportunities.push(...rows);
+      if (rows.length < 1000) break;
+    }
+
     setLoading(false);
 
     if (productsResponse.error) setError(productsResponse.error.message);
@@ -703,8 +716,8 @@ export default function PromocionesMeliPage() {
     if (publicationsResponse.error) setError(publicationsResponse.error.message);
     else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
 
-    if (opportunitiesResponse.error) setError(opportunitiesResponse.error.message);
-    else setOpportunities((opportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]);
+    if (opportunitiesError) setError(opportunitiesError);
+    else setOpportunities(allOpportunities);
 
     if (installmentsResponse.error) setError(installmentsResponse.error.message);
     else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
@@ -2123,7 +2136,6 @@ export default function PromocionesMeliPage() {
                                   <strong>{item.installmentLabel}</strong>
                                   <span>
                                     {item.activeComparison.promotionName}
-                                    <span className="promo-active-status">Vigente</span>
                                     {promoValidityLabel(item.activeComparison.startDate, item.activeComparison.endDate) ? ` | ${promoValidityLabel(item.activeComparison.startDate, item.activeComparison.endDate)}` : ""}
                                   </span>
                                   <span>
@@ -2134,6 +2146,7 @@ export default function PromocionesMeliPage() {
                                   </span>
                                 </div>
                                 <div className="promociones-traffic-meta">
+                                  <span className="promo-active-status">Vigente</span>
                                   <button
                                     type="button"
                                     className={copiedItemId === item.itemId ? "copied" : ""}

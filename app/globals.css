@@ -6271,6 +6271,12 @@ textarea:focus-visible {
   border-left: 3px solid #22c55e;
 }
 
+.promociones-traffic-item-active .promociones-traffic-meta {
+  align-self: start;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .promociones-traffic-item:last-child {
   border-bottom: 0;
 }
