@@ -118,6 +118,7 @@ const mainItems: NavItem[] = [
   { href: "/impuestos", label: "Impuestos", icon: <IconTaxes /> },
   { href: "/precios", label: "Precios", icon: <IconPrices /> },
   { href: "/promociones-meli", label: "Promociones Meli", icon: <IconPromotions /> },
+  { href: "/asesoria-360", label: "Asesoria 360", icon: <IconPromotions /> },
   { href: "/simulador", label: "Simulador", icon: <IconSimulator /> },
 ];
 

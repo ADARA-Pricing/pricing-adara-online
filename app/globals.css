@@ -129,6 +129,173 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 @media (max-width: 900px) { .grid.three { grid-template-columns: 1fr; } }
 @media (max-width: 620px) { .grid.two, .grid.three { grid-template-columns: 1fr; } }
 
+.asesoria360-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.asesoria360-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.asesoria360-products,
+.asesoria360-publications {
+  min-width: 0;
+}
+
+.asesoria360-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.asesoria360-panel-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.asesoria360-panel-head p {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.asesoria360-sku-list,
+.asesoria360-mla-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.asesoria360-sku {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+  color: #0f172a;
+  cursor: pointer;
+  text-align: left;
+}
+
+.asesoria360-sku.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.asesoria360-sku span,
+.asesoria360-mla-card span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asesoria360-sku small,
+.asesoria360-mla-card small {
+  color: #475569;
+  font-size: 12px;
+}
+
+.asesoria360-controls {
+  display: grid;
+  grid-template-columns: 190px 170px;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.asesoria360-percent-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+}
+
+.asesoria360-percent-input span {
+  font-weight: 700;
+  color: #1d4ed8;
+  text-align: center;
+}
+
+.asesoria360-days {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.asesoria360-mla-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px 110px;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+.asesoria360-mla-card > div:first-child,
+.asesoria360-price-stack {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.asesoria360-price-stack {
+  text-align: right;
+  font-size: 13px;
+}
+
+.asesoria360-price-stack strong {
+  color: #047857;
+}
+
+.asesoria360-empty {
+  color: #475569;
+  text-align: center;
+  padding: 20px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.asesoria360-draft {
+  padding: 18px 20px;
+}
+
+@media (max-width: 1100px) {
+  .asesoria360-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .asesoria360-controls,
+  .asesoria360-mla-card,
+  .asesoria360-sku {
+    grid-template-columns: 1fr;
+  }
+
+  .asesoria360-price-stack {
+    text-align: left;
+  }
+}
+
 
 .pricing-modal-card { padding: 20px; }
 .pricing-modal-grid {
