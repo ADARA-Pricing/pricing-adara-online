@@ -547,16 +547,18 @@ export default function DashboardPage() {
                   <div className="dashboard-action-margin">
                     <span>{item.margin === null ? "-" : percent(item.margin)}</span>
                   </div>
-                  <div>
-                    <small>Venta</small>
-                    <strong>{moneyWithCents(item.salePrice)}</strong>
-                  </div>
-                  <div>
-                    <small>Comprador</small>
-                    <strong>{moneyWithCents(item.buyerPrice)}</strong>
+                  <div className="dashboard-action-prices">
+                    <div>
+                      <small>Venta</small>
+                      <strong>{moneyWithCents(item.salePrice)}</strong>
+                    </div>
+                    <div>
+                      <small>Comprador</small>
+                      <strong>{moneyWithCents(item.buyerPrice)}</strong>
+                    </div>
                   </div>
                   {item.kind === "future" && (
-                    <div>
+                    <div className="dashboard-action-date">
                       <small>Desde</small>
                       <strong>{formatDate(item.startDate)}</strong>
                     </div>
