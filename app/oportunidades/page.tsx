@@ -563,7 +563,7 @@ export default function OpportunitiesPage() {
                 </div>
               </div>
 
-              <Link className="button ghost" href={item.href}>Abrir</Link>
+              <Link className="button opportunity-open-button" href={item.href}>Abrir</Link>
             </article>
           ))}
           {!filteredActions.length && <div className="dashboard-empty">No hay oportunidades para los filtros elegidos.</div>}

@@ -419,51 +419,77 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 .opportunity-summary-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .opportunity-summary {
-  border-radius: 8px;
-  padding: 14px;
+  position: relative;
+  min-height: 106px;
+  border-radius: 12px;
+  padding: 18px 18px 16px;
   text-align: left;
-  border-left: 4px solid #94a3b8;
+  border: 1px solid #e6ebf2;
+  border-left: 1px solid #e6ebf2;
   cursor: pointer;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  overflow: hidden;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.opportunity-summary::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: #2563eb;
 }
 
 .opportunity-summary.active {
-  outline: 2px solid #2563eb;
+  border-color: #bfdbfe;
+  background: #f8fbff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.11);
 }
 
-.opportunity-summary.review { border-left-color: #dc2626; }
-.opportunity-summary.activate { border-left-color: #2563eb; }
-.opportunity-summary.future { border-left-color: #f97316; }
-.opportunity-summary.missing_promo { border-left-color: #64748b; }
-.opportunity-summary.data_issue { border-left-color: #eab308; }
+.opportunity-summary.review::before { background: #dc2626; }
+.opportunity-summary.activate::before { background: #2563eb; }
+.opportunity-summary.future::before { background: #f97316; }
+.opportunity-summary.missing_promo::before { background: #64748b; }
+.opportunity-summary.data_issue::before { background: #eab308; }
 
 .opportunity-summary span,
 .opportunity-summary small {
   display: block;
-  color: #475569;
-  font-size: 12px;
+  color: #5b6472;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .opportunity-summary strong {
   display: block;
-  margin: 6px 0 4px;
+  margin: 9px 0 7px;
   color: #0f172a;
-  font-size: 24px;
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.opportunity-summary small {
+  color: #8a94a6;
+  font-weight: 650;
 }
 
 .opportunity-toolbar {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) 190px 180px;
-  gap: 10px;
-  border-radius: 8px;
-  padding: 14px;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 16px;
 }
 
 .opportunity-list-card {
-  border-radius: 8px;
+  border-radius: 12px;
+  padding: 18px;
 }
 
 .opportunity-list-head {
@@ -488,19 +514,26 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 .opportunity-action-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .opportunity-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(430px, 540px) 90px;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e6ebf2;
   border-left: 4px solid #94a3b8;
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 16px;
   background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.opportunity-row:hover {
+  border-color: #d8e0ea;
+  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.06);
 }
 
 .opportunity-row.review { border-left-color: #dc2626; }
@@ -513,7 +546,7 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .opportunity-row-title {
@@ -528,9 +561,11 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 11px;
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
   font-weight: 800;
+  border: 1px solid transparent;
 }
 
 .opportunity-pill {
@@ -538,15 +573,15 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   color: #1d4ed8;
 }
 
-.opportunity-pill.review { background: #fee2e2; color: #b91c1c; }
-.opportunity-pill.future { background: #ffedd5; color: #c2410c; }
-.opportunity-pill.missing_promo { background: #f1f5f9; color: #334155; }
-.opportunity-pill.data_issue { background: #fef9c3; color: #854d0e; }
+.opportunity-pill.review { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+.opportunity-pill.future { background: #fff7ed; color: #d97706; border-color: #fed7aa; }
+.opportunity-pill.missing_promo { background: #f3f4f6; color: #4b5563; border-color: #e5e7eb; }
+.opportunity-pill.data_issue { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
 
-.opportunity-priority.alta { background: #fee2e2; color: #b91c1c; }
-.opportunity-priority.media { background: #ffedd5; color: #c2410c; }
-.opportunity-priority.baja { background: #f1f5f9; color: #334155; }
-.opportunity-date { background: #eef2ff; color: #3730a3; }
+.opportunity-priority.alta { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+.opportunity-priority.media { background: #fff7ed; color: #d97706; border-color: #fed7aa; }
+.opportunity-priority.baja { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+.opportunity-date { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
 
 .opportunity-row-main strong,
 .opportunity-row-main small {
@@ -564,14 +599,14 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 .opportunity-row-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .opportunity-row-metrics > div {
   min-width: 0;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 8px;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 10px 12px;
   background: #f8fafc;
 }
 
@@ -592,11 +627,19 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 .opportunity-row-metrics strong {
   margin-top: 3px;
   color: #0f172a;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 850;
 }
 
 .opportunity-row-metrics strong.success { color: #047857; }
 .opportunity-row-metrics strong.danger { color: #dc2626; }
+
+.opportunity-open-button {
+  min-height: 42px;
+  justify-content: center;
+  border-radius: 12px;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18);
+}
 
 .dashboard-empty {
   color: #475569;
