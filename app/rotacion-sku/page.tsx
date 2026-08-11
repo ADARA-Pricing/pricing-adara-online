@@ -74,6 +74,22 @@ function productImage(publications: MercadoLibreShippingCost[]) {
   return publications.find((publication) => Boolean(publication.meli_thumbnail))?.meli_thumbnail || null;
 }
 
+function latestSyncedPublications(publications: MercadoLibreShippingCost[]) {
+  const synced = publications
+    .map((publication) => ({
+      publication,
+      time: new Date(publication.meli_last_sync_at || publication.updated_at || 0).getTime(),
+    }))
+    .filter((item) => Number.isFinite(item.time) && item.time > 0);
+  if (!synced.length) return publications;
+
+  const latest = Math.max(...synced.map((item) => item.time));
+  const syncWindowMs = 10 * 60 * 1000;
+  return synced
+    .filter((item) => latest - item.time <= syncWindowMs)
+    .map((item) => item.publication);
+}
+
 function productInitial(name: string, sku: string) {
   return (name || sku || "P").slice(0, 2).toUpperCase();
 }
@@ -219,8 +235,9 @@ export default function RotacionSkuPage() {
       const skuSales = salesBySku.get(sku) || [];
       const skuPublications = pubsBySku.get(sku) || [];
       const skuImagePublications = imagePubsBySku.get(sku) || skuPublications;
-      const activePublications = skuPublications.filter((item) => item.meli_status === "active");
-      const stockSourcePublications = activePublications.length ? activePublications : skuImagePublications;
+      const latestSkuPublications = latestSyncedPublications(skuImagePublications);
+      const activePublications = latestSkuPublications.filter((item) => item.meli_status === "active");
+      const stockSourcePublications = latestSkuPublications.length ? latestSkuPublications : skuImagePublications;
       const stockFromMl = stockSourcePublications.length ? Math.max(...stockSourcePublications.map((item) => numberValue(item.meli_stock))) : 0;
       const stock = stockSourcePublications.length ? stockFromMl : numberValue(product.stock);
 
@@ -243,7 +260,7 @@ export default function RotacionSkuPage() {
         category: product.category,
         thumbnail: productImage(skuImagePublications),
         stock,
-        activePublications: skuPublications.length,
+        activePublications: activePublications.length,
         units7,
         units30,
         units60,
@@ -252,8 +269,8 @@ export default function RotacionSkuPage() {
         avgPrice30: units30 > 0 ? revenue30 / units30 : null,
         stockDays,
         lastSale,
-        catalogCount: skuPublications.filter((item) => item.meli_catalog_listing).length,
-        itemIds: [...new Set(skuPublications.map((item) => item.meli_item_id).filter(Boolean) as string[])],
+        catalogCount: latestSkuPublications.filter((item) => item.meli_catalog_listing).length,
+        itemIds: [...new Set(latestSkuPublications.map((item) => item.meli_item_id).filter(Boolean) as string[])],
       };
     });
   }, [products, publications, imagePublications, sales]);
