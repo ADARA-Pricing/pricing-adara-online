@@ -31,6 +31,15 @@ type RotationRow = {
   itemIds: string[];
 };
 
+function RotationThumbnail({ src, label }: { src: string | null; label: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="rotation-thumb">
+      {src && !failed ? <img src={src} alt="" onError={() => setFailed(true)} /> : label}
+    </div>
+  );
+}
+
 function numberValue(value: unknown) {
   return Number(value || 0);
 }
@@ -74,6 +83,7 @@ export default function RotacionSkuPage() {
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
+  const [imagePublications, setImagePublications] = useState<MercadoLibreShippingCost[]>([]);
   const [sales, setSales] = useState<MercadoLibreOrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -121,9 +131,10 @@ export default function RotacionSkuPage() {
     const since = new Date();
     since.setDate(since.getDate() - 65);
 
-    const [productsResponse, publicationsResponse, salesResponse] = await Promise.all([
+    const [productsResponse, publicationsResponse, imagePublicationsResponse, salesResponse] = await Promise.all([
       supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).eq("meli_status", "active"),
+      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
       fetchSalesSince(since.toISOString()),
     ]);
 
@@ -132,6 +143,8 @@ export default function RotacionSkuPage() {
     else setProducts((productsResponse.data || []) as Product[]);
     if (publicationsResponse.error) setError(publicationsResponse.error.message);
     else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
+    if (imagePublicationsResponse.error) setError(imagePublicationsResponse.error.message);
+    else setImagePublications((imagePublicationsResponse.data || []) as MercadoLibreShippingCost[]);
     if (salesResponse.error) {
       setError(
         salesResponse.error.message.includes("mercadolibre_order_items")
@@ -185,11 +198,19 @@ export default function RotacionSkuPage() {
       if (!sku) return;
       pubsBySku.set(sku, [...(pubsBySku.get(sku) || []), publication]);
     });
+    const imagePubsBySku = new Map<string, MercadoLibreShippingCost[]>();
+    imagePublications.forEach((publication) => {
+      const product = productById.get(publication.product_id);
+      const sku = (publication.sku || product?.sku || "").toUpperCase();
+      if (!sku) return;
+      imagePubsBySku.set(sku, [...(imagePubsBySku.get(sku) || []), publication]);
+    });
 
     return products.map((product) => {
       const sku = product.sku.toUpperCase();
       const skuSales = salesBySku.get(sku) || [];
       const skuPublications = pubsBySku.get(sku) || [];
+      const skuImagePublications = imagePubsBySku.get(sku) || skuPublications;
       const activePublications = skuPublications.filter((item) => item.meli_status === "active");
       const stockSourcePublications = activePublications.length ? activePublications : skuPublications;
       const stockFromMl = stockSourcePublications.length ? Math.max(...stockSourcePublications.map((item) => numberValue(item.meli_stock))) : 0;
@@ -212,7 +233,7 @@ export default function RotacionSkuPage() {
         sku,
         productName: product.name,
         category: product.category,
-        thumbnail: productImage(skuPublications),
+        thumbnail: productImage(skuImagePublications),
         stock,
         activePublications: skuPublications.length,
         units7,
@@ -227,7 +248,7 @@ export default function RotacionSkuPage() {
         itemIds: [...new Set(skuPublications.map((item) => item.meli_item_id).filter(Boolean) as string[])],
       };
     });
-  }, [products, publications, sales]);
+  }, [products, publications, imagePublications, sales]);
 
   const filteredRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -289,7 +310,7 @@ export default function RotacionSkuPage() {
 
   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
     return (
-      <button className={`rotation-sort-button ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
         {children}
         <SortIcon column={column} />
       </button>
@@ -444,9 +465,7 @@ export default function RotacionSkuPage() {
                   <tr key={row.sku}>
                     <td>
                       <div className="rotation-product-cell">
-                        <div className="rotation-thumb">
-                          {row.thumbnail ? <img src={row.thumbnail} alt="" /> : productInitial(row.productName, row.sku)}
-                        </div>
+                        <RotationThumbnail src={row.thumbnail} label={productInitial(row.productName, row.sku)} />
                         <div>
                           <strong>{row.productName}</strong>
                           <span>{row.sku}{row.category ? ` · ${row.category}` : ""}</span>
@@ -659,20 +678,23 @@ export default function RotacionSkuPage() {
           font-size: 12px;
           margin-top: 3px;
         }
-        .rotation-sort-button {
-          appearance: none;
-          -webkit-appearance: none;
+        .rotation-sort-trigger {
+          all: unset;
+          appearance: none !important;
+          -webkit-appearance: none !important;
           display: inline-flex;
           align-items: center;
-          gap: 5px;
-          min-height: auto;
+          gap: 4px;
+          width: auto;
+          height: auto !important;
+          min-height: 0 !important;
           border: 0 !important;
-          border-radius: 0;
+          border-radius: 0 !important;
           background: transparent !important;
           box-shadow: none !important;
           color: inherit;
           cursor: pointer;
-          padding: 0;
+          padding: 2px 0 !important;
           font: inherit;
           font-size: inherit;
           font-weight: inherit;
@@ -680,17 +702,25 @@ export default function RotacionSkuPage() {
           text-align: left;
           white-space: nowrap;
         }
-        .rotation-sort-button:hover {
+        :global(.rotation-page .rotation-sort-trigger) {
+          border: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          min-height: 0 !important;
+          height: auto !important;
+          padding: 2px 0 !important;
+        }
+        .rotation-sort-trigger:hover {
           color: #2563eb;
         }
-        .rotation-sort-button.active {
+        .rotation-sort-trigger.active {
           color: #1d4ed8;
         }
-        .rotation-sort-button svg {
-          width: 14px;
-          height: 14px;
+        .rotation-sort-trigger svg {
+          width: 13px;
+          height: 13px;
           flex-shrink: 0;
-          stroke-width: 2;
+          stroke-width: 1.8;
         }
         .rotation-product-sort {
           display: flex;
