@@ -114,6 +114,16 @@ function uniqueShippingRows(rows: MercadoLibreShippingCost[]) {
   return [...map.values()];
 }
 
+function formatTechnicalLabel(value?: string | null) {
+  if (!value) return "-";
+  return value
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/^\w/, (letter) => letter.toUpperCase());
+}
+
 function normalizeHeader(value: unknown) {
   return String(value || "")
     .trim()
@@ -1352,6 +1362,7 @@ export default function ProductsPage() {
               const bestPrice = bestMeliPrice(shippings);
               const shippingCostRange = moneyRange(shippings.map((item) => item.shipping_cost_amount));
               const fixedFeeRange = moneyRange(shippings.map((item) => item.fixed_fee_amount));
+              const productNotes = product.description || shippings[0]?.notes || "-";
               const detailId = `product-detail-${String(product.id || product.sku).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
               const toggleProductRow = () => setExpandedSku(expanded ? null : product.sku);
               const handleProductRowClick = (event: MouseEvent<HTMLDivElement>) => {
@@ -1432,7 +1443,7 @@ export default function ProductsPage() {
                     <div className="product-expanded-panel" id={detailId}>
                       <div className="product-detail-grid">
                         <div className="product-detail-section">
-                          <h3>Producto</h3>
+                          <h3>Información del producto</h3>
                           <h4>Dimensiones</h4>
                           <p>{dimensions(product)}</p>
                           <h4>Peso</h4>
@@ -1455,7 +1466,7 @@ export default function ProductsPage() {
                         </div>
                         <div className="product-detail-section product-detail-notes">
                           <h3>Notas</h3>
-                          <p>{product.description || shippings[0]?.notes || "-"}</p>
+                          <p title={productNotes}>{productNotes}</p>
                         </div>
                       </div>
 
@@ -1464,7 +1475,7 @@ export default function ProductsPage() {
                           <div className="product-publications-header">
                             <div>
                               <h3>Publicaciones MercadoLibre</h3>
-                              <p>{publicationCount} publicaciones vinculadas</p>
+                              <p>{product.name} · {publicationCount} publicaciones vinculadas · Stock compartido {sharedMlStock}</p>
                             </div>
                           </div>
                           <div className="table-wrap product-publications-table">
@@ -1487,17 +1498,17 @@ export default function ProductsPage() {
                                 return (
                                   <tr key={shipping.id || `${product.sku}-${shipping.meli_item_id}`}>
                                     <td>
-                                      <strong>{shipping.meli_title || product.name}</strong>
+                                      <strong className="product-publication-title" title={shipping.meli_title || product.name}>{shipping.meli_title || product.name}</strong>
                                       <br />
-                                      <span className="small">{shipping.meli_item_id || "-"} · {shipping.meli_logistic_type || shipping.shipping_method || "-"}</span>
+                                      <span className="small">{shipping.meli_item_id || "-"} · {formatTechnicalLabel(shipping.meli_logistic_type || shipping.shipping_method)}</span>
                                     </td>
                                     <td><span className={`badge meli-status-${shipping.meli_status || "none"}`}>{meliStatusLabel(shipping.meli_status)}</span></td>
-                                    <td><strong>{shipping.meli_price ? money(shipping.meli_price) : "-"}</strong></td>
-                                    <td>{money(Number(shipping.shipping_cost_amount || 0))}</td>
-                                    <td>{money(Number(shipping.fixed_fee_amount || 0))}</td>
+                                    <td className="numeric"><strong>{shipping.meli_price ? money(shipping.meli_price) : "-"}</strong></td>
+                                    <td className="numeric">{money(Number(shipping.shipping_cost_amount || 0))}</td>
+                                    <td className="numeric">{money(Number(shipping.fixed_fee_amount || 0))}</td>
                                     <td><span className="badge">{installmentLabel(shipping, shippings)}</span></td>
-                                    <td>{shipping.meli_stock ?? "-"}</td>
-                                    <td>{formatDateTime(shipping.meli_last_sync_at || shipping.updated_at)}</td>
+                                    <td className="numeric">{shipping.meli_stock ?? "-"}</td>
+                                    <td className="numeric">{formatDateTime(shipping.meli_last_sync_at || shipping.updated_at)}</td>
                                     <td>{shipping.meli_permalink ? <a className="item-action product-publication-open" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir <ChevronRight aria-hidden="true" /></a> : null}</td>
                                   </tr>
                                 );

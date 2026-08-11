@@ -8898,7 +8898,7 @@ textarea:focus,
 
 .product-row-card.expanded {
   border-color: #bfdbfe;
-  box-shadow: var(--ui-shadow-xs);
+  box-shadow: inset 3px 0 0 rgba(37, 99, 235, 0.18);
   background: #f8fbff;
 }
 
@@ -9005,20 +9005,20 @@ textarea:focus,
 }
 
 .product-expanded-panel {
-  padding: 12px 13px 13px;
+  padding: 10px 13px 13px;
   border-top: 1px solid #dbeafe;
   background: #f8fbff;
 }
 
 .product-detail-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, max-content));
-  gap: 18px 34px;
-  justify-content: start;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 0.85fr) minmax(260px, 1.35fr);
+  gap: 12px 24px;
+  justify-content: stretch;
   align-items: start;
   border-radius: 10px;
   border: 1px solid #e2e8f0;
-  padding: 13px 14px;
+  padding: 12px 13px;
   background: #ffffff;
 }
 
@@ -9029,14 +9029,14 @@ textarea:focus,
 
 .product-detail-section h3,
 .product-publications-header h3 {
-  margin: 0 0 9px;
+  margin: 0 0 7px;
   color: #0f172a;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.2;
 }
 
 .product-detail-section h4 {
-  margin: 10px 0 3px;
+  margin: 8px 0 2px;
   color: #475569;
   font-size: 11px;
   font-weight: 750;
@@ -9044,10 +9044,10 @@ textarea:focus,
 }
 
 .product-detail-section p {
-  margin: 0 0 7px;
+  margin: 0 0 6px;
   color: #334155;
   font-size: 12px;
-  line-height: 1.42;
+  line-height: 1.35;
 }
 
 .product-detail-ml p strong {
@@ -9088,7 +9088,7 @@ textarea:focus,
   border-radius: 9px;
   background: #f8fafc;
   color: #64748b;
-  padding: 9px 10px;
+  padding: 8px 10px;
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -9096,18 +9096,23 @@ textarea:focus,
 
 .product-publications-section {
   margin-top: 12px;
+  margin-left: 8px;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  background: #ffffff;
-  overflow: hidden;
+  background: #f8fbff;
+  overflow: visible;
 }
 
 .product-publications-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 11px 12px 9px;
+  padding: 10px 12px 8px;
   border-bottom: 1px solid #e5edf7;
+  border-radius: 10px 10px 0 0;
   background: #ffffff;
 }
 
@@ -9115,10 +9120,13 @@ textarea:focus,
   margin: 0;
   color: #64748b;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .product-publications-table {
   margin-top: 0;
+  border-radius: 0 0 10px 10px;
+  background: #ffffff;
 }
 
 .product-publications-table table {
@@ -9144,13 +9152,23 @@ textarea:focus,
   vertical-align: middle;
 }
 
+.product-publications-table td {
+  background: #ffffff;
+}
+
 .product-publications-table tbody tr:hover td {
   background: #f8fbff;
 }
 
-.product-publications-table td:first-child strong {
+.product-publication-title {
+  display: -webkit-box;
+  max-width: 620px;
+  overflow: hidden;
   color: #0f172a;
   font-weight: 750;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .product-publications-table td:first-child .small {
@@ -9158,10 +9176,12 @@ textarea:focus,
   font-size: 12px;
 }
 
-.product-publications-table td:nth-child(3),
-.product-publications-table td:nth-child(4),
-.product-publications-table td:nth-child(5),
-.product-publications-table td:nth-child(7) {
+.product-publications-table td.numeric,
+.product-publications-table th:nth-child(3),
+.product-publications-table th:nth-child(4),
+.product-publications-table th:nth-child(5),
+.product-publications-table th:nth-child(7),
+.product-publications-table th:nth-child(8) {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -9171,9 +9191,16 @@ textarea:focus,
   height: 29px;
   padding: 0 9px;
   border-radius: 8px;
+  border-color: transparent;
+  background: transparent;
   font-size: 12px;
   text-decoration: none;
   white-space: nowrap;
+}
+
+.product-publication-open.item-action:hover {
+  border-color: #dbe4f0;
+  background: #f5f9ff;
 }
 
 .badge.meli-status-active {
@@ -9222,6 +9249,10 @@ textarea:focus,
 @media (max-width: 1100px) {
   .product-row-main {
     grid-template-columns: 22px 50px minmax(0, 1fr) 40px;
+  }
+
+  .product-detail-grid {
+    grid-template-columns: 1fr;
   }
 }
 
