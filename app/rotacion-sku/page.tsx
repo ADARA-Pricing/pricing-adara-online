@@ -65,6 +65,7 @@ export default function RotacionSkuPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncInfo, setSyncInfo] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("units30");
   const [onlyWithSales, setOnlyWithSales] = useState(false);
@@ -121,10 +122,11 @@ export default function RotacionSkuPage() {
       const response = await fetch("/api/mercadolibre/sync-sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 60 }),
+        body: JSON.stringify({ days: 60, chunkDays: 7 }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudieron sincronizar ventas.");
+      setSyncInfo(`Ventas ML: ${data.saved || 0} items guardados, ${data.scanned || 0} ordenes revisadas en ${data.windows || 1} ventanas.`);
       await loadData();
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "No se pudieron sincronizar ventas.");
@@ -212,6 +214,19 @@ export default function RotacionSkuPage() {
     return { units30, revenue30, activeSkus, lowStock };
   }, [rows]);
 
+  const salesCoverage = useMemo(() => {
+    const dates = sales
+      .map((sale) => new Date(sale.order_date).getTime())
+      .filter((time) => Number.isFinite(time))
+      .sort((a, b) => a - b);
+    if (!dates.length) return null;
+    return {
+      first: new Date(dates[0]).toISOString(),
+      last: new Date(dates[dates.length - 1]).toISOString(),
+      count: sales.length,
+    };
+  }, [sales]);
+
   return (
     <main className="page">
       <PageHero
@@ -227,6 +242,16 @@ export default function RotacionSkuPage() {
       </div>
 
       {error && <div className="alert error">{error}</div>}
+      {(syncInfo || salesCoverage) && (
+        <div className="rotation-sync-info">
+          {syncInfo && <span>{syncInfo}</span>}
+          {salesCoverage && (
+            <span>
+              Datos cargados: {salesCoverage.count} items vendidos desde {shortDate(salesCoverage.first)} hasta {shortDate(salesCoverage.last)}.
+            </span>
+          )}
+        </div>
+      )}
 
       <section className="rotation-summary">
         <article className="metric-card">
@@ -333,6 +358,20 @@ export default function RotacionSkuPage() {
           display: flex;
           justify-content: flex-end;
           margin-top: 12px;
+        }
+        .rotation-sync-info {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin: 12px 0 0;
+          color: #385172;
+          font-size: 13px;
+        }
+        .rotation-sync-info span {
+          border: 1px solid #d6e3f5;
+          border-radius: 999px;
+          background: #f8fbff;
+          padding: 7px 10px;
         }
         .metric-card {
           background: #fff;
