@@ -90,6 +90,30 @@ function isProductRowInteractiveTarget(target: EventTarget | null) {
   return Boolean(target.closest("button, a, input, select, textarea, label, summary, [contenteditable='true'], [data-no-row-toggle]"));
 }
 
+function normalizeProductSku(value?: string | null) {
+  return (value || "").trim().toUpperCase();
+}
+
+function uniqueShippingRows(rows: MercadoLibreShippingCost[]) {
+  const map = new Map<string, MercadoLibreShippingCost>();
+
+  rows.forEach((row) => {
+    const key = row.id
+      || [
+        row.meli_item_id || "sin-mla",
+        row.product_id || "sin-producto",
+        normalizeProductSku(row.sku),
+        row.meli_listing_type_id || "sin-tipo",
+        row.meli_price ?? "sin-precio",
+        row.meli_installments_text || "sin-cuotas",
+      ].join("|");
+
+    if (!map.has(key)) map.set(key, row);
+  });
+
+  return [...map.values()];
+}
+
 function normalizeHeader(value: unknown) {
   return String(value || "")
     .trim()
@@ -454,17 +478,6 @@ export default function ProductsPage() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function shippingsForProduct(product: Product) {
-    return shippingCosts
-      .filter((item) => item.product_id === product.id || item.sku === product.sku)
-      .sort((a, b) => {
-        const aActive = a.meli_status === "active" ? 1 : 0;
-        const bActive = b.meli_status === "active" ? 1 : 0;
-        if (aActive !== bActive) return bActive - aActive;
-        return String(b.updated_at || b.meli_last_sync_at || "").localeCompare(String(a.updated_at || a.meli_last_sync_at || ""));
-      });
-  }
-
   function editProduct(product: Product) {
     setActiveProductTab("manual");
     setEditorOpen(true);
@@ -811,9 +824,33 @@ export default function ProductsPage() {
   }, [products]);
 
   const enriched = useMemo(() => {
-    return products.map((product) => {
-      const shippings = shippingsForProduct(product);
-      return { product, shippings };
+    const groupedProducts = new Map<string, Product[]>();
+
+    products.forEach((product) => {
+      const key = normalizeProductSku(product.sku) || product.id || product.sku;
+      const current = groupedProducts.get(key) || [];
+      current.push(product);
+      groupedProducts.set(key, current);
+    });
+
+    return [...groupedProducts.values()].map((groupProducts) => {
+      const product = groupProducts[0];
+      const productIds = new Set(groupProducts.map((item) => item.id).filter(Boolean) as string[]);
+      const productSkus = new Set(groupProducts.map((item) => normalizeProductSku(item.sku)).filter(Boolean));
+      const shippings = uniqueShippingRows(
+        shippingCosts.filter((item) => {
+          const matchesProduct = Boolean(item.product_id && productIds.has(item.product_id));
+          const matchesSku = Boolean(item.sku && productSkus.has(normalizeProductSku(item.sku)));
+          return matchesProduct || matchesSku;
+        }),
+      ).sort((a, b) => {
+        const aActive = a.meli_status === "active" ? 1 : 0;
+        const bActive = b.meli_status === "active" ? 1 : 0;
+        if (aActive !== bActive) return bActive - aActive;
+        return String(b.updated_at || b.meli_last_sync_at || "").localeCompare(String(a.updated_at || a.meli_last_sync_at || ""));
+      });
+
+      return { product, products: groupProducts, shippings };
     });
   }, [products, shippingCosts]);
 
