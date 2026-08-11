@@ -166,7 +166,7 @@ export default function RotacionSkuPage() {
       const units30 = sales30.reduce((total, sale) => total + numberValue(sale.quantity), 0);
       const units60 = sales60.reduce((total, sale) => total + numberValue(sale.quantity), 0);
       const revenue30 = sales30.reduce((total, sale) => total + numberValue(sale.total_amount), 0);
-      const dailyUnits = units30 / 30;
+      const dailyUnits = Math.max(units7 / 7, units30 / 30, units60 / 60);
       const stockDays = dailyUnits > 0 ? stock / dailyUnits : null;
 
       return {
