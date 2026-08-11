@@ -233,6 +233,48 @@ export default function PricesPage() {
     return !normalizeOption(option).applies_marketplace_fee;
   }
 
+  function publicationInstallmentCount(publication?: MercadoLibreShippingCost | null) {
+    if (!publication) return null;
+    const text = `${publication.meli_installments_text || ""} ${publication.notes || ""} ${publication.meli_listing_type_id || ""}`.toLowerCase();
+    if (text.includes("sin cuotas") || text.includes("1 pago") || text.includes("clasica")) return 1;
+    const match = text.match(/(\d{1,2})\s*(x|cuotas?|installments?)/i);
+    if (match?.[1]) return Number(match[1]);
+    if (text.includes("gold_pro") || text.includes("premium")) return 6;
+    return null;
+  }
+
+  function optionMatchesPublication(option: MercadoLibrePriceOption, publication: MercadoLibreShippingCost) {
+    const optionCount = Number(option.installment_count || 0) || 1;
+    const publicationCount = publicationInstallmentCount(publication);
+    if (!publicationCount) return false;
+    return optionCount === publicationCount;
+  }
+
+  function shippingCostForOption(product: Product, option: MercadoLibrePriceOption) {
+    const normalizedOption = normalizeOption(option);
+    const candidates = shippingCosts.filter(
+      (item) => item.product_id === product.id || item.sku === product.sku,
+    );
+    if (!candidates.length) return null;
+
+    return [...candidates].sort((a, b) => {
+      const score = (item: MercadoLibreShippingCost) => {
+        let value = 0;
+        if (optionMatchesPublication(normalizedOption, item)) value += 1000;
+        if (item.meli_status === "active") value += 100;
+        if (item.active !== false) value += 50;
+        if (item.product_id === product.id) value += 20;
+        if (Number(item.fixed_fee_amount || 0) > 0) value += 8;
+        if (Number(item.shipping_cost_amount || 0) > 0) value += 4;
+        if (item.meli_item_id) value += 2;
+        return value;
+      };
+      const diff = score(b) - score(a);
+      if (diff) return diff;
+      return new Date(b.meli_last_sync_at || b.updated_at || 0).getTime() - new Date(a.meli_last_sync_at || a.updated_at || 0).getTime();
+    })[0] || null;
+  }
+
   function isMercadoLibreChannel(option?: MercadoLibrePriceOption | null) {
     if (!option) return false;
     const normalized = normalizeOption(option);
@@ -417,9 +459,7 @@ export default function PricesPage() {
       (item) =>
         item.category?.toLowerCase() === (product.category || "").toLowerCase(),
     );
-    const shippingCost = shippingCosts.find(
-      (item) => item.product_id === product.id || item.sku === product.sku,
-    );
+    const shippingCost = shippingCostForOption(product, normalizedOption);
     const result = calculatePriceSummary(
       product,
       normalizedOption,
@@ -474,9 +514,7 @@ export default function PricesPage() {
       (item) =>
         item.category?.toLowerCase() === (product.category || "").toLowerCase(),
     );
-    const shippingCost = shippingCosts.find(
-      (item) => item.product_id === product.id || item.sku === product.sku,
-    );
+    const shippingCost = shippingCostForOption(product, normalizedOption);
     const result = calculatePriceSummary(
       product,
       normalizedOption,
@@ -603,9 +641,6 @@ export default function PricesPage() {
       (item) =>
         item.category?.toLowerCase() === (product.category || "").toLowerCase(),
     );
-    const shippingCost = shippingCosts.find(
-      (item) => item.product_id === product.id || item.sku === product.sku,
-    );
     return pricingOptions.map((option) => {
       const desiredNetProfit = effectiveNetProfit(option.code);
       const desiredMargin = effectiveMargin(option.code);
@@ -614,7 +649,7 @@ export default function PricesPage() {
         ? categoryFee
         : null;
       const shippingForOption = normalizedOption.applies_shipping
-        ? shippingCost
+        ? shippingCostForOption(product, normalizedOption)
         : null;
       const salePriceOverride = modal.priceOverrides[option.code] ?? null;
       const result = calculatePriceSummary(
@@ -673,9 +708,6 @@ export default function PricesPage() {
       (item) =>
         item.category?.toLowerCase() === (product.category || "").toLowerCase(),
     );
-    const shippingCost = shippingCosts.find(
-      (item) => item.product_id === product.id || item.sku === product.sku,
-    );
     return pricingOptions.map((option) => {
       const normalizedOption = normalizeOption(option);
       const setting = getChannelSetting(product.id, normalizedOption.code);
@@ -683,7 +715,7 @@ export default function PricesPage() {
         ? categoryFee
         : null;
       const shippingForOption = normalizedOption.applies_shipping
-        ? shippingCost
+        ? shippingCostForOption(product, normalizedOption)
         : null;
       const result = calculatePriceSummary(
         product,
@@ -726,12 +758,11 @@ export default function PricesPage() {
       (item) =>
         item.category?.toLowerCase() === (product.category || "").toLowerCase(),
     );
-    const shippingCost = shippingCosts.find(
-      (item) => item.product_id === product.id || item.sku === product.sku,
-    );
+    const mcOption = mercadoLibreClassicOption();
+    const shippingCost = shippingCostForOption(product, mcOption);
     const result = calculatePriceSummary(
       product,
-      mercadoLibreClassicOption(),
+      mcOption,
       categoryFee,
       taxes,
       shippingCost,
@@ -1221,6 +1252,7 @@ export default function PricesPage() {
                     <div className="summary-line"><span>Ingresos brutos</span><strong>-{moneyWithCents(selectedSummaryRow.result.iibbAmount)}</strong></div>
                     <div className="summary-divider" />
                     <div className="summary-line"><span>Envío s/IVA</span><strong>-{moneyWithCents(selectedSummaryRow.result.shippingCostAmount)}</strong></div>
+                    <div className="summary-line"><span>Fijo ML s/IVA</span><strong>-{moneyWithCents(selectedSummaryRow.result.fixedFeeAmount || 0)}</strong></div>
                     <div className="summary-line"><span>Gasto de estructura</span><strong>-{moneyWithCents(selectedSummaryRow.result.structureAmount)}</strong></div>
                     <div className="summary-line"><span>IVA atribuido al costo</span><strong>-{moneyWithCents(selectedSummaryRow.result.costVatAmount || 0)}</strong></div>
                     <div className="summary-line"><span>Costo usado</span><strong>-{moneyWithCents(selectedSummaryRow.result.costForProfit)}</strong></div>
