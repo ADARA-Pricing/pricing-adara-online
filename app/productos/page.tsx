@@ -174,6 +174,7 @@ function groupProductPublications(publications: MercadoLibreShippingCost[]) {
     title: string;
     branchKind: "catalog_listing" | "seller_listing";
     itemIds: string[];
+    hasCatalog: boolean;
     rows: MercadoLibreShippingCost[];
   }>();
 
@@ -184,12 +185,14 @@ function groupProductPublications(publications: MercadoLibreShippingCost[]) {
       title: publication.meli_title || publication.meli_item_id || "Publicación ML",
       branchKind: publicationBranchKind(publication),
       itemIds: [],
+      hasCatalog: false,
       rows: [],
     };
 
     if (publication.meli_item_id && !current.itemIds.includes(publication.meli_item_id)) {
       current.itemIds.push(publication.meli_item_id);
     }
+    current.hasCatalog = current.hasCatalog || Boolean(publication.meli_catalog_listing);
     current.rows.push(publication);
     groups.set(key, current);
   });
@@ -1603,7 +1606,10 @@ export default function ProductsPage() {
                                       >
                                         <span>
                                           <strong>{group.title}</strong>
-                                          <small>{publicationBranchLabel(group.branchKind)} · {group.itemIds.length} MLA · {group.rows.length} variante{group.rows.length === 1 ? "" : "s"}</small>
+                                          <small>
+                                            {publicationBranchLabel(group.branchKind)} · {group.itemIds.length} MLA · {group.rows.length} variante{group.rows.length === 1 ? "" : "s"}
+                                            {group.hasCatalog ? <span className="badge product-catalog-badge">Catálogo</span> : null}
+                                          </small>
                                         </span>
                                         {groupExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                                       </button>
@@ -1629,8 +1635,7 @@ export default function ProductsPage() {
                                       <strong className="product-publication-title" title={shipping.meli_title || product.name}>{shipping.meli_title || product.name}</strong>
                                       <br />
                                       <span className="small">
-                                        {shipping.meli_item_id || "-"} · {formatTechnicalLabel(shipping.meli_logistic_type || shipping.shipping_method)}
-                                        {shipping.meli_catalog_listing ? <span className="badge product-catalog-badge">Catálogo</span> : null}
+                                                    {shipping.meli_item_id || "-"} · {formatTechnicalLabel(shipping.meli_logistic_type || shipping.shipping_method)}
                                       </span>
                                     </td>
                                     <td><span className={`badge meli-status-${shipping.meli_status || "none"}`}>{meliStatusLabel(shipping.meli_status)}</span></td>
