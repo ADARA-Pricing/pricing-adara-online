@@ -1,23 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, ChartNoAxesCombined, RefreshCw, Search } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import { moneyWithCents } from "@/lib/pricing";
 import type { MercadoLibreOrderItem, MercadoLibreShippingCost, Product } from "@/lib/types";
 
-type SortKey = "units30" | "revenue30" | "stockDays" | "stock";
+type SortKey = "productName" | "sku" | "units7" | "revenue7" | "units30" | "revenue30" | "units60" | "stock" | "stockDays" | "lastSale" | "activePublications" | "catalogCount";
+type SortDirection = "asc" | "desc";
 
 type RotationRow = {
   sku: string;
   productName: string;
+  category?: string | null;
+  thumbnail: string | null;
   stock: number;
   activePublications: number;
   units7: number;
   units30: number;
   units60: number;
+  revenue7: number;
   revenue30: number;
   avgPrice30: number | null;
   stockDays: number | null;
@@ -56,6 +61,14 @@ function statusClass(days: number | null, stock: number) {
   return "good";
 }
 
+function productImage(publications: MercadoLibreShippingCost[]) {
+  return publications.find((publication) => Boolean(publication.meli_thumbnail))?.meli_thumbnail || null;
+}
+
+function productInitial(name: string, sku: string) {
+  return (name || sku || "P").slice(0, 2).toUpperCase();
+}
+
 export default function RotacionSkuPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -68,6 +81,9 @@ export default function RotacionSkuPage() {
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("units30");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [rotationFilter, setRotationFilter] = useState("");
   const [onlyWithSales, setOnlyWithSales] = useState(false);
   const [onlyLowStock, setOnlyLowStock] = useState(false);
 
@@ -187,6 +203,7 @@ export default function RotacionSkuPage() {
       const units7 = sales7.reduce((total, sale) => total + numberValue(sale.quantity), 0);
       const units30 = sales30.reduce((total, sale) => total + numberValue(sale.quantity), 0);
       const units60 = sales60.reduce((total, sale) => total + numberValue(sale.quantity), 0);
+      const revenue7 = sales7.reduce((total, sale) => total + numberValue(sale.total_amount), 0);
       const revenue30 = sales30.reduce((total, sale) => total + numberValue(sale.total_amount), 0);
       const dailyUnits = Math.max(units7 / 7, units30 / 30, units60 / 60);
       const stockDays = dailyUnits > 0 ? stock / dailyUnits : null;
@@ -194,11 +211,14 @@ export default function RotacionSkuPage() {
       return {
         sku,
         productName: product.name,
+        category: product.category,
+        thumbnail: productImage(skuPublications),
         stock,
         activePublications: skuPublications.length,
         units7,
         units30,
         units60,
+        revenue7,
         revenue30,
         avgPrice30: units30 > 0 ? revenue30 / units30 : null,
         stockDays,
@@ -211,20 +231,33 @@ export default function RotacionSkuPage() {
 
   const filteredRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
+    const multiplier = sortDirection === "asc" ? 1 : -1;
+
     return rows
       .filter((row) => {
         if (needle && !`${row.sku} ${row.productName} ${row.itemIds.join(" ")}`.toLowerCase().includes(needle)) return false;
+        if (categoryFilter && row.category !== categoryFilter) return false;
+        if (rotationFilter === "no_sales" && row.units30 > 0) return false;
+        if (rotationFilter === "low_stock" && !(row.stockDays !== null && row.stockDays < 25)) return false;
+        if (rotationFilter === "normal" && !(row.stockDays !== null && row.stockDays >= 25)) return false;
         if (onlyWithSales && row.units30 <= 0) return false;
         if (onlyLowStock && !(row.stockDays !== null && row.stockDays < 25)) return false;
         return true;
       })
       .sort((a, b) => {
-        const av = a[sortKey] ?? -1;
-        const bv = b[sortKey] ?? -1;
-        if (sortKey === "stockDays") return Number(av) - Number(bv);
-        return Number(bv) - Number(av);
+        if (sortKey === "productName" || sortKey === "sku") {
+          return String(a[sortKey] || "").localeCompare(String(b[sortKey] || ""), "es") * multiplier;
+        }
+        if (sortKey === "lastSale") {
+          const av = a.lastSale ? new Date(a.lastSale).getTime() : 0;
+          const bv = b.lastSale ? new Date(b.lastSale).getTime() : 0;
+          return (av - bv) * multiplier;
+        }
+        const av = Number(a[sortKey] ?? -1);
+        const bv = Number(b[sortKey] ?? -1);
+        return (av - bv) * multiplier;
       });
-  }, [onlyLowStock, onlyWithSales, query, rows, sortKey]);
+  }, [categoryFilter, onlyLowStock, onlyWithSales, query, rotationFilter, rows, sortDirection, sortKey]);
 
   const totals = useMemo(() => {
     const units30 = rows.reduce((total, row) => total + row.units30, 0);
@@ -233,6 +266,43 @@ export default function RotacionSkuPage() {
     const lowStock = rows.filter((row) => row.stockDays !== null && row.stockDays < 25).length;
     return { units30, revenue30, activeSkus, lowStock };
   }, [rows]);
+
+  const categories = useMemo(() => {
+    return [...new Set(rows.map((row) => row.category).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "es"));
+  }, [rows]);
+
+  const activeFilterCount = [query.trim(), categoryFilter, rotationFilter, onlyWithSales ? "sales" : "", onlyLowStock ? "stock" : ""].filter(Boolean).length;
+
+  function changeSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection(key === "productName" || key === "sku" ? "asc" : "desc");
+  }
+
+  function SortIcon({ column }: { column: SortKey }) {
+    if (sortKey !== column) return <ArrowUpDown aria-hidden="true" />;
+    return sortDirection === "asc" ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />;
+  }
+
+  function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+    return (
+      <button className={`rotation-sort-button ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+        {children}
+        <SortIcon column={column} />
+      </button>
+    );
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setCategoryFilter("");
+    setRotationFilter("");
+    setOnlyWithSales(false);
+    setOnlyLowStock(false);
+  }
 
   const salesCoverage = useMemo(() => {
     const dates = sales
@@ -248,18 +318,21 @@ export default function RotacionSkuPage() {
   }, [sales]);
 
   return (
-    <main className="page">
+    <main className="page rotation-page">
       <PageHero
-        title="Ventas / Rotacion por SKU"
-        description="Ventas recientes, unidades, stock y dias estimados para priorizar reposicion, promos y liquidacion."
-        onRefresh={syncSales}
-        refreshLabel={syncing ? "Sincronizando..." : "Sincronizar ventas ML"}
-        refreshDisabled={syncing}
+        title="Rotación SKU"
+        description="Ventas recientes, stock y rotación para priorizar reposición, promociones y liquidación."
+        icon={<ChartNoAxesCombined aria-hidden="true" />}
+        actions={(
+          <>
+            <Link className="button ghost" href="/dashboard"><ArrowLeft aria-hidden="true" />Volver al dashboard</Link>
+            <button className="button" type="button" onClick={syncSales} disabled={syncing}>
+              <RefreshCw aria-hidden="true" />
+              {syncing ? "Sincronizando..." : "Sincronizar ventas ML"}
+            </button>
+          </>
+        )}
       />
-
-      <div className="rotation-top-actions">
-        <Link className="button ghost" href="/dashboard">Volver al dashboard</Link>
-      </div>
 
       {error && <div className="alert error">{error}</div>}
       {(syncInfo || salesCoverage) && (
@@ -274,80 +347,117 @@ export default function RotacionSkuPage() {
       )}
 
       <section className="rotation-summary">
-        <article className="metric-card">
+        <article className="kpi-card">
           <span>Unidades 30 dias</span>
           <strong>{totals.units30}</strong>
+          <small>Vendidas</small>
         </article>
-        <article className="metric-card">
+        <article className="kpi-card">
           <span>Venta 30 dias</span>
           <strong>{moneyWithCents(totals.revenue30)}</strong>
+          <small>Facturación ML</small>
         </article>
-        <article className="metric-card">
+        <article className="kpi-card rotation-kpi-good">
           <span>SKU con venta</span>
           <strong>{totals.activeSkus}</strong>
+          <small>Últimos 30 días</small>
         </article>
-        <article className="metric-card">
+        <article className="kpi-card rotation-kpi-warning">
           <span>Stock bajo</span>
           <strong>{totals.lowStock}</strong>
+          <small>Menos de 25 días</small>
         </article>
       </section>
 
       <section className="card rotation-card">
         <div className="rotation-toolbar">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o MLA" />
-          <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
-            <option value="units30">Mas unidades 30 dias</option>
-            <option value="revenue30">Mayor venta 30 dias</option>
-            <option value="stockDays">Menos dias de stock</option>
-            <option value="stock">Mayor stock</option>
+          <label className="search-control">
+            <Search aria-hidden="true" />
+            <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o MLA" />
+          </label>
+          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+            <option value="">Todas las categorias</option>
+            {categories.map((category) => <option key={category} value={category}>{category}</option>)}
           </select>
-          <label>
+          <select value={rotationFilter} onChange={(event) => setRotationFilter(event.target.value)}>
+            <option value="">Todos los estados</option>
+            <option value="low_stock">Stock bajo</option>
+            <option value="normal">Stock normal</option>
+            <option value="no_sales">Sin ventas 30d</option>
+          </select>
+          <label className={`rotation-filter-chip ${onlyWithSales ? "active" : ""}`}>
             <input type="checkbox" checked={onlyWithSales} onChange={(event) => setOnlyWithSales(event.target.checked)} />
             Con ventas
           </label>
-          <label>
+          <label className={`rotation-filter-chip ${onlyLowStock ? "active" : ""}`}>
             <input type="checkbox" checked={onlyLowStock} onChange={(event) => setOnlyLowStock(event.target.checked)} />
             Stock bajo
           </label>
         </div>
+        <div className="rotation-table-status">
+          <span>{filteredRows.length} de {rows.length} SKU{activeFilterCount ? ` · ${activeFilterCount} filtros activos` : ""}</span>
+          {activeFilterCount ? <button className="button ghost small-button" type="button" onClick={clearFilters}>Limpiar filtros</button> : null}
+        </div>
 
         {loading ? (
-          <div className="empty-state">Cargando rotacion...</div>
+          <div className="rotation-skeleton">
+            <span />
+            <span />
+            <span />
+          </div>
         ) : (
           <div className="rotation-table-wrap">
             <table className="rotation-table">
               <thead>
                 <tr>
-                  <th>SKU / Producto</th>
-                  <th>Publicaciones</th>
-                  <th>7 dias</th>
-                  <th>30 dias</th>
-                  <th>60 dias</th>
-                  <th>Venta 30d</th>
-                  <th>Stock</th>
-                  <th>Dias stock</th>
-                  <th>Ultima venta</th>
+                  <th rowSpan={2}>
+                    <div className="rotation-product-sort">
+                      <SortButton column="productName">Producto</SortButton>
+                      <SortButton column="sku">SKU</SortButton>
+                    </div>
+                  </th>
+                  <th rowSpan={2}><SortButton column="activePublications">Publicaciones</SortButton></th>
+                  <th colSpan={2}>Últimos 7 días</th>
+                  <th colSpan={2}>Últimos 30 días</th>
+                  <th rowSpan={2}><SortButton column="units60">60 días</SortButton></th>
+                  <th rowSpan={2}><SortButton column="stock">Stock</SortButton></th>
+                  <th rowSpan={2}><SortButton column="stockDays">Días stock</SortButton></th>
+                  <th rowSpan={2}><SortButton column="lastSale">Última venta</SortButton></th>
+                </tr>
+                <tr>
+                  <th><SortButton column="units7">Unidades</SortButton></th>
+                  <th><SortButton column="revenue7">Venta</SortButton></th>
+                  <th><SortButton column="units30">Unidades</SortButton></th>
+                  <th><SortButton column="revenue30">Venta</SortButton></th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRows.map((row) => (
                   <tr key={row.sku}>
                     <td>
-                      <strong>{row.sku}</strong>
-                      <span>{row.productName}</span>
+                      <div className="rotation-product-cell">
+                        <div className="rotation-thumb">
+                          {row.thumbnail ? <img src={row.thumbnail} alt="" /> : productInitial(row.productName, row.sku)}
+                        </div>
+                        <div>
+                          <strong>{row.productName}</strong>
+                          <span>{row.sku}{row.category ? ` · ${row.category}` : ""}</span>
+                        </div>
+                      </div>
                     </td>
                     <td>
                       <strong>{row.activePublications}</strong>
                       <span>{row.catalogCount ? `${row.catalogCount} catalogo` : "Sin catalogo"}</span>
                     </td>
-                    <td>{row.units7}</td>
-                    <td>{row.units30}</td>
-                    <td>{row.units60}</td>
-                    <td>
+                    <td className="numeric">{row.units7}</td>
+                    <td className="numeric">{moneyWithCents(row.revenue7)}</td>
+                    <td className="numeric">{row.units30}</td>
+                    <td className="numeric">
                       <strong>{moneyWithCents(row.revenue30)}</strong>
                       <span>{row.avgPrice30 ? `Prom. ${moneyWithCents(row.avgPrice30)}` : "-"}</span>
                     </td>
-                    <td>{row.stock}</td>
+                    <td className="numeric">{row.units60}</td>
+                    <td className="numeric">{row.stock}</td>
                     <td>
                       <span className={`stock-pill ${statusClass(row.stockDays, row.stock)}`}>{stockLabel(row.stockDays)}</span>
                     </td>
@@ -356,7 +466,7 @@ export default function RotacionSkuPage() {
                 ))}
                 {!filteredRows.length && (
                   <tr>
-                    <td colSpan={9}>
+                    <td colSpan={10}>
                       <div className="empty-state">No hay SKU para los filtros actuales.</div>
                     </td>
                   </tr>
@@ -374,11 +484,6 @@ export default function RotacionSkuPage() {
           gap: 12px;
           margin: 18px 0;
         }
-        .rotation-top-actions {
-          display: flex;
-          justify-content: flex-end;
-          margin-top: 12px;
-        }
         .rotation-sync-info {
           display: flex;
           flex-wrap: wrap;
@@ -393,32 +498,16 @@ export default function RotacionSkuPage() {
           background: #f8fbff;
           padding: 7px 10px;
         }
-        .metric-card {
-          background: #fff;
-          border: 1px solid #d9e4f5;
-          border-radius: 8px;
-          padding: 16px;
-        }
-        .metric-card span {
-          display: block;
-          color: #4a5f7d;
-          font-size: 13px;
-          margin-bottom: 8px;
-        }
-        .metric-card strong {
-          font-size: 26px;
-        }
         .rotation-card {
           padding: 18px;
         }
         .rotation-toolbar {
           display: grid;
-          grid-template-columns: minmax(260px, 1fr) 220px auto auto;
+          grid-template-columns: minmax(280px, 1fr) 190px 180px auto auto;
           gap: 12px;
           align-items: center;
-          margin-bottom: 16px;
+          margin-bottom: 10px;
         }
-        .rotation-toolbar input,
         .rotation-toolbar select {
           border: 1px solid #cfe0f6;
           border-radius: 8px;
@@ -426,41 +515,129 @@ export default function RotacionSkuPage() {
           padding: 0 12px;
           background: #fff;
         }
-        .rotation-toolbar label {
+        .rotation-filter-chip {
           display: inline-flex;
           align-items: center;
           gap: 8px;
+          min-height: 34px;
+          border: 1px solid #dbe4f0;
+          border-radius: 999px;
+          background: #fff;
+          padding: 0 11px;
           font-weight: 700;
-          color: #0f3d7a;
+          color: #334155;
           white-space: nowrap;
+        }
+        .rotation-filter-chip.active {
+          border-color: #bfdbfe;
+          background: #eff6ff;
+          color: #1d4ed8;
+        }
+        .rotation-table-status {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 700;
+          margin-bottom: 10px;
+        }
+        .rotation-skeleton {
+          display: grid;
+          gap: 8px;
+        }
+        .rotation-skeleton span {
+          height: 58px;
+          border-radius: 10px;
+          background: linear-gradient(90deg, #f1f5f9, #f8fafc, #f1f5f9);
         }
         .rotation-table-wrap {
           overflow-x: auto;
         }
         .rotation-table {
           width: 100%;
-          border-collapse: separate;
-          border-spacing: 0;
-          min-width: 980px;
+          border-collapse: collapse;
+          min-width: 1180px;
         }
         .rotation-table th {
           text-align: left;
+          background: #f8fafc;
           color: #526580;
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 800;
           border-bottom: 1px solid #dce6f4;
-          padding: 10px;
+          padding: 8px 10px;
+          vertical-align: middle;
         }
         .rotation-table td {
           border-bottom: 1px solid #e4edf8;
-          padding: 12px 10px;
+          padding: 9px 10px;
           vertical-align: middle;
+          font-variant-numeric: tabular-nums;
+        }
+        .rotation-table tbody tr:hover td {
+          background: #f8fbff;
+        }
+        .rotation-table .numeric {
+          text-align: right;
         }
         .rotation-table td span {
           display: block;
           color: #4c6280;
           font-size: 12px;
           margin-top: 3px;
+        }
+        .rotation-sort-button {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          cursor: pointer;
+          padding: 0;
+          font: inherit;
+          text-align: left;
+        }
+        .rotation-sort-button.active {
+          color: #1d4ed8;
+        }
+        .rotation-sort-button svg {
+          width: 13px;
+          height: 13px;
+          stroke-width: 2;
+        }
+        .rotation-product-sort {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          align-items: flex-start;
+        }
+        .rotation-product-cell {
+          display: grid;
+          grid-template-columns: 44px minmax(0, 1fr);
+          gap: 10px;
+          align-items: center;
+          min-width: 310px;
+        }
+        .rotation-thumb {
+          display: grid;
+          place-items: center;
+          width: 42px;
+          height: 42px;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #f8fafc;
+          color: #2563eb;
+          font-size: 12px;
+          font-weight: 800;
+          overflow: hidden;
+        }
+        .rotation-thumb img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
         }
         .stock-pill {
           display: inline-flex !important;
