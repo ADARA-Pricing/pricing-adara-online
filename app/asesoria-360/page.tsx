@@ -241,9 +241,34 @@ export default function Asesoria360Page() {
     if (!data.session) router.push("/login");
   }
 
+  async function fetchSalesSince(sinceIso: string) {
+    const pageSize = 1000;
+    const result: MercadoLibreOrderItem[] = [];
+
+    for (let from = 0; from < 20000; from += pageSize) {
+      const to = from + pageSize - 1;
+      const response = await supabase
+        .from("mercadolibre_order_items")
+        .select("*")
+        .gte("order_date", sinceIso)
+        .neq("status", "cancelled")
+        .order("order_date", { ascending: false })
+        .range(from, to);
+
+      if (response.error) return response;
+      const page = (response.data || []) as MercadoLibreOrderItem[];
+      result.push(...page);
+      if (page.length < pageSize) break;
+    }
+
+    return { data: result, error: null };
+  }
+
   async function loadData() {
     setLoading(true);
     setError(null);
+    const since = new Date();
+    since.setDate(since.getDate() - 65);
     const [
       productsResponse,
       publicationsResponse,
@@ -258,7 +283,7 @@ export default function Asesoria360Page() {
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).eq("meli_status", "active").order("sku", { ascending: true }),
       supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
       supabase.from("mercadolibre_promotion_opportunities").select("*").order("meli_amount", { ascending: false }).limit(2000),
-      supabase.from("mercadolibre_order_items").select("*").gte("order_date", new Date(Date.now() - 65 * 86400000).toISOString()).neq("status", "cancelled"),
+      fetchSalesSince(since.toISOString()),
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
       supabase.from("tax_settings").select("*").eq("key", "default").single(),
       supabase.from("product_channel_margins").select("*"),
