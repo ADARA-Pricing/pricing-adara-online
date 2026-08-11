@@ -34,7 +34,7 @@ type RotationRow = {
 function RotationThumbnail({ src, label }: { src: string | null; label: string }) {
   const [failed, setFailed] = useState(false);
   return (
-    <div className="rotation-thumb">
+    <div className="rotation-product-thumb">
       {src && !failed ? <img src={src} alt="" onError={() => setFailed(true)} /> : label}
     </div>
   );
@@ -466,7 +466,7 @@ export default function RotacionSkuPage() {
                     <td>
                       <div className="rotation-product-cell">
                         <RotationThumbnail src={row.thumbnail} label={productInitial(row.productName, row.sku)} />
-                        <div>
+                        <div className="rotation-product-text">
                           <strong>{row.productName}</strong>
                           <span>{row.sku}{row.category ? ` · ${row.category}` : ""}</span>
                         </div>
@@ -717,10 +717,10 @@ export default function RotacionSkuPage() {
           color: #1d4ed8;
         }
         .rotation-sort-trigger svg {
-          width: 13px;
-          height: 13px;
+          width: 12px;
+          height: 12px;
           flex-shrink: 0;
-          stroke-width: 1.8;
+          stroke-width: 1.7;
         }
         .rotation-product-sort {
           display: flex;
@@ -729,29 +729,58 @@ export default function RotacionSkuPage() {
           align-items: flex-start;
         }
         .rotation-product-cell {
-          display: grid;
-          grid-template-columns: 40px minmax(0, 1fr);
+          display: flex;
           gap: 10px;
           align-items: center;
           min-width: 310px;
         }
-        .rotation-thumb {
-          display: grid;
-          place-items: center;
-          width: 40px;
-          height: 40px;
+        :global(.rotation-page .rotation-product-thumb) {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px !important;
+          height: 44px !important;
+          min-width: 44px !important;
+          min-height: 44px !important;
+          max-width: 44px !important;
+          max-height: 44px !important;
+          flex: 0 0 44px;
           border: 1px solid #e2e8f0;
           border-radius: 8px;
-          background: #f8fafc;
+          background: #ffffff;
           color: #2563eb;
           font-size: 12px;
           font-weight: 800;
+          line-height: 1;
           overflow: hidden;
         }
-        .rotation-thumb img {
-          width: 100%;
-          height: 100%;
+        :global(.rotation-page .rotation-product-thumb img) {
+          display: block;
+          width: 100% !important;
+          height: 100% !important;
+          max-width: 40px !important;
+          max-height: 40px !important;
           object-fit: contain;
+          flex: 0 0 auto;
+        }
+        .rotation-product-text {
+          min-width: 0;
+        }
+        .rotation-product-text strong {
+          display: -webkit-box;
+          color: #0f172a;
+          font-size: 13px;
+          font-weight: 800;
+          line-height: 1.25;
+          overflow: hidden;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+        .rotation-product-text span {
+          color: #4c6280;
+          font-size: 12px;
+          line-height: 1.25;
+          margin-top: 3px;
         }
         .stock-pill {
           display: inline-flex !important;
