@@ -113,6 +113,26 @@ function typeLabel(type: OpportunityType) {
   return "Datos";
 }
 
+function typeBadgeClass(type: OpportunityType) {
+  if (type === "review") return "badge-high";
+  if (type === "future") return "badge-warning";
+  if (type === "missing_promo" || type === "data_issue") return "badge-neutral";
+  return "badge-low";
+}
+
+function priorityBadgeClass(priority: OpportunityPriority) {
+  if (priority === "alta") return "badge-high";
+  if (priority === "media") return "badge-warning";
+  return "badge-low";
+}
+
+function marginTone(margin?: number | null) {
+  if (margin === undefined || margin === null) return "neutral";
+  if (margin < 5) return "negative";
+  if (margin < 10) return "warning";
+  return "positive";
+}
+
 function meliContributionAmount(
   promoPrice?: number | null,
   meliAmount?: number | null,
@@ -489,16 +509,16 @@ export default function OpportunitiesPage() {
       {error && <div className="message error">{error}</div>}
 
       <section className="opportunity-summary-grid">
-        <button className={`card opportunity-summary ${typeFilter === "all" ? "active" : ""}`} type="button" onClick={() => setTypeFilter("all")}>
-          <span>Total</span>
-          <strong>{actions.length}</strong>
-          <small>Todas las acciones</small>
+        <button className={`kpi-card opportunity-summary ${typeFilter === "all" ? "active" : ""}`} type="button" onClick={() => setTypeFilter("all")}>
+          <span className="kpi-label">Total</span>
+          <strong className="kpi-value">{actions.length}</strong>
+          <small className="kpi-meta">Todas las acciones</small>
         </button>
         {(["review", "activate", "future", "missing_promo", "data_issue"] as OpportunityType[]).map((type) => (
-          <button className={`card opportunity-summary ${type} ${typeFilter === type ? "active" : ""}`} type="button" onClick={() => setTypeFilter(type)} key={type}>
-            <span>{typeLabel(type)}</span>
-            <strong>{countsByType[type] || 0}</strong>
-            <small>{type === "future" ? "Para mirar fecha" : type === "data_issue" ? "Bloquean calculo" : "Accionable"}</small>
+          <button className={`kpi-card opportunity-summary ${type} ${typeFilter === type ? "active" : ""}`} type="button" onClick={() => setTypeFilter(type)} key={type}>
+            <span className="kpi-label">{typeLabel(type)}</span>
+            <strong className="kpi-value">{countsByType[type] || 0}</strong>
+            <small className="kpi-meta">{type === "future" ? "Para mirar fecha" : type === "data_issue" ? "Bloquean calculo" : "Accionable"}</small>
           </button>
         ))}
       </section>
@@ -532,12 +552,12 @@ export default function OpportunitiesPage() {
 
         <div className="opportunity-action-list">
           {filteredActions.map((item) => (
-            <article className={`opportunity-row ${item.type} priority-${item.priority}`} key={item.key}>
+            <article className={`action-card opportunity-row ${item.type} priority-${item.priority}`} key={item.key}>
               <div className="opportunity-row-main">
                 <div className="opportunity-row-title">
-                  <span className={`opportunity-pill ${item.type}`}>{typeLabel(item.type)}</span>
-                  <span className={`opportunity-priority ${item.priority}`}>{item.priority}</span>
-                  {item.startDate && <span className="opportunity-date">Desde {formatDate(item.startDate)}</span>}
+                  <span className={`badge ${typeBadgeClass(item.type)}`}>{typeLabel(item.type)}</span>
+                  <span className={`badge ${priorityBadgeClass(item.priority)}`}>{item.priority}</span>
+                  {item.startDate && <span className="badge badge-date">Desde {formatDate(item.startDate)}</span>}
                 </div>
                 <strong>{item.sku} · {item.productName}</strong>
                 <small>{item.title}: {item.detail}</small>
@@ -545,19 +565,19 @@ export default function OpportunitiesPage() {
               </div>
 
               <div className="opportunity-row-metrics">
-                <div>
+                <div className="mini-stat">
                   <span>Margen</span>
-                  <strong className={Number(item.margin || 0) < 5 ? "danger" : "success"}>{item.margin === undefined || item.margin === null ? "-" : percent(item.margin)}</strong>
+                  <strong className={`mini-stat-value ${marginTone(item.margin)}`}>{item.margin === undefined || item.margin === null ? "-" : percent(item.margin)}</strong>
                 </div>
-                <div>
+                <div className="mini-stat">
                   <span>Venta</span>
                   <strong>{moneyWithCents(item.salePrice || item.currentPrice || null)}</strong>
                 </div>
-                <div>
+                <div className="mini-stat">
                   <span>Comprador</span>
                   <strong>{moneyWithCents(item.buyerPrice || item.currentPrice || null)}</strong>
                 </div>
-                <div>
+                <div className="mini-stat">
                   <span>Aporte ML</span>
                   <strong>{moneyWithCents(item.meliAmount || 0)} · {percent(item.meliRate || 0)}</strong>
                 </div>
