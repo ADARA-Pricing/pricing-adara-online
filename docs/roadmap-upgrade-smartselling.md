@@ -297,6 +297,17 @@ Falta investigar o agregar:
    - Alertas;
    - Asesoria 360.
 
+## Ajustes detectados en Dashboard Ejecutivo
+
+Pendientes para revisar despues de avanzar con los modulos principales:
+
+- En "Top aporte ML" no mostrar promos con aporte ML igual a 0.
+- En acciones recomendadas, evitar que el texto de precio/fecha se pise o quede pegado al margen derecho.
+- Separar visualmente mejor los tipos de accion: revisar activa, activar disponible y futura.
+- Mostrar etiqueta de estado en cada accion, no depender solo del color lateral.
+- Revisar truncado de nombres largos de producto para que no rompan lectura.
+- Validar si el orden de oportunidades debe priorizar margen, aporte ML o urgencia segun el bloque.
+
 ## Criterios de exito
 
 - El usuario puede abrir la app y saber que hacer en menos de 30 segundos.
