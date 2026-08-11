@@ -597,14 +597,14 @@ export default function DashboardPage() {
             <div className="dashboard-panel-head">
               <div>
                 <h2>Ventas y Ads</h2>
-                <p>Preparado para el siguiente paso.</p>
+                <p>Rotacion, stock y proximos modulos comerciales.</p>
               </div>
             </div>
             <div className="dashboard-integration-list">
-              <div>
+              <Link href="/rotacion-sku">
                 <strong>Rotacion por SKU</strong>
                 <span>Ventas, unidades y dias de stock.</span>
-              </div>
+              </Link>
               <div>
                 <strong>Publicidad / ACOS</strong>
                 <span>Margen despues de inversion en ads.</span>

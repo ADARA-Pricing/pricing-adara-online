@@ -103,6 +103,7 @@ function IconLogout() {
 const mainItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: <IconPrices /> },
   { href: "/oportunidades", label: "Oportunidades", icon: <IconPromotions /> },
+  { href: "/rotacion-sku", label: "Rotacion SKU", icon: <IconChannels /> },
   { href: "/productos", label: "Productos", icon: <IconProducts /> },
   { href: "/mercadolibre", label: "Costo x canal", icon: <IconChannels /> },
   { href: "/impuestos", label: "Impuestos", icon: <IconTaxes /> },

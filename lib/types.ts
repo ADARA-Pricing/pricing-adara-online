@@ -166,6 +166,26 @@ export type MercadoLibrePromotionOpportunity = {
   raw?: unknown;
 };
 
+export type MercadoLibreOrderItem = {
+  id?: string;
+  order_id: string;
+  order_date: string;
+  status?: string | null;
+  pack_id?: string | null;
+  meli_item_id: string;
+  variation_id?: string | null;
+  sku: string;
+  product_id?: string | null;
+  title?: string | null;
+  quantity: number;
+  unit_price: number;
+  total_amount: number;
+  currency_id?: string | null;
+  raw?: unknown;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type TaxSettings = {
   key: string;
   iibb_rate: number;
