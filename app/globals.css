@@ -7978,3 +7978,342 @@ textarea:focus,
     grid-template-columns: 1fr;
   }
 }
+
+/* v8.01 - Compact pass for Opportunities and Executive Dashboard */
+.app-page-hero {
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  box-shadow: var(--ui-shadow-xs);
+}
+
+.app-page-hero .prices-hero-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+}
+
+.app-page-hero .prices-hero-icon svg {
+  width: 21px;
+  height: 21px;
+  stroke-width: 1.9;
+}
+
+.app-page-hero .brand h1 {
+  font-size: 24px;
+  line-height: 1.12;
+}
+
+.app-page-hero .brand p {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.page-back-button {
+  gap: 7px;
+}
+
+.page-back-button svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.9;
+}
+
+.search-control {
+  position: relative;
+  display: block;
+  color: #64748b;
+}
+
+.search-control svg {
+  position: absolute;
+  left: 12px;
+  top: 11px;
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.9;
+  pointer-events: none;
+}
+
+.search-control .search-field {
+  padding-left: 36px;
+}
+
+.opportunities-page .badge {
+  min-height: 21px;
+  border-radius: 8px;
+  border-color: rgba(148, 163, 184, 0.28);
+  background: #f8fafc;
+}
+
+.opportunities-page .badge-high {
+  background: #fff7f7;
+  color: #dc2626;
+  border-color: rgba(248, 113, 113, 0.28);
+}
+
+.opportunities-page .badge-warning {
+  background: #fffaf2;
+  color: #c2410c;
+  border-color: rgba(251, 146, 60, 0.28);
+}
+
+.opportunities-page .badge-low,
+.opportunities-page .badge-date {
+  background: #f6f9ff;
+  color: var(--ui-primary);
+  border-color: rgba(96, 165, 250, 0.28);
+}
+
+.opportunities-page .badge-neutral {
+  background: #f8fafc;
+  color: #475569;
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.opportunities-page .action-card {
+  grid-template-columns: minmax(0, 1fr) minmax(470px, 560px) auto;
+}
+
+.opportunity-row-metrics {
+  grid-template-columns: minmax(74px, 0.75fr) minmax(96px, 1fr) minmax(110px, 1.05fr) minmax(150px, 1.45fr);
+}
+
+.opportunity-row-metrics .mini-stat:last-child strong {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.opportunity-open-button {
+  min-width: 76px;
+  min-height: 34px;
+  padding: 7px 10px;
+  gap: 5px;
+}
+
+.dashboard-sync-section,
+.dashboard-primary-kpi-grid,
+.dashboard-operational-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-sync-section {
+  grid-template-columns: 1fr;
+}
+
+.dashboard-sync-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: 12px;
+  border-left: 4px solid #94a3b8;
+  padding: 14px 16px;
+  box-shadow: var(--ui-shadow-xs);
+}
+
+.dashboard-sync-card.good {
+  border-left-color: var(--ui-success);
+}
+
+.dashboard-sync-card.warning {
+  border-left-color: var(--ui-warning);
+}
+
+.dashboard-sync-card.pending {
+  border-left-color: #64748b;
+}
+
+.dashboard-sync-card span,
+.dashboard-sync-card small {
+  display: block;
+  color: var(--ui-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-sync-card strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ui-text);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-sync-meta {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  text-align: right;
+}
+
+.dashboard-primary-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-operational-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.dashboard-kpi {
+  border-radius: 12px;
+  box-shadow: var(--ui-shadow-xs);
+}
+
+.dashboard-kpi-primary {
+  min-height: 112px;
+  padding: 16px;
+}
+
+.dashboard-kpi-primary strong {
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-kpi-primary.danger strong {
+  color: var(--ui-danger);
+}
+
+.dashboard-kpi-primary.success strong {
+  color: var(--ui-success);
+}
+
+.dashboard-kpi-primary.warning strong {
+  color: var(--ui-warning);
+}
+
+.dashboard-kpi-compact {
+  min-height: 78px;
+  padding: 12px;
+}
+
+.dashboard-kpi-compact span,
+.dashboard-kpi-compact small {
+  font-size: 12px;
+}
+
+.dashboard-kpi-compact strong {
+  margin: 5px 0 3px;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-action.action-card {
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 340px) auto;
+  gap: 14px;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: var(--ui-shadow-xs);
+}
+
+.dashboard-action-metrics {
+  grid-template-columns: 82px minmax(150px, 1fr);
+}
+
+.dashboard-action.future .dashboard-action-metrics {
+  grid-template-columns: 82px minmax(150px, 1fr) 58px;
+}
+
+.dashboard-action-open {
+  min-height: 34px;
+  min-width: 76px;
+  padding: 7px 10px;
+  gap: 5px;
+  border-radius: 10px;
+}
+
+.dashboard-action-open svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.9;
+}
+
+.dashboard-quality-row {
+  background: #ffffff;
+  border-color: #e5edf7;
+}
+
+.dashboard-quality-row.good,
+.dashboard-quality-row.warning {
+  background: #ffffff;
+  border-color: #e5edf7;
+}
+
+.dashboard-quality-row.good strong {
+  color: var(--ui-success);
+}
+
+.dashboard-quality-row.warning strong {
+  color: var(--ui-warning);
+}
+
+.dashboard-upcoming-list > div {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-style: solid;
+}
+
+.dashboard-upcoming-list svg {
+  width: 16px;
+  height: 16px;
+  color: #64748b;
+  stroke-width: 1.8;
+}
+
+.dashboard-upcoming-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-upcoming-list span svg {
+  width: 13px;
+  height: 13px;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-operational-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .opportunities-page .action-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-primary-kpi-grid,
+  .dashboard-operational-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-sync-card,
+  .dashboard-sync-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    text-align: left;
+  }
+
+  .dashboard-action.action-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .dashboard-primary-kpi-grid,
+  .dashboard-operational-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-page-hero {
+    padding: 14px;
+  }
+}

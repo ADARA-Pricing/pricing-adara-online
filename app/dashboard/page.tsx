@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronRight, CircleDashed, Megaphone, ShoppingBag } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -441,20 +442,11 @@ export default function DashboardPage() {
         status: dashboardData.missingMeliPriceCount + dashboardData.missingShippingCount + dashboardData.missingCostProducts ? "warning" : "good",
         detail: "Precios, costos o envios faltantes",
       },
-      {
-        label: "Ventas ML",
-        value: "Pendiente",
-        status: "pending",
-        detail: "Falta integrar ordenes para rotacion por SKU",
-      },
-      {
-        label: "Publicidad",
-        value: "Pendiente",
-        status: "pending",
-        detail: "Falta integrar Ads para ACOS y margen post-publicidad",
-      },
     ];
   }, [dashboardData]);
+
+  const syncHealth = healthItems[0];
+  const dataQualityTotal = dashboardData.missingMeliPriceCount + dashboardData.missingShippingCount + dashboardData.missingCostProducts;
 
   return (
     <main className="container wide dashboard-page">
@@ -468,61 +460,73 @@ export default function DashboardPage() {
 
       {error && <div className="message error">{error}</div>}
 
-      <section className="dashboard-health-grid">
-        {healthItems.map((item) => (
-          <article className={`card dashboard-health ${item.status}`} key={item.label}>
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            <small>{item.detail}</small>
-          </article>
-        ))}
+      <section className="dashboard-sync-section">
+        <article className={`card dashboard-sync-card ${syncHealth.status}`}>
+          <div>
+            <span>Sincronizacion ML</span>
+            <strong>{syncHealth.value}</strong>
+          </div>
+          <div className="dashboard-sync-meta">
+            <small>Estado sincronizado</small>
+            <small>Ultima actualizacion: {formatDateTime(dashboardData.latestSync)}</small>
+            <small>{dashboardData.staleSyncCount} publicaciones con datos viejos o incompletos</small>
+          </div>
+        </article>
       </section>
 
-      <section className="dashboard-kpi-grid">
-        <article className="card dashboard-kpi">
+      <section className="dashboard-primary-kpi-grid">
+        <article className={`card dashboard-kpi dashboard-kpi-primary ${dashboardData.lowMarginActive.length ? "danger" : "success"}`}>
+          <span>Rentabilidad</span>
+          <strong>{dashboardData.lowMarginActive.length}</strong>
+          <small>Promos vigentes bajo el umbral de 5%</small>
+        </article>
+        <article className={`card dashboard-kpi dashboard-kpi-primary ${dashboardData.activationOpportunities.length || dashboardData.futureOpportunities.length ? "warning" : "success"}`}>
+          <span>Oportunidades</span>
+          <strong>{dashboardData.activationOpportunities.length + dashboardData.futureOpportunities.length}</strong>
+          <small>Promos rentables disponibles o futuras</small>
+        </article>
+        <article className={`card dashboard-kpi dashboard-kpi-primary ${dataQualityTotal ? "warning" : "success"}`}>
+          <span>Calidad de datos</span>
+          <strong>{dataQualityTotal}</strong>
+          <small>Precios, costos o envios faltantes</small>
+        </article>
+        <article className="card dashboard-kpi dashboard-kpi-primary">
           <span>Productos activos</span>
           <strong>{products.length}</strong>
           <small>SKUs disponibles para operar</small>
         </article>
-        <article className="card dashboard-kpi">
+      </section>
+
+      <section className="dashboard-operational-grid">
+        <article className="card dashboard-kpi dashboard-kpi-compact">
           <span>Publicaciones ML</span>
           <strong>{dashboardData.activePublications.length}</strong>
           <small>Activas y sincronizadas</small>
         </article>
-        <article className="card dashboard-kpi">
+        <article className="card dashboard-kpi dashboard-kpi-compact">
           <span>Promos vigentes</span>
           <strong>{dashboardData.activePromoPublications.length}</strong>
           <small>Con precio promo detectado</small>
         </article>
-        <article className="card dashboard-kpi warning">
-          <span>Revisar margen</span>
-          <strong>{dashboardData.lowMarginActive.length}</strong>
-          <small>Promos vigentes bajo 5%</small>
-        </article>
-        <article className="card dashboard-kpi success">
+        <article className="card dashboard-kpi dashboard-kpi-compact success">
           <span>Para activar</span>
           <strong>{dashboardData.activationOpportunities.length}</strong>
           <small>Oportunidades sobre 5%</small>
         </article>
-        <article className="card dashboard-kpi info">
+        <article className="card dashboard-kpi dashboard-kpi-compact info">
           <span>Futuras</span>
           <strong>{dashboardData.futureOpportunities.length}</strong>
           <small>Empiezan mas adelante</small>
         </article>
-        <article className="card dashboard-kpi">
+        <article className="card dashboard-kpi dashboard-kpi-compact">
           <span>SKUs sin promo</span>
           <strong>{dashboardData.missingPromoSkus.size}</strong>
           <small>Alguna cuota sin promo vigente</small>
         </article>
-        <article className="card dashboard-kpi">
+        <article className="card dashboard-kpi dashboard-kpi-compact">
           <span>Catalogo ML</span>
           <strong>{dashboardData.catalogPublications}</strong>
           <small>Publicaciones asociadas a catalogo</small>
-        </article>
-        <article className="card dashboard-kpi">
-          <span>Ultima sincro</span>
-          <strong>{formatDateTime(dashboardData.latestSync)}</strong>
-          <small>Dato mas reciente ML</small>
         </article>
       </section>
 
@@ -537,7 +541,7 @@ export default function DashboardPage() {
           </div>
           <div className="dashboard-action-list">
             {[...dashboardData.lowMarginActive.slice(0, 3), ...dashboardData.activationOpportunities.slice(0, 5), ...dashboardData.futureOpportunities.slice(0, 4)].slice(0, 10).map((item) => (
-              <div className={`dashboard-action ${item.kind}`} key={item.key}>
+              <div className={`action-card dashboard-action ${item.kind}`} key={item.key}>
                 <div>
                   <strong>{item.sku}</strong>
                   <span>{item.productName}</span>
@@ -564,6 +568,10 @@ export default function DashboardPage() {
                     </div>
                   )}
                 </div>
+                <Link className="button dashboard-action-open" href={item.kind === "future" ? "/asesoria-360" : "/promociones-meli"}>
+                  Abrir
+                  <ChevronRight aria-hidden="true" />
+                </Link>
               </div>
             ))}
             {!dashboardData.lowMarginActive.length && !dashboardData.activationOpportunities.length && !dashboardData.futureOpportunities.length && (
@@ -614,22 +622,20 @@ export default function DashboardPage() {
           <article className="card dashboard-panel">
             <div className="dashboard-panel-head">
               <div>
-                <h2>Ventas y Ads</h2>
-                <p>Rotacion, stock y proximos modulos comerciales.</p>
+                <h2>Proximas integraciones</h2>
+                <p>Funciones comerciales todavia no integradas.</p>
               </div>
             </div>
-            <div className="dashboard-integration-list">
-              <Link href="/rotacion-sku">
-                <strong>Rotacion por SKU</strong>
-                <span>Ventas, unidades y dias de stock.</span>
-              </Link>
+            <div className="dashboard-integration-list dashboard-upcoming-list">
               <div>
-                <strong>Publicidad / ACOS</strong>
-                <span>Margen despues de inversion en ads.</span>
+                <ShoppingBag aria-hidden="true" />
+                <strong>Ventas Mercado Libre</strong>
+                <span><CircleDashed aria-hidden="true" />Proximamente</span>
               </div>
               <div>
-                <strong>Reputacion ML</strong>
-                <span>Reclamos, cancelaciones y demoras.</span>
+                <Megaphone aria-hidden="true" />
+                <strong>Publicidad</strong>
+                <span><CircleDashed aria-hidden="true" />Proximamente</span>
               </div>
             </div>
           </article>

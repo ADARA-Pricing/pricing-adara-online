@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, Search, Target } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -502,6 +502,8 @@ export default function OpportunitiesPage() {
       <PageHero
         title="Centro de Oportunidades"
         description="Bandeja de acciones para promociones, datos incompletos y Asesoria 360."
+        icon={<Target aria-hidden="true" />}
+        actions={<Link className="button secondary page-back-button" href="/dashboard"><ArrowLeft aria-hidden="true" />Volver al dashboard</Link>}
         onRefresh={loadData}
         refreshLabel={loading ? "Actualizando..." : "Actualizar"}
         refreshDisabled={loading}
@@ -525,7 +527,10 @@ export default function OpportunitiesPage() {
       </section>
 
       <section className="card toolbar-card opportunity-toolbar">
-        <input className="form-control search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, MLA, producto o promo" />
+        <label className="search-control">
+          <Search aria-hidden="true" />
+          <input className="form-control search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, MLA, producto o promo" />
+        </label>
         <select className="form-control" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}>
           <option value="all">Todas las prioridades</option>
           <option value="alta">Alta</option>
@@ -548,7 +553,6 @@ export default function OpportunitiesPage() {
             <h2>Acciones</h2>
             <p>{filteredActions.length} resultado(s) segun filtros actuales.</p>
           </div>
-          <Link className="button ghost" href="/dashboard">Volver al dashboard</Link>
         </div>
 
         <div className="opportunity-action-list">

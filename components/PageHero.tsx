@@ -127,6 +127,7 @@ export function PageHero({
   refreshLabel = "Actualizar",
   refreshDisabled = false,
   icon,
+  actions,
 }: {
   title: string;
   description: ReactNode;
@@ -135,6 +136,7 @@ export function PageHero({
   refreshDisabled?: boolean;
   onLogout?: () => void;
   icon?: ReactNode;
+  actions?: ReactNode;
 }) {
   return (
     <header className="header prices-hero app-page-hero">
@@ -146,6 +148,7 @@ export function PageHero({
         </div>
       </div>
       <div className="page-hero-actions">
+        {actions}
         {onRefresh && (
           <button className="button ghost page-refresh-button" onClick={onRefresh} type="button" disabled={refreshDisabled}>
             {refreshLabel}
