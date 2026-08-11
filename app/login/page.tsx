@@ -27,7 +27,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/productos");
+    router.push("/dashboard");
   }
 
   async function signUp() {

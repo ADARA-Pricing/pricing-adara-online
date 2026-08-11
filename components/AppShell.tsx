@@ -112,6 +112,7 @@ function IconLogout() {
 }
 
 const mainItems: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", icon: <IconPrices /> },
   { href: "/productos", label: "Productos", icon: <IconProducts /> },
   { href: "/mercadolibre", label: "Costo x canal", icon: <IconChannels /> },
   { href: "/envios-meli", label: "Envíos", icon: <IconShipping /> },
@@ -187,7 +188,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-logo-row">
-          <Link href="/precios" className="adara-logo" aria-label="ADARA">
+          <Link href="/dashboard" className="adara-logo" aria-label="ADARA">
             <img src="/logo-adara.png" alt="ADARA Group" />
             <span className="adara-logo-mark" aria-hidden="true">A</span>
           </Link>
