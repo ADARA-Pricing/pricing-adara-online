@@ -39,6 +39,15 @@ type DashboardOpportunity = {
   startDate?: string | null;
 };
 
+type DashboardHealthStatus = "good" | "warning" | "danger" | "pending";
+
+type DashboardHealthItem = {
+  label: string;
+  value: string;
+  status: DashboardHealthStatus;
+  detail: string;
+};
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -56,6 +65,13 @@ function formatDateTime(value?: string | null) {
 function formatDate(value?: string | null) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit" }).format(new Date(value));
+}
+
+function daysSince(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return (Date.now() - date.getTime()) / 86400000;
 }
 
 function publicationInstallments(publication: MercadoLibreShippingCost) {
@@ -155,7 +171,6 @@ export default function DashboardPage() {
   }, []);
 
   const activeProductsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
-  const productsBySku = useMemo(() => new Map(products.map((product) => [product.sku, product])), [products]);
 
   const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
     return sortPricingOptions([
@@ -231,6 +246,14 @@ export default function DashboardPage() {
       .filter(Boolean)
       .sort()
       .at(-1) || null;
+    const staleSyncCount = activePublications.filter((publication) => {
+      const age = daysSince(publication.meli_last_sync_at || publication.updated_at || publication.created_at || null);
+      return age === null || age > 1;
+    }).length;
+    const missingMeliPriceCount = activePublications.filter((publication) => !Number(publication.meli_price || 0)).length;
+    const missingShippingCount = activePublications.filter((publication) => !Number(publication.shipping_cost_amount || 0) && publication.free_shipping).length;
+    const missingCostProducts = products.filter((product) => !Number(product.cost_without_vat || 0)).length;
+    const catalogPublications = activePublications.filter((publication) => Array.isArray(publication.meli_tags) && publication.meli_tags.includes("user_product_listing")).length;
 
     const lowMarginActive = activePromoPublications
       .map((publication): DashboardOpportunity | null => {
@@ -317,13 +340,68 @@ export default function DashboardPage() {
       activePublications,
       activePromoPublications,
       latestSync,
+      staleSyncCount,
+      missingMeliPriceCount,
+      missingShippingCount,
+      missingCostProducts,
+      catalogPublications,
       lowMarginActive,
       futureOpportunities,
       activationOpportunities,
       missingPromoSkus,
       topMeliContributions: [...opportunityRows].sort((a, b) => b.meliAmount - a.meliAmount).slice(0, 6),
+      dataQualityRows: [
+        { label: "Publicaciones sin precio ML", value: missingMeliPriceCount, href: "/productos" },
+        { label: "Envios gratis sin costo", value: missingShippingCount, href: "/envios-meli" },
+        { label: "Productos sin costo", value: missingCostProducts, href: "/productos" },
+        { label: "Datos ML viejos", value: staleSyncCount, href: "/configuracion/mercadolibre" },
+      ],
     };
   }, [activeProductsById, publications, opportunities, pricingOptions, categoryFees, taxes, marginSettings]);
+
+  const healthItems = useMemo<DashboardHealthItem[]>(() => {
+    const syncAge = daysSince(dashboardData.latestSync);
+    return [
+      {
+        label: "Sincronizacion ML",
+        value: dashboardData.latestSync ? formatDateTime(dashboardData.latestSync) : "Sin datos",
+        status: syncAge === null ? "pending" : syncAge > 1 ? "warning" : "good",
+        detail: dashboardData.staleSyncCount
+          ? `${dashboardData.staleSyncCount} publicaciones con datos viejos o incompletos`
+          : "Datos actualizados recientemente",
+      },
+      {
+        label: "Rentabilidad",
+        value: `${dashboardData.lowMarginActive.length}`,
+        status: dashboardData.lowMarginActive.length ? "danger" : "good",
+        detail: "Promos vigentes bajo el umbral de 5%",
+      },
+      {
+        label: "Oportunidades",
+        value: `${dashboardData.activationOpportunities.length + dashboardData.futureOpportunities.length}`,
+        status: dashboardData.activationOpportunities.length || dashboardData.futureOpportunities.length ? "warning" : "good",
+        detail: "Promos rentables disponibles o futuras",
+      },
+      {
+        label: "Calidad de datos",
+        value: `${dashboardData.missingMeliPriceCount + dashboardData.missingShippingCount + dashboardData.missingCostProducts}`,
+        status: dashboardData.missingMeliPriceCount + dashboardData.missingShippingCount + dashboardData.missingCostProducts ? "warning" : "good",
+        detail: "Precios, costos o envios faltantes",
+      },
+      {
+        label: "Ventas ML",
+        value: "Pendiente",
+        status: "pending",
+        detail: "Falta integrar ordenes para rotacion por SKU",
+      },
+      {
+        label: "Publicidad",
+        value: "Pendiente",
+        status: "pending",
+        detail: "Falta integrar Ads para ACOS y margen post-publicidad",
+      },
+    ];
+  }, [dashboardData]);
 
   return (
     <main className="container wide dashboard-page">
@@ -336,6 +414,16 @@ export default function DashboardPage() {
       />
 
       {error && <div className="message error">{error}</div>}
+
+      <section className="dashboard-health-grid">
+        {healthItems.map((item) => (
+          <article className={`card dashboard-health ${item.status}`} key={item.label}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <small>{item.detail}</small>
+          </article>
+        ))}
+      </section>
 
       <section className="dashboard-kpi-grid">
         <article className="card dashboard-kpi">
@@ -372,6 +460,11 @@ export default function DashboardPage() {
           <span>SKUs sin promo</span>
           <strong>{dashboardData.missingPromoSkus.size}</strong>
           <small>Alguna cuota sin promo vigente</small>
+        </article>
+        <article className="card dashboard-kpi">
+          <span>Catalogo ML</span>
+          <strong>{dashboardData.catalogPublications}</strong>
+          <small>Publicaciones asociadas a catalogo</small>
         </article>
         <article className="card dashboard-kpi">
           <span>Ultima sincro</span>
@@ -414,6 +507,23 @@ export default function DashboardPage() {
           <article className="card dashboard-panel">
             <div className="dashboard-panel-head">
               <div>
+                <h2>Calidad de datos</h2>
+                <p>Bloqueos que pueden distorsionar margenes.</p>
+              </div>
+            </div>
+            <div className="dashboard-mini-list">
+              {dashboardData.dataQualityRows.map((item) => (
+                <Link className={`dashboard-quality-row ${item.value ? "warning" : "good"}`} href={item.href} key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </Link>
+              ))}
+            </div>
+          </article>
+
+          <article className="card dashboard-panel">
+            <div className="dashboard-panel-head">
+              <div>
                 <h2>Top aporte ML</h2>
                 <p>Promos con mayor aporte absoluto.</p>
               </div>
@@ -429,6 +539,29 @@ export default function DashboardPage() {
                 </div>
               ))}
               {!dashboardData.topMeliContributions.length && <div className="dashboard-empty">Sin aportes ML detectados.</div>}
+            </div>
+          </article>
+
+          <article className="card dashboard-panel">
+            <div className="dashboard-panel-head">
+              <div>
+                <h2>Ventas y Ads</h2>
+                <p>Preparado para el siguiente paso.</p>
+              </div>
+            </div>
+            <div className="dashboard-integration-list">
+              <div>
+                <strong>Rotacion por SKU</strong>
+                <span>Ventas, unidades y dias de stock.</span>
+              </div>
+              <div>
+                <strong>Publicidad / ACOS</strong>
+                <span>Margen despues de inversion en ads.</span>
+              </div>
+              <div>
+                <strong>Reputacion ML</strong>
+                <span>Reclamos, cancelaciones y demoras.</span>
+              </div>
             </div>
           </article>
 
