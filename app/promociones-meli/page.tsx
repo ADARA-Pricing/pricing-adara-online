@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { AlertTriangle, BadgePercent, CalendarClock, ChevronRight, Search, TrendingUp } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -1640,6 +1640,12 @@ export default function PromocionesMeliPage() {
     };
   }
 
+  function trafficMarginTone(value: number) {
+    if (value < redThreshold) return "negative";
+    if (value < yellowThreshold) return "warning";
+    return "positive";
+  }
+
   function toggleTrafficSku(key: string) {
     setExpandedTrafficSkus((current) => ({
       ...current,
@@ -1707,14 +1713,18 @@ export default function PromocionesMeliPage() {
                 Cerrar
               </button>
             </div>
-            <div className="field">
+            <div className="field promociones-picker-search">
               <label>Buscar</label>
-              <input
-                autoFocus
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="SKU, producto, marca, item ML..."
-              />
+              <label className="search-control">
+                <Search aria-hidden="true" />
+                <input
+                  className="form-control search-field"
+                  autoFocus
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="SKU, producto, marca, item ML..."
+                />
+              </label>
             </div>
             <div className="promociones-picker-list">
               {loading ? (
@@ -2137,36 +2147,49 @@ export default function PromocionesMeliPage() {
               title: "Revisar activas",
               subtitle: `Vigentes con menos de ${percent(redThreshold)}`,
               groups: trafficLights.red,
+              Icon: AlertTriangle,
             },
             {
               key: "yellow",
               title: "Conviene activar",
               subtitle: `Publicaciones activas con mas de ${percent(yellowThreshold)}`,
               groups: trafficLights.yellow,
+              Icon: TrendingUp,
             },
             {
               key: "scheduled",
               title: "Futuras",
               subtitle: onlySharedFuture ? "Promos futuras con aporte compartido" : "Promos futuras con fecha de inicio",
               groups: onlySharedFuture ? trafficLights.scheduledShared : trafficLights.scheduled,
+              Icon: CalendarClock,
             },
           ].map((column) => (
             <div className={`promociones-traffic-column ${column.key}`} key={column.key}>
               <div className="promociones-traffic-column-head">
                 <div>
-                  <h3>{column.title}</h3>
+                  <h3>
+                    <column.Icon aria-hidden="true" />
+                    {column.title}
+                  </h3>
                   <p>{column.subtitle}</p>
                   {column.key === "scheduled" && (
-                    <button
-                      className={`promociones-column-filter ${onlySharedFuture ? "active" : ""}`}
-                      type="button"
-                      onClick={() => setOnlySharedFuture((current) => !current)}
-                    >
-                      {onlySharedFuture ? "Ver todas" : "Solo compartidas"}
-                    </button>
+                    <label className="promociones-shared-switch">
+                      <span>Solo compartidas</span>
+                      <button
+                        className={`promociones-column-filter ${onlySharedFuture ? "active" : ""}`}
+                        type="button"
+                        aria-pressed={onlySharedFuture}
+                        onClick={() => setOnlySharedFuture((current) => !current)}
+                      >
+                        <span />
+                      </button>
+                    </label>
                   )}
                 </div>
-                <strong>{column.groups.reduce((total, group) => total + group.items.length, 0)}</strong>
+                <strong className="badge promociones-column-count">
+                  <BadgePercent aria-hidden="true" />
+                  {column.groups.reduce((total, group) => total + group.items.length, 0)}
+                </strong>
               </div>
               {column.groups.length ? (
                 column.groups.map((group) => {
@@ -2186,14 +2209,19 @@ export default function PromocionesMeliPage() {
                           <strong>{group.sku}</strong>
                           <small>{group.productName}</small>
                         </div>
+                        <span className="badge promociones-traffic-count">
+                          <BadgePercent aria-hidden="true" />
+                          {group.items.length} {group.items.length === 1 ? "promo" : "promos"}
+                        </span>
                         <div className="promociones-traffic-sku-summary">
-                          <span>{group.items.length}</span>
                           <small>{summary.installmentText}</small>
-                          <small>Mejor {percent(summary.bestMargin)}</small>
-                          {summary.bestBuyerPrice && <small>Desde {moneyWithCents(summary.bestBuyerPrice)}</small>}
+                          <small>
+                            Mejor <span className={`metric-value ${trafficMarginTone(summary.bestMargin)}`}>{percent(summary.bestMargin)}</span>
+                          </small>
+                          {summary.bestBuyerPrice && <small>Desde <span className="money-value">{moneyWithCents(summary.bestBuyerPrice)}</span></small>}
                         </div>
                         <span className="item-action promociones-traffic-toggle">
-                          {expanded ? "Ocultar" : "Ver"}
+                          {expanded ? "Cerrar" : "Abrir"}
                           <ChevronRight aria-hidden="true" />
                         </span>
                       </button>
@@ -2227,7 +2255,7 @@ export default function PromocionesMeliPage() {
                                   >
                                     {copiedItemId === item.itemId ? "Copiado" : item.itemId}
                                   </button>
-                                  <strong className={item.activeComparison.margin < redThreshold ? "negative" : "positive"}>{percent(item.activeComparison.margin)}</strong>
+                                  <strong className={trafficMarginTone(item.activeComparison.margin)}>{percent(item.activeComparison.margin)}</strong>
                                 </div>
                               </div>
                             )}
@@ -2261,7 +2289,7 @@ export default function PromocionesMeliPage() {
                                 >
                                   {copiedItemId === item.itemId ? "Copiado" : item.itemId}
                                 </button>
-                                <strong className={item.margin < redThreshold ? "negative" : "positive"}>{percent(item.margin)}</strong>
+                                <strong className={trafficMarginTone(item.margin)}>{percent(item.margin)}</strong>
                               </div>
                             </div>
                             </Fragment>
@@ -2273,7 +2301,10 @@ export default function PromocionesMeliPage() {
                   );
                 })
               ) : (
-                <div className="promociones-empty">Sin publicaciones en este grupo.</div>
+                <div className="empty-state promociones-empty promociones-traffic-empty">
+                  <column.Icon aria-hidden="true" />
+                  <span>No hay promociones para revisar</span>
+                </div>
               )}
             </div>
           ))}

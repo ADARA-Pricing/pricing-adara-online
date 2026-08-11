@@ -8334,3 +8334,343 @@ textarea:focus,
     padding: 14px;
   }
 }
+
+/* v8.03 - Promociones Meli compact visual pass */
+.promociones-meli-page {
+  --promo-red: #dc2626;
+  --promo-red-soft: #fff7f7;
+  --promo-red-border: rgba(248, 113, 113, 0.28);
+  --promo-yellow: #c2410c;
+  --promo-yellow-soft: #fffaf2;
+  --promo-yellow-border: rgba(251, 146, 60, 0.28);
+  --promo-blue: var(--ui-primary, #2563eb);
+  --promo-blue-soft: #f6f9ff;
+  --promo-blue-border: rgba(96, 165, 250, 0.28);
+}
+
+.promociones-meli-page .money-value,
+.promociones-meli-page .metric-value,
+.promociones-meli-page .promociones-traffic-meta strong,
+.promociones-meli-page .promociones-traffic-sku-summary,
+.promociones-meli-page .promociones-column-count,
+.promociones-meli-page .promociones-traffic-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.promociones-picker-search .search-control {
+  display: block;
+}
+
+.promociones-picker-search .search-field {
+  width: 100%;
+}
+
+.promociones-traffic-light {
+  border-color: var(--ui-border, #dbe3ee);
+  border-radius: 12px;
+  background: var(--ui-surface, #ffffff);
+  box-shadow: var(--ui-shadow-xs);
+}
+
+.promociones-traffic-head {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.promociones-traffic-head h2 {
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.promociones-traffic-actions label {
+  min-height: 36px;
+  border-color: var(--ui-border, #dbe3ee);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1e293b;
+  box-shadow: var(--ui-shadow-xs);
+}
+
+.promociones-traffic-actions label input {
+  width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+.promociones-traffic-grid {
+  grid-template-columns: repeat(3, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.promociones-traffic-column {
+  position: relative;
+  border-color: var(--ui-border, #dbe3ee) !important;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: var(--ui-shadow-xs);
+}
+
+.promociones-traffic-column::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--promo-blue);
+}
+
+.promociones-traffic-column.red::before {
+  background: var(--promo-red);
+}
+
+.promociones-traffic-column.yellow::before {
+  background: #f59e0b;
+}
+
+.promociones-traffic-column.scheduled::before {
+  background: #fb923c;
+}
+
+.promociones-traffic-column-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  align-items: flex-start;
+  padding: 13px 14px 11px;
+  border-bottom-color: #e5edf7;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(6px);
+}
+
+.promociones-traffic-column-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.promociones-traffic-column-head h3 svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  stroke-width: 1.9;
+}
+
+.promociones-traffic-column.red .promociones-traffic-column-head h3 svg {
+  color: var(--promo-red);
+}
+
+.promociones-traffic-column.yellow .promociones-traffic-column-head h3 svg {
+  color: #d97706;
+}
+
+.promociones-traffic-column.scheduled .promociones-traffic-column-head h3 svg {
+  color: #ea580c;
+}
+
+.promociones-column-count {
+  gap: 5px;
+  min-height: 24px;
+  border-radius: 999px;
+  border-color: var(--promo-blue-border);
+  background: var(--promo-blue-soft);
+  color: var(--promo-blue);
+  padding: 0 8px;
+}
+
+.promociones-column-count svg,
+.promociones-traffic-count svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.9;
+}
+
+.promociones-shared-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.promociones-column-filter {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #e2e8f0;
+  padding: 0;
+}
+
+.promociones-column-filter span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+}
+
+.promociones-column-filter.active {
+  border-color: var(--promo-blue);
+  background: var(--promo-blue);
+}
+
+.promociones-column-filter.active span {
+  left: 18px;
+}
+
+.promociones-traffic-sku {
+  margin: 10px 10px 0;
+  border-color: #e2e8f0;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.promociones-traffic-sku:last-child {
+  margin-bottom: 10px;
+}
+
+.promociones-traffic-sku-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(118px, auto) auto;
+  gap: 10px;
+  padding: 12px 13px;
+  background: #ffffff;
+}
+
+.promociones-traffic-sku-head:hover,
+.promociones-traffic-sku.expanded .promociones-traffic-sku-head {
+  background: #f8fbff;
+}
+
+.promociones-traffic-sku-head strong {
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.promociones-traffic-sku-head small {
+  color: #475569;
+}
+
+.promociones-traffic-count {
+  align-self: start;
+  gap: 5px;
+  white-space: nowrap;
+  border-color: var(--promo-blue-border);
+  background: var(--promo-blue-soft);
+  color: var(--promo-blue);
+}
+
+.promociones-traffic-sku-summary {
+  min-width: 0;
+  gap: 3px;
+}
+
+.promociones-traffic-sku-summary small {
+  font-size: 11px;
+  color: #475569;
+}
+
+.promociones-traffic-sku-summary .metric-value,
+.promociones-traffic-sku-summary .money-value {
+  font-weight: 850;
+}
+
+.promociones-traffic-toggle.item-action {
+  min-height: 29px;
+  height: 29px;
+  border-radius: 8px;
+  padding: 0 9px;
+  background: #ffffff;
+  font-size: 12px;
+  color: var(--promo-blue);
+}
+
+.promociones-traffic-items {
+  border-top-color: #e5edf7;
+}
+
+.promociones-traffic-item {
+  padding: 10px 13px;
+}
+
+.promociones-traffic-main strong,
+.promociones-traffic-meta strong {
+  font-size: 12px;
+}
+
+.promociones-traffic-meta strong.positive,
+.promociones-meli-page .metric-value.positive {
+  color: var(--ui-success, #047857);
+}
+
+.promociones-traffic-meta strong.warning,
+.promociones-meli-page .metric-value.warning {
+  color: var(--ui-warning, #c2410c);
+}
+
+.promociones-traffic-meta strong.negative,
+.promociones-meli-page .metric-value.negative {
+  color: var(--ui-danger, #dc2626);
+}
+
+.promociones-traffic-empty {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  margin: 10px;
+  padding: 18px 12px;
+  min-height: 90px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.promociones-traffic-empty svg {
+  width: 20px;
+  height: 20px;
+  color: #94a3b8;
+  stroke-width: 1.8;
+}
+
+.promociones-traffic-empty span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 1320px) {
+  .promociones-traffic-grid {
+    grid-template-columns: repeat(2, minmax(300px, 1fr));
+  }
+}
+
+@media (max-width: 920px) {
+  .promociones-traffic-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .promociones-traffic-sku-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .promociones-traffic-sku-summary {
+    justify-items: start;
+  }
+}
+
+@media (max-width: 620px) {
+  .promociones-traffic-sku-head {
+    grid-template-columns: 1fr;
+  }
+
+  .promociones-traffic-toggle.item-action {
+    justify-self: start;
+  }
+}
