@@ -1240,6 +1240,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const targetSkus = normalizeSkuList(body?.skus);
     const promotionsOnly = body?.scope === "promotions";
+    const shippingOnly = body?.scope === "shipping";
     const account = await getConnectedMeliAccount();
     if (!account) {
       return NextResponse.json({ error: "Primero conectá MercadoLibre." }, { status: 400 });
@@ -1378,10 +1379,16 @@ export async function POST(request: NextRequest) {
     );
     const matchedItemIds = new Set(matchedItemsForFetch.map((item) => item.id));
 
-    await mapWithConcurrency(matchedItemsForFetch, promotionsOnly ? 8 : 4, async (item) => {
+    await mapWithConcurrency(matchedItemsForFetch, promotionsOnly || shippingOnly ? 8 : 4, async (item) => {
       if (promotionsOnly) {
         detailedItemsByItem.set(item.id, item);
         await promotionForMatchedItem(item);
+        return;
+      }
+
+      if (shippingOnly) {
+        detailedItemsByItem.set(item.id, item);
+        await shippingCostForMatchedItem(item);
         return;
       }
 
@@ -1395,7 +1402,7 @@ export async function POST(request: NextRequest) {
       ]);
     });
 
-    const sellerPromotions = await getSellerPromotions(account);
+    const sellerPromotions = shippingOnly ? [] : await getSellerPromotions(account);
     const sellerPromotionsById = new Map(sellerPromotions.map((promotion) => [promotion.id, promotion]));
     const promotionOpportunityRows: any[] = [];
     const promotionOpportunityKeys = new Set<string>();
@@ -1407,7 +1414,7 @@ export async function POST(request: NextRequest) {
       promotionOpportunityRows.push(row);
     }
 
-    matchedItemsForFetch.forEach((item) => {
+    if (!shippingOnly) matchedItemsForFetch.forEach((item) => {
       const promotionSummary = promotionsByItem.get(item.id);
       const rawResponses = Array.isArray(promotionSummary?.raw) ? promotionSummary.raw : [];
       rawResponses.forEach((entry) => {
@@ -1422,17 +1429,19 @@ export async function POST(request: NextRequest) {
       });
     });
 
-    if (targetSkus.length) {
+    if (!shippingOnly && targetSkus.length) {
       const idsToRefresh = [...matchedItemIds];
       if (idsToRefresh.length) {
         await supabase.from("mercadolibre_promotion_opportunities").delete().in("meli_item_id", idsToRefresh);
       }
-    } else {
+    } else if (!shippingOnly) {
       await supabase.from("mercadolibre_promotion_opportunities").delete().neq("promotion_id", "__never__");
     }
-    for (const batch of chunk(promotionOpportunityRows, 200)) {
-      const { error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch);
-      if (promoSaveError) throw new Error(promoSaveError.message);
+    if (!shippingOnly) {
+      for (const batch of chunk(promotionOpportunityRows, 200)) {
+        const { error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch);
+        if (promoSaveError) throw new Error(promoSaveError.message);
+      }
     }
 
     if (promotionsOnly) {
@@ -1599,11 +1608,11 @@ export async function POST(request: NextRequest) {
         }
 
         const shippingResult = await shippingCostForMatchedItem(item);
-        const promotionResult = await promotionForMatchedItem(item);
+        const promotionResult = shippingOnly ? null : await promotionForMatchedItem(item);
         const detailedItem = detailedItemsByItem.get(item.id) || item;
-        const priceToWinResult = await priceToWinForMatchedItem(item);
-        const listingPriceResult = await listingPriceForMatchedItem(item);
-        const meliCategoryResult = await meliCategoryForMatchedItem(item);
+        const priceToWinResult = shippingOnly ? null : await priceToWinForMatchedItem(item);
+        const listingPriceResult = shippingOnly ? null : await listingPriceForMatchedItem(item);
+        const meliCategoryResult = shippingOnly ? null : await meliCategoryForMatchedItem(item);
         const newShippingCost = Number(shippingResult?.cost || 0);
         const shippingSource = shippingResult?.source || null;
         const { data: current } = await supabase
@@ -1615,7 +1624,7 @@ export async function POST(request: NextRequest) {
 
         const oldShippingCost = Number(current?.shipping_cost_amount || 0);
         matched += 1;
-        addCategoryObservation(categoryFeeObservations, product.category, listingPriceResult, meliCategoryResult);
+        if (!shippingOnly) addCategoryObservation(categoryFeeObservations, product.category, listingPriceResult, meliCategoryResult);
 
         const detectedInstallmentsText = detectInstallmentsText(
           detailedItem,
@@ -1628,19 +1637,13 @@ export async function POST(request: NextRequest) {
             ? optionCodeForInstallments(detectedInstallments)
             : optionCodeByFinancingRate(detectedFinancingFeeRate, (currentInstallmentFees || []) as CurrentInstallmentFee[]);
 
-        if (optionCode && optionCode !== "MC" && Number.isFinite(detectedFinancingFeeRate) && detectedFinancingFeeRate > 0) {
+        if (!shippingOnly && optionCode && optionCode !== "MC" && Number.isFinite(detectedFinancingFeeRate) && detectedFinancingFeeRate > 0) {
           const currentRates = financingFeeObservations.get(optionCode) || [];
           currentRates.push(detectedFinancingFeeRate);
           financingFeeObservations.set(optionCode, currentRates);
         }
 
-        const metadataPayload = {
-          meli_item_id: item.id,
-          meli_thumbnail: itemThumbnail(detailedItem),
-          meli_title: detailedItem.title || null,
-          meli_permalink: detailedItem.permalink || null,
-          meli_price: Number(detailedItem.price ?? 0) || null,
-          meli_currency_id: detailedItem.currency_id || null,
+        const promotionPayload = promotionResult ? {
           meli_original_price: promotionResult.originalPrice,
           meli_promo_price: promotionResult.promoPrice,
           meli_promo_name: promotionResult.name,
@@ -1653,11 +1656,23 @@ export async function POST(request: NextRequest) {
           meli_promo_meli_rate: promotionResult.meliRate,
           meli_promo_receive_amount: promotionResult.receiveAmount,
           meli_promotions: promotionResult.raw,
+        } : {};
+
+        const metadataPayload = {
+          meli_item_id: item.id,
+          meli_thumbnail: itemThumbnail(detailedItem),
+          meli_title: detailedItem.title || null,
+          meli_permalink: detailedItem.permalink || null,
+          meli_price: Number(detailedItem.price ?? 0) || null,
+          meli_currency_id: detailedItem.currency_id || null,
+          ...promotionPayload,
           meli_listing_type_id: detailedItem.listing_type_id || null,
           meli_listing_type_name: detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null,
-          meli_sale_fee_amount: Number(listingPriceResult?.sale_fee_amount || 0) || null,
-          meli_sale_fee_details: listingPriceResult?.sale_fee_details || null,
-          meli_financing_fee_rate: detectedFinancingFeeRate,
+          ...(shippingOnly ? {} : {
+            meli_sale_fee_amount: Number(listingPriceResult?.sale_fee_amount || 0) || null,
+            meli_sale_fee_details: listingPriceResult?.sale_fee_details || null,
+            meli_financing_fee_rate: detectedFinancingFeeRate,
+          }),
           meli_sale_terms: detailedItem.sale_terms || [],
           meli_tags: detailedItem.tags || [],
           meli_installments_text: detectedInstallmentsText,
@@ -1669,15 +1684,17 @@ export async function POST(request: NextRequest) {
           meli_catalog_listing: Boolean(detailedItem.catalog_listing),
           meli_catalog_product_id: detailedItem.catalog_product_id || priceToWinResult?.catalog_product_id || null,
           meli_domain_id: detailedItem.domain_id || null,
-          meli_catalog_status: priceToWinResult?.status || null,
-          meli_catalog_price_to_win: Number(priceToWinResult?.price_to_win || 0) || null,
-          meli_catalog_current_price: Number(priceToWinResult?.current_price || 0) || null,
-          meli_catalog_consistent: priceToWinResult?.consistent ?? null,
-          meli_catalog_visit_share: priceToWinResult?.visit_share !== undefined && priceToWinResult?.visit_share !== null
-            ? String(priceToWinResult.visit_share)
-            : null,
-          meli_catalog_competitors_sharing_first_place: priceToWinResult?.competitors_sharing_first_place ?? null,
-          meli_catalog_reason: priceToWinResult?.reason || [],
+          ...(shippingOnly ? {} : {
+            meli_catalog_status: priceToWinResult?.status || null,
+            meli_catalog_price_to_win: Number(priceToWinResult?.price_to_win || 0) || null,
+            meli_catalog_current_price: Number(priceToWinResult?.current_price || 0) || null,
+            meli_catalog_consistent: priceToWinResult?.consistent ?? null,
+            meli_catalog_visit_share: priceToWinResult?.visit_share !== undefined && priceToWinResult?.visit_share !== null
+              ? String(priceToWinResult.visit_share)
+              : null,
+            meli_catalog_competitors_sharing_first_place: priceToWinResult?.competitors_sharing_first_place ?? null,
+            meli_catalog_reason: priceToWinResult?.reason || [],
+          }),
           meli_cost_source: shippingSource || null,
           meli_last_sync_at: now,
         };
@@ -1685,7 +1702,7 @@ export async function POST(request: NextRequest) {
         if (!newShippingCost) {
           noShippingCost += 1;
 
-          const shippingPayload = {
+          const shippingPayload: Record<string, unknown> = {
             product_id: product.id,
             sku: product.sku,
             fixed_fee_amount: Number(current?.fixed_fee_amount || 0),
@@ -1718,7 +1735,7 @@ export async function POST(request: NextRequest) {
 
         if (Math.round(oldShippingCost) !== Math.round(newShippingCost)) changed += 1;
 
-        const shippingPayload = {
+        const shippingPayload: Record<string, unknown> = {
           product_id: product.id,
           sku: product.sku,
           fixed_fee_amount: Number(current?.fixed_fee_amount || 0),

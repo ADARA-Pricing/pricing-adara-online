@@ -70,6 +70,8 @@ export default function MercadoLibreConfigPage() {
 
       const response = await fetch("/api/mercadolibre/sync-shipping", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "shipping" }),
         signal: controller.signal,
       }).finally(() => window.clearTimeout(timeout));
 
