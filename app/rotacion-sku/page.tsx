@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, ChartNoAxesCombined, RefreshCw, Search } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, ChartNoAxesCombined, Database, RefreshCw, Search } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import { moneyWithCents } from "@/lib/pricing";
@@ -325,7 +325,7 @@ export default function RotacionSkuPage() {
         icon={<ChartNoAxesCombined aria-hidden="true" />}
         actions={(
           <>
-            <Link className="button ghost" href="/dashboard"><ArrowLeft aria-hidden="true" />Volver al dashboard</Link>
+            <Link className="button ghost page-back-button rotation-back-button" href="/dashboard"><ArrowLeft aria-hidden="true" />Volver al dashboard</Link>
             <button className="button" type="button" onClick={syncSales} disabled={syncing}>
               <RefreshCw aria-hidden="true" />
               {syncing ? "Sincronizando..." : "Sincronizar ventas ML"}
@@ -340,6 +340,7 @@ export default function RotacionSkuPage() {
           {syncInfo && <span>{syncInfo}</span>}
           {salesCoverage && (
             <span>
+              <Database aria-hidden="true" />
               Datos cargados: {salesCoverage.count} items vendidos desde {shortDate(salesCoverage.first)} hasta {shortDate(salesCoverage.last)}.
             </span>
           )}
@@ -348,24 +349,24 @@ export default function RotacionSkuPage() {
 
       <section className="rotation-summary">
         <article className="kpi-card">
-          <span>Unidades 30 dias</span>
-          <strong>{totals.units30}</strong>
-          <small>Vendidas</small>
+          <span className="kpi-label">Unidades 30 dias</span>
+          <strong className="kpi-value">{totals.units30}</strong>
+          <small className="kpi-meta">Vendidas</small>
         </article>
         <article className="kpi-card">
-          <span>Venta 30 dias</span>
-          <strong>{moneyWithCents(totals.revenue30)}</strong>
-          <small>Facturación ML</small>
+          <span className="kpi-label">Venta 30 dias</span>
+          <strong className="kpi-value">{moneyWithCents(totals.revenue30)}</strong>
+          <small className="kpi-meta">Facturacion ML</small>
         </article>
         <article className="kpi-card rotation-kpi-good">
-          <span>SKU con venta</span>
-          <strong>{totals.activeSkus}</strong>
-          <small>Últimos 30 días</small>
+          <span className="kpi-label">SKU con venta</span>
+          <strong className="kpi-value">{totals.activeSkus}</strong>
+          <small className="kpi-meta">Ultimos 30 dias</small>
         </article>
         <article className="kpi-card rotation-kpi-warning">
-          <span>Stock bajo</span>
-          <strong>{totals.lowStock}</strong>
-          <small>Menos de 25 días</small>
+          <span className="kpi-label">Stock bajo</span>
+          <strong className="kpi-value">{totals.lowStock}</strong>
+          <small className="kpi-meta">Menos de 25 dias</small>
         </article>
       </section>
 
@@ -408,14 +409,21 @@ export default function RotacionSkuPage() {
         ) : (
           <div className="rotation-table-wrap">
             <table className="rotation-table">
+              <colgroup>
+                <col className="rotation-col-product" />
+                <col className="rotation-col-publications" />
+                <col className="rotation-col-units" />
+                <col className="rotation-col-money" />
+                <col className="rotation-col-units" />
+                <col className="rotation-col-money" />
+                <col className="rotation-col-units" />
+                <col className="rotation-col-stock" />
+                <col className="rotation-col-days" />
+                <col className="rotation-col-date" />
+              </colgroup>
               <thead>
                 <tr>
-                  <th rowSpan={2}>
-                    <div className="rotation-product-sort">
-                      <SortButton column="productName">Producto</SortButton>
-                      <SortButton column="sku">SKU</SortButton>
-                    </div>
-                  </th>
+                  <th rowSpan={2}><SortButton column="productName">Producto</SortButton></th>
                   <th rowSpan={2}><SortButton column="activePublications">Publicaciones</SortButton></th>
                   <th colSpan={2}>Últimos 7 días</th>
                   <th colSpan={2}>Últimos 30 días</th>
@@ -484,6 +492,37 @@ export default function RotacionSkuPage() {
           gap: 12px;
           margin: 18px 0;
         }
+        .rotation-summary .kpi-card {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          justify-content: center;
+          min-height: 86px;
+          padding: 14px 16px;
+          border: 1px solid #dbe6f4;
+          border-radius: 12px;
+          background: #fff;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+          gap: 3px;
+        }
+        .rotation-summary .kpi-label,
+        .rotation-summary .kpi-meta {
+          display: block;
+          color: #4c6280;
+          font-size: 12px;
+          font-weight: 600;
+          line-height: 1.25;
+        }
+        .rotation-summary .kpi-value {
+          display: block;
+          color: #020817;
+          font-size: 26px;
+          font-weight: 800;
+          line-height: 1.08;
+          letter-spacing: 0;
+          font-variant-numeric: tabular-nums;
+          white-space: nowrap;
+        }
         .rotation-sync-info {
           display: flex;
           flex-wrap: wrap;
@@ -493,10 +532,21 @@ export default function RotacionSkuPage() {
           font-size: 13px;
         }
         .rotation-sync-info span {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
           border: 1px solid #d6e3f5;
           border-radius: 999px;
           background: #f8fbff;
           padding: 7px 10px;
+        }
+        .rotation-sync-info svg {
+          width: 14px;
+          height: 14px;
+          color: #64748b;
+        }
+        .rotation-back-button {
+          white-space: nowrap;
         }
         .rotation-card {
           padding: 18px;
@@ -559,7 +609,15 @@ export default function RotacionSkuPage() {
           width: 100%;
           border-collapse: collapse;
           min-width: 1180px;
+          table-layout: fixed;
         }
+        .rotation-col-product { width: 34%; }
+        .rotation-col-publications { width: 9%; }
+        .rotation-col-units { width: 6.5%; }
+        .rotation-col-money { width: 10%; }
+        .rotation-col-stock { width: 6%; }
+        .rotation-col-days { width: 7%; }
+        .rotation-col-date { width: 7%; }
         .rotation-table th {
           text-align: left;
           background: #f8fafc;
@@ -570,9 +628,22 @@ export default function RotacionSkuPage() {
           padding: 8px 10px;
           vertical-align: middle;
         }
+        .rotation-table thead tr:first-child th[colspan] {
+          text-align: center;
+          color: #64748b;
+          font-size: 10px;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          background: #f6f8fb;
+        }
+        .rotation-table thead tr:nth-child(2) th {
+          background: #f8fafc;
+          padding-top: 7px;
+          padding-bottom: 7px;
+        }
         .rotation-table td {
           border-bottom: 1px solid #e4edf8;
-          padding: 9px 10px;
+          padding: 8px 10px;
           vertical-align: middle;
           font-variant-numeric: tabular-nums;
         }
@@ -589,23 +660,36 @@ export default function RotacionSkuPage() {
           margin-top: 3px;
         }
         .rotation-sort-button {
+          appearance: none;
+          -webkit-appearance: none;
           display: inline-flex;
           align-items: center;
           gap: 5px;
-          border: 0;
-          background: transparent;
+          min-height: auto;
+          border: 0 !important;
+          border-radius: 0;
+          background: transparent !important;
+          box-shadow: none !important;
           color: inherit;
           cursor: pointer;
           padding: 0;
           font: inherit;
+          font-size: inherit;
+          font-weight: inherit;
+          line-height: 1.2;
           text-align: left;
+          white-space: nowrap;
+        }
+        .rotation-sort-button:hover {
+          color: #2563eb;
         }
         .rotation-sort-button.active {
           color: #1d4ed8;
         }
         .rotation-sort-button svg {
-          width: 13px;
-          height: 13px;
+          width: 14px;
+          height: 14px;
+          flex-shrink: 0;
           stroke-width: 2;
         }
         .rotation-product-sort {
@@ -616,7 +700,7 @@ export default function RotacionSkuPage() {
         }
         .rotation-product-cell {
           display: grid;
-          grid-template-columns: 44px minmax(0, 1fr);
+          grid-template-columns: 40px minmax(0, 1fr);
           gap: 10px;
           align-items: center;
           min-width: 310px;
@@ -624,8 +708,8 @@ export default function RotacionSkuPage() {
         .rotation-thumb {
           display: grid;
           place-items: center;
-          width: 42px;
-          height: 42px;
+          width: 40px;
+          height: 40px;
           border: 1px solid #e2e8f0;
           border-radius: 8px;
           background: #f8fafc;
@@ -644,7 +728,8 @@ export default function RotacionSkuPage() {
           align-items: center;
           justify-content: center;
           border-radius: 999px;
-          padding: 5px 10px;
+          padding: 4px 9px;
+          font-size: 12px;
           font-weight: 800;
           margin-top: 0 !important;
         }
