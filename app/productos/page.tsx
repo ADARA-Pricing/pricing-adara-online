@@ -3,7 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, ChevronRight, CircleCheck, FileSpreadsheet, Package, PackageCheck, PackageMinus, Plus, Search, Upload } from "lucide-react";
+import { BadgeCheck, ChevronRight, CircleCheck, FileSpreadsheet, Package, PackageMinus, Plus, RefreshCw, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import type { MercadoLibreShippingCost, Product } from "@/lib/types";
 import { money, toNumber } from "@/lib/pricing";
@@ -864,7 +864,7 @@ export default function ProductsPage() {
     <main className="container wide products-advanced-page">
       <PageHero
         title="Productos"
-        description="Visualiza, filtra y administra tu catalogo."
+        description="Visualizá, filtrá y administrá tu catálogo."
         onRefresh={loadProducts}
         icon={<Package aria-hidden="true" />}
       />
@@ -910,7 +910,7 @@ export default function ProductsPage() {
               Importar Excel
             </button>
             <button className="button ghost products-secondary-button" type="button" onClick={openMeliImportModal}>
-              <Upload aria-hidden="true" />
+              <RefreshCw aria-hidden="true" />
               Importar desde ML
             </button>
           </div>
@@ -919,7 +919,6 @@ export default function ProductsPage() {
 
       <section className="products-kpi-grid">
         <div className="kpi-card product-kpi-card">
-          <span className="product-kpi-icon"><Package aria-hidden="true" /></span>
           <div>
             <p>Total productos</p>
             <strong>{metrics.total}</strong>
@@ -927,25 +926,22 @@ export default function ProductsPage() {
           </div>
         </div>
         <div className="kpi-card product-kpi-card">
-          <span className="product-kpi-icon green"><PackageCheck aria-hidden="true" /></span>
           <div>
-            <p>Con publicación ML</p>
+            <p>Con ML</p>
             <strong>{metrics.withMl}</strong>
             <small>{metrics.total ? `${Math.round((metrics.withMl / metrics.total) * 100)}% del catálogo` : "0% del catálogo"}</small>
           </div>
         </div>
         <div className="kpi-card product-kpi-card">
-          <span className="product-kpi-icon violet"><BadgeCheck aria-hidden="true" /></span>
           <div>
-            <p>Publicaciones activas</p>
+            <p>Activas</p>
             <strong>{metrics.activePublications}</strong>
             <small>{metrics.pausedPublications} pausadas</small>
           </div>
         </div>
         <div className="kpi-card product-kpi-card">
-          <span className="product-kpi-icon amber"><PackageMinus aria-hidden="true" /></span>
           <div>
-            <p>Sin publicación ML</p>
+            <p>Sin ML</p>
             <strong>{metrics.withoutMl}</strong>
             <small>{metrics.total ? `${Math.round((metrics.withoutMl / metrics.total) * 100)}% del catálogo` : "0% del catálogo"}</small>
           </div>
@@ -953,15 +949,12 @@ export default function ProductsPage() {
       </section>
 
       <section className="card products-sync-summary">
-        <div className="products-sync-status"><CircleCheck aria-hidden="true" /><strong>MercadoLibre sincronizado</strong></div>
-        <div><span>Ultima actualizacion</span><strong>{formatDateTime(metrics.latestSync)}</strong></div>
-        <div>
-          <span>Productos actualizados hoy</span>
-          <strong>{metrics.syncedToday}</strong>
-        </div>
-        <div>
-          <span>Publicaciones vinculadas</span>
-          <strong>{metrics.activePublications + metrics.pausedPublications}</strong>
+        <div className="products-sync-status">
+          <CircleCheck aria-hidden="true" />
+          <strong>MercadoLibre sincronizado</strong>
+          <span>
+            Última actualización: {formatDateTime(metrics.latestSync)} · {metrics.syncedToday} productos actualizados · {metrics.activePublications + metrics.pausedPublications} publicaciones vinculadas
+          </span>
         </div>
       </section>
 
@@ -1172,7 +1165,7 @@ export default function ProductsPage() {
 
                     <section className="products-kpi-grid" style={{ marginBottom: 14 }}>
                       <div className="card product-kpi-card">
-                        <span className="product-kpi-icon">ML</span>
+                        <span className="product-kpi-icon"><Package aria-hidden="true" /></span>
                         <div>
                           <p>SKU unicos</p>
                           <strong>{meliPreview.total_products || meliPreview.rows.length}</strong>
@@ -1180,7 +1173,7 @@ export default function ProductsPage() {
                         </div>
                       </div>
                       <div className="card product-kpi-card">
-                        <span className="product-kpi-icon green">+</span>
+                        <span className="product-kpi-icon green"><Plus aria-hidden="true" /></span>
                         <div>
                           <p>Nuevos para crear</p>
                           <strong>{meliPreview.missing}</strong>
@@ -1188,7 +1181,7 @@ export default function ProductsPage() {
                         </div>
                       </div>
                       <div className="card product-kpi-card">
-                        <span className="product-kpi-icon violet">=</span>
+                        <span className="product-kpi-icon violet"><BadgeCheck aria-hidden="true" /></span>
                         <div>
                           <p>Ya existentes</p>
                           <strong>{meliPreview.existing}</strong>
@@ -1196,7 +1189,7 @@ export default function ProductsPage() {
                         </div>
                       </div>
                       <div className="card product-kpi-card">
-                        <span className="product-kpi-icon amber">!</span>
+                        <span className="product-kpi-icon amber"><PackageMinus aria-hidden="true" /></span>
                         <div>
                           <p>Publicaciones repetidas</p>
                           <strong>{meliPreview.duplicate_publications || 0}</strong>
