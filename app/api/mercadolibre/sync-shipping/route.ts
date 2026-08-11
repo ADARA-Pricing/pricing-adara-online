@@ -277,6 +277,13 @@ function findShippingCost(value: any): number {
 }
 
 async function getShippingCostForItem(item: MeliItem, account: any) {
+  if (item.shipping?.free_shipping === false) {
+    return {
+      cost: 0,
+      source: "buyer_paid_shipping",
+    };
+  }
+
   const endpoints = [
     `/users/${account.meli_user_id}/shipping_options/free?item_id=${item.id}`,
     `/items/${item.id}/shipping_options/free`,
@@ -1664,6 +1671,7 @@ export async function POST(request: NextRequest) {
         const newShippingCost = Number(shippingResult?.cost || 0);
         const newFixedFeeAmount = fixedFeeAmount(listingPriceResult);
         const shippingSource = shippingResult?.source || null;
+        const buyerPaidShipping = shippingSource === "buyer_paid_shipping";
         const { data: current } = await supabase
           .from("mercadolibre_shipping_costs")
           .select("*")
@@ -1748,7 +1756,7 @@ export async function POST(request: NextRequest) {
           meli_last_sync_at: now,
         };
 
-        if (!newShippingCost) {
+        if (!newShippingCost && !buyerPaidShipping) {
           noShippingCost += 1;
 
           const shippingPayload: Record<string, unknown> = {
