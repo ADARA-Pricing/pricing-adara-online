@@ -455,6 +455,7 @@ export default function ProductsPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [meliStatusFilter, setMeliStatusFilter] = useState("");
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
+  const [expandedPublicationGroups, setExpandedPublicationGroups] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -559,6 +560,10 @@ export default function ProductsPage() {
 
   function update<K extends keyof Product>(key: K, value: Product[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function togglePublicationGroup(key: string) {
+    setExpandedPublicationGroups((current) => ({ ...current, [key]: !current[key] }));
   }
 
   function editProduct(product: Product) {
@@ -1566,15 +1571,28 @@ export default function ProductsPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {publicationGroups.map((group) => (
+                              {publicationGroups.map((group) => {
+                                const groupKey = `${product.sku}-${group.key}`;
+                                const groupExpanded = Boolean(expandedPublicationGroups[groupKey]);
+                                return (
                                 <Fragment key={group.key}>
                                   <tr className="product-publication-group-row">
                                     <td colSpan={9}>
-                                      <strong>{group.title}</strong>
-                                      <span>{publicationBranchLabel(group.branchKind)} · {group.itemIds.length} MLA · {group.rows.length} variante{group.rows.length === 1 ? "" : "s"}</span>
+                                      <button
+                                        className="product-publication-group-trigger"
+                                        type="button"
+                                        aria-expanded={groupExpanded}
+                                        onClick={() => togglePublicationGroup(groupKey)}
+                                      >
+                                        <span>
+                                          <strong>{group.title}</strong>
+                                          <small>{publicationBranchLabel(group.branchKind)} · {group.itemIds.length} MLA · {group.rows.length} variante{group.rows.length === 1 ? "" : "s"}</small>
+                                        </span>
+                                        {groupExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+                                      </button>
                                     </td>
                                   </tr>
-                                  {sortPublicationsByInstallments(group.rows).map((shipping) => {
+                                  {groupExpanded && sortPublicationsByInstallments(group.rows).map((shipping) => {
                                 return (
                                   <tr key={shipping.id || `${product.sku}-${shipping.meli_item_id}`}>
                                     <td>
@@ -1594,7 +1612,8 @@ export default function ProductsPage() {
                                 );
                                   })}
                                 </Fragment>
-                              ))}
+                                );
+                              })}
                             </tbody>
                           </table>
                           </div>

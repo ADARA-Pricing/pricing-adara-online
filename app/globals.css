@@ -9164,23 +9164,52 @@ textarea:focus,
   background: #f1f6ff !important;
   color: #334155;
   font-size: 12px;
+  padding: 0 !important;
 }
 
-.product-publication-group-row strong {
-  display: block;
+.product-publication-group-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.product-publication-group-trigger:hover {
+  background: #eaf2ff;
+}
+
+.product-publication-group-trigger strong {
+  display: -webkit-box;
   max-width: 720px;
   overflow: hidden;
   color: #0f172a;
   font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.product-publication-group-row span {
+.product-publication-group-trigger small {
   display: block;
   margin-top: 2px;
   color: #64748b;
   font-size: 11px;
+  font-weight: 700;
+}
+
+.product-publication-group-trigger svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: #2563eb;
+  stroke-width: 2;
 }
 
 .product-publication-title {
