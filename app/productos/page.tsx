@@ -3,7 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { BadgeCheck, ChevronRight, CircleCheck, FileSpreadsheet, Package, PackageCheck, PackageMinus, Plus, Search, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import type { MercadoLibreShippingCost, Product } from "@/lib/types";
 import { money, toNumber } from "@/lib/pricing";
@@ -864,9 +864,9 @@ export default function ProductsPage() {
     <main className="container wide products-advanced-page">
       <PageHero
         title="Productos"
-        description="Visualizá, filtrá y actualizá productos con datos comerciales y de MercadoLibre."
+        description="Visualiza, filtra y administra tu catalogo."
         onRefresh={loadProducts}
-        icon="▧"
+        icon={<Package aria-hidden="true" />}
       />
 
       {message && <div className="message success">{message}</div>}
@@ -876,7 +876,10 @@ export default function ProductsPage() {
         <div className="products-toolbar-grid">
           <div className="field">
             <label>Buscar producto</label>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nombre, SKU, EAN o Item ID..." />
+            <label className="search-control">
+              <Search aria-hidden="true" />
+              <input className="form-control search-field" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar producto..." />
+            </label>
           </div>
           <div className="field">
             <label>Categoría</label>
@@ -899,12 +902,15 @@ export default function ProductsPage() {
           </div>
           <div className="products-toolbar-actions">
             <button className="button products-primary-button" type="button" onClick={openNewProductModal}>
-              + Nuevo producto
+              <Plus aria-hidden="true" />
+              Nuevo producto
             </button>
             <button className="button ghost products-secondary-button" type="button" onClick={openImportModal}>
+              <FileSpreadsheet aria-hidden="true" />
               Importar Excel
             </button>
             <button className="button ghost products-secondary-button" type="button" onClick={openMeliImportModal}>
+              <Upload aria-hidden="true" />
               Importar desde ML
             </button>
           </div>
@@ -912,32 +918,32 @@ export default function ProductsPage() {
       </section>
 
       <section className="products-kpi-grid">
-        <div className="card product-kpi-card">
-          <span className="product-kpi-icon">▧</span>
+        <div className="kpi-card product-kpi-card">
+          <span className="product-kpi-icon"><Package aria-hidden="true" /></span>
           <div>
             <p>Total productos</p>
             <strong>{metrics.total}</strong>
             <small>100% del catálogo</small>
           </div>
         </div>
-        <div className="card product-kpi-card">
-          <span className="product-kpi-icon green">⌑</span>
+        <div className="kpi-card product-kpi-card">
+          <span className="product-kpi-icon green"><PackageCheck aria-hidden="true" /></span>
           <div>
             <p>Con publicación ML</p>
             <strong>{metrics.withMl}</strong>
             <small>{metrics.total ? `${Math.round((metrics.withMl / metrics.total) * 100)}% del catálogo` : "0% del catálogo"}</small>
           </div>
         </div>
-        <div className="card product-kpi-card">
-          <span className="product-kpi-icon violet">↻</span>
+        <div className="kpi-card product-kpi-card">
+          <span className="product-kpi-icon violet"><BadgeCheck aria-hidden="true" /></span>
           <div>
             <p>Publicaciones activas</p>
             <strong>{metrics.activePublications}</strong>
             <small>{metrics.pausedPublications} pausadas</small>
           </div>
         </div>
-        <div className="card product-kpi-card">
-          <span className="product-kpi-icon amber">!</span>
+        <div className="kpi-card product-kpi-card">
+          <span className="product-kpi-icon amber"><PackageMinus aria-hidden="true" /></span>
           <div>
             <p>Sin publicación ML</p>
             <strong>{metrics.withoutMl}</strong>
@@ -947,10 +953,8 @@ export default function ProductsPage() {
       </section>
 
       <section className="card products-sync-summary">
-        <div>
-          <span>Última sincronización ML</span>
-          <strong>{formatDateTime(metrics.latestSync)}</strong>
-        </div>
+        <div className="products-sync-status"><CircleCheck aria-hidden="true" /><strong>MercadoLibre sincronizado</strong></div>
+        <div><span>Ultima actualizacion</span><strong>{formatDateTime(metrics.latestSync)}</strong></div>
         <div>
           <span>Productos actualizados hoy</span>
           <strong>{metrics.syncedToday}</strong>
@@ -1283,6 +1287,19 @@ export default function ProductsPage() {
           <section className="card"><p>Cargando productos...</p></section>
         ) : (
           <div className="products-advanced-list">
+            <div className="products-list-columns" aria-hidden="true">
+              <span />
+              <span />
+              <span>Producto</span>
+              <span>Costo</span>
+              <span>Precio</span>
+              <span>Envio ML</span>
+              <span>Fijo ML</span>
+              <span>MLA</span>
+              <span>Stock</span>
+              <span>Estado</span>
+              <span>Accion</span>
+            </div>
             {filtered.map(({ product, shippings }) => {
               const expanded = expandedSku === product.sku;
               const publicationCount = shippings.length;
@@ -1311,10 +1328,10 @@ export default function ProductsPage() {
                     <div className="product-primary">
                       <h3>{product.name}</h3>
                       <p>
-                        <strong>SKU:</strong> {product.sku}
+                        {product.sku}
                         {product.ean ? <> · <strong>EAN:</strong> {product.ean}</> : null}
                       </p>
-                      <p>Categoría: {product.category || "-"} · {product.brand || ""} {product.model || ""}</p>
+                      <p>{product.brand || "-"} · {product.category || "-"}{product.model ? ` · ${product.model}` : ""}</p>
                     </div>
 
                     <div className="product-row-stat">
@@ -1352,7 +1369,7 @@ export default function ProductsPage() {
                       </strong>
                     </div>
                     <button className="item-action product-expand-button" type="button" onClick={() => setExpandedSku(expanded ? null : product.sku)}>
-                      {expanded ? "Ocultar" : "Ver"}
+                      {expanded ? "Cerrar" : "Abrir"}
                       <ChevronRight aria-hidden="true" />
                     </button>
                   </div>

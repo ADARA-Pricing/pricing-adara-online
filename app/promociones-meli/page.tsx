@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, BadgePercent, CalendarClock, ChevronRight, Search, TrendingUp } from "lucide-react";
+import { BadgePercent, CalendarClock, ChevronRight, CircleAlert, Search, TrendingUp } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -2147,7 +2147,7 @@ export default function PromocionesMeliPage() {
               title: "Revisar activas",
               subtitle: `Vigentes con menos de ${percent(redThreshold)}`,
               groups: trafficLights.red,
-              Icon: AlertTriangle,
+              Icon: CircleAlert,
             },
             {
               key: "yellow",
