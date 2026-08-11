@@ -76,6 +76,29 @@ export default function RotacionSkuPage() {
     if (!data.session) router.push("/login");
   }
 
+  async function fetchSalesSince(sinceIso: string) {
+    const pageSize = 1000;
+    const result: MercadoLibreOrderItem[] = [];
+
+    for (let from = 0; from < 20000; from += pageSize) {
+      const to = from + pageSize - 1;
+      const response = await supabase
+        .from("mercadolibre_order_items")
+        .select("*")
+        .gte("order_date", sinceIso)
+        .neq("status", "cancelled")
+        .order("order_date", { ascending: false })
+        .range(from, to);
+
+      if (response.error) return response;
+      const page = (response.data || []) as MercadoLibreOrderItem[];
+      result.push(...page);
+      if (page.length < pageSize) break;
+    }
+
+    return { data: result, error: null };
+  }
+
   async function loadData() {
     setLoading(true);
     setError(null);
@@ -85,12 +108,7 @@ export default function RotacionSkuPage() {
     const [productsResponse, publicationsResponse, salesResponse] = await Promise.all([
       supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).eq("meli_status", "active"),
-      supabase
-        .from("mercadolibre_order_items")
-        .select("*")
-        .gte("order_date", since.toISOString())
-        .neq("status", "cancelled")
-        .order("order_date", { ascending: false }),
+      fetchSalesSince(since.toISOString()),
     ]);
 
     setLoading(false);
