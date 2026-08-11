@@ -64,7 +64,10 @@ type MeliListingPrice = {
   sale_fee_details?: {
     financing_add_on_fee?: number | null;
     fixed_fee?: number | null;
+    fixed_fee_amount?: number | null;
     gross_amount?: number | null;
+    sale_unit_fee?: number | null;
+    unit_fee?: number | null;
     meli_percentage_fee?: number | null;
     percentage_fee?: number | null;
   } | null;
@@ -968,6 +971,10 @@ async function getDetailedItemForPricing(item: MeliItem, account: any) {
   }
 }
 
+function hasListingPriceInputs(item: MeliItem) {
+  return Boolean(Number(item.price || item.base_price || 0) && item.listing_type_id);
+}
+
 async function getPriceToWinForItem(item: MeliItem, account: any): Promise<MeliPriceToWin | null> {
   try {
     return await meliFetch(`/items/${item.id}/price_to_win`, account) as MeliPriceToWin;
@@ -981,25 +988,43 @@ async function getListingPriceForItem(item: MeliItem, account: any): Promise<Mel
   const listingTypeId = item.listing_type_id;
   if (!price || !listingTypeId) return null;
 
-  try {
-    const params = new URLSearchParams({
+  const baseParams = new URLSearchParams({
+    price: String(price),
+    listing_type_id: listingTypeId,
+  });
+  if (item.category_id) baseParams.set("category_id", item.category_id);
+  if (item.domain_id) baseParams.set("domain_id", item.domain_id);
+  const campaignTag = installmentCampaignTag(item);
+  if (campaignTag) baseParams.set("tags", campaignTag);
+
+  const attempts = [
+    baseParams,
+    new URLSearchParams({
       price: String(price),
       listing_type_id: listingTypeId,
-    });
-    if (item.category_id) params.set("category_id", item.category_id);
-    if (item.domain_id) params.set("domain_id", item.domain_id);
-    const campaignTag = installmentCampaignTag(item);
-    if (campaignTag) params.set("tags", campaignTag);
+      ...(item.category_id ? { category_id: item.category_id } : {}),
+    }),
+    new URLSearchParams({
+      price: String(price),
+      listing_type_id: listingTypeId,
+    }),
+  ];
 
-    const data = await meliFetch(
-      `/sites/MLA/listing_prices?${params.toString()}`,
-      account,
-    );
-    const prices = Array.isArray(data) ? data : [];
-    return (prices.find((entry: MeliListingPrice) => entry?.listing_type_id === listingTypeId) || prices[0] || null) as MeliListingPrice | null;
-  } catch {
-    return null;
+  for (const params of attempts) {
+    try {
+      const data = await meliFetch(
+        `/sites/MLA/listing_prices?${params.toString()}`,
+        account,
+      );
+      const prices = Array.isArray(data) ? data : data ? [data] : [];
+      const result = prices.find((entry: MeliListingPrice) => entry?.listing_type_id === listingTypeId) || prices[0] || null;
+      if (result) return result as MeliListingPrice;
+    } catch {
+      // Probamos una variante menos especifica de parametros.
+    }
   }
+
+  return null;
 }
 
 async function getMeliCategory(categoryId: string | null | undefined, account: any): Promise<MeliCategory | null> {
@@ -1198,7 +1223,20 @@ function financingFeeRate(listingPrice: MeliListingPrice | null) {
 }
 
 function fixedFeeAmount(listingPrice: MeliListingPrice | null) {
-  return positiveFeeNumber(listingPrice?.sale_fee_details?.fixed_fee);
+  const details = listingPrice?.sale_fee_details || {};
+  return (
+    positiveFeeNumber(details.fixed_fee) ||
+    positiveFeeNumber(details.fixed_fee_amount) ||
+    positiveFeeNumber(details.unit_fee) ||
+    positiveFeeNumber(details.sale_unit_fee) ||
+    positiveFeeNumber(pickNumberDeep(listingPrice, [
+      "fixed_fee",
+      "fixed_fee_amount",
+      "unit_fee",
+      "sale_unit_fee",
+      "cost_per_unit_sold",
+    ]))
+  );
 }
 
 function optionCodeForInstallments(count: number | null) {
@@ -1359,9 +1397,10 @@ export async function POST(request: NextRequest) {
     async function listingPriceForMatchedItem(item: MeliItem) {
       if (listingPriceByItem.has(item.id)) return listingPriceByItem.get(item.id) || null;
 
-      const detailedItem = item.price && item.listing_type_id
-        ? detailedItemsByItem.get(item.id) || item
-        : detailedItemsByItem.get(item.id) || await getDetailedItemForPricing(item, account);
+      const cachedItem = detailedItemsByItem.get(item.id) || item;
+      const detailedItem = hasListingPriceInputs(cachedItem)
+        ? cachedItem
+        : await getDetailedItemForPricing(item, account);
       detailedItemsByItem.set(item.id, detailedItem);
       const result = await getListingPriceForItem(detailedItem, account);
       listingPriceByItem.set(item.id, result);
