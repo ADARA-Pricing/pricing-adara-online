@@ -272,7 +272,7 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
 .dashboard-action {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
   gap: 12px;
   align-items: center;
   border: 1px solid #e2e8f0;
@@ -314,17 +314,45 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 }
 
 .dashboard-action-metrics {
+  display: grid;
+  grid-template-columns: 72px repeat(2, minmax(108px, 1fr));
+  gap: 8px;
+  align-items: center;
   text-align: right;
 }
 
-.dashboard-action-metrics span {
+.dashboard-action.future .dashboard-action-metrics {
+  grid-template-columns: 72px repeat(3, minmax(90px, 1fr));
+}
+
+.dashboard-action-metrics > div {
+  min-width: 0;
+}
+
+.dashboard-action-metrics span,
+.dashboard-action-metrics strong,
+.dashboard-action-metrics small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-action-margin span {
   color: #047857;
   font-size: 18px;
   font-weight: 800;
 }
 
-.dashboard-action.review .dashboard-action-metrics span {
+.dashboard-action.review .dashboard-action-margin span {
   color: #dc2626;
+}
+
+.dashboard-action-metrics strong {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .dashboard-mini-row {

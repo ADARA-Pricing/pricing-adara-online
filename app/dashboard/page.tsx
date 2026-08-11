@@ -399,7 +399,10 @@ export default function DashboardPage() {
       futureOpportunities,
       activationOpportunities,
       missingPromoSkus,
-      topMeliContributions: [...opportunityRows].sort((a, b) => b.meliAmount - a.meliAmount).slice(0, 6),
+      topMeliContributions: [...opportunityRows]
+        .filter((item) => Number(item.meliAmount || 0) > 0 || Number(item.meliRate || 0) > 0)
+        .sort((a, b) => b.meliAmount - a.meliAmount)
+        .slice(0, 6),
       dataQualityRows: [
         { label: "Publicaciones sin precio ML", value: missingMeliPriceCount, href: "/productos" },
         { label: "Envios gratis sin costo", value: missingShippingCount, href: "/productos" },
@@ -541,10 +544,23 @@ export default function DashboardPage() {
                   <small>{item.promotionName} | {item.installments} | {item.itemId}</small>
                 </div>
                 <div className="dashboard-action-metrics">
-                  <span>{item.margin === null ? "-" : percent(item.margin)}</span>
-                  <small>Venta {moneyWithCents(item.salePrice)}</small>
-                  <small>Comprador {moneyWithCents(item.buyerPrice)}</small>
-                  {item.kind === "future" && <small>Desde {formatDate(item.startDate)}</small>}
+                  <div className="dashboard-action-margin">
+                    <span>{item.margin === null ? "-" : percent(item.margin)}</span>
+                  </div>
+                  <div>
+                    <small>Venta</small>
+                    <strong>{moneyWithCents(item.salePrice)}</strong>
+                  </div>
+                  <div>
+                    <small>Comprador</small>
+                    <strong>{moneyWithCents(item.buyerPrice)}</strong>
+                  </div>
+                  {item.kind === "future" && (
+                    <div>
+                      <small>Desde</small>
+                      <strong>{formatDate(item.startDate)}</strong>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
