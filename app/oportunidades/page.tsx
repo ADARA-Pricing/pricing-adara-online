@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronRight } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -523,15 +524,15 @@ export default function OpportunitiesPage() {
         ))}
       </section>
 
-      <section className="card opportunity-toolbar">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, MLA, producto o promo" />
-        <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}>
+      <section className="card toolbar-card opportunity-toolbar">
+        <input className="form-control search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, MLA, producto o promo" />
+        <select className="form-control" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}>
           <option value="all">Todas las prioridades</option>
           <option value="alta">Alta</option>
           <option value="media">Media</option>
           <option value="baja">Baja</option>
         </select>
-        <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}>
+        <select className="form-control" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}>
           <option value="all">Todos los tipos</option>
           <option value="review">Revisar activa</option>
           <option value="activate">Activar promo</option>
@@ -559,7 +560,7 @@ export default function OpportunitiesPage() {
                   <span className={`badge ${priorityBadgeClass(item.priority)}`}>{item.priority}</span>
                   {item.startDate && <span className="badge badge-date">Desde {formatDate(item.startDate)}</span>}
                 </div>
-                <strong>{item.sku} · {item.productName}</strong>
+                <strong>{item.sku} - {item.productName}</strong>
                 <small>{item.title}: {item.detail}</small>
                 <small>{item.itemId || "-"}{item.installments ? ` | ${item.installments}` : ""}</small>
               </div>
@@ -579,14 +580,24 @@ export default function OpportunitiesPage() {
                 </div>
                 <div className="mini-stat">
                   <span>Aporte ML</span>
-                  <strong>{moneyWithCents(item.meliAmount || 0)} · {percent(item.meliRate || 0)}</strong>
+                  <strong>{moneyWithCents(item.meliAmount || 0)} - {percent(item.meliRate || 0)}</strong>
                 </div>
               </div>
 
-              <Link className="button opportunity-open-button" href={item.href}>Abrir</Link>
+              <Link className="button opportunity-open-button" href={item.href}>
+                Abrir
+                <ChevronRight aria-hidden="true" />
+              </Link>
             </article>
           ))}
-          {!filteredActions.length && <div className="dashboard-empty">No hay oportunidades para los filtros elegidos.</div>}
+          {loading && !filteredActions.length && (
+            <>
+              <div className="skeleton skeleton-action" />
+              <div className="skeleton skeleton-action" />
+              <div className="skeleton skeleton-action" />
+            </>
+          )}
+          {!loading && !filteredActions.length && <div className="empty-state">No hay oportunidades para los filtros elegidos.</div>}
         </div>
       </section>
     </main>
