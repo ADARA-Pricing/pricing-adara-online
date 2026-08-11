@@ -248,6 +248,85 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   background: #fff;
 }
 
+.asesoria360-family-card {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.asesoria360-family-card.expanded {
+  border-color: #93c5fd;
+}
+
+.asesoria360-family-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px 140px 34px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: #fff;
+  color: #0f172a;
+  padding: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.asesoria360-family-card.expanded .asesoria360-family-button {
+  background: #eff6ff;
+}
+
+.asesoria360-family-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.asesoria360-family-main strong,
+.asesoria360-family-main small,
+.asesoria360-family-installments,
+.asesoria360-family-price {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asesoria360-family-main small,
+.asesoria360-family-installments {
+  color: #475569;
+  font-size: 12px;
+}
+
+.asesoria360-family-price {
+  color: #047857;
+  font-weight: 700;
+  text-align: right;
+}
+
+.asesoria360-family-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.asesoria360-family-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid #dbeafe;
+  background: #f8fafc;
+}
+
 .asesoria360-mla-card > div:first-child,
 .asesoria360-price-stack {
   min-width: 0;
@@ -286,9 +365,14 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
 @media (max-width: 720px) {
   .asesoria360-controls,
+  .asesoria360-family-button,
   .asesoria360-mla-card,
   .asesoria360-sku {
     grid-template-columns: 1fr;
+  }
+
+  .asesoria360-family-price {
+    text-align: left;
   }
 
   .asesoria360-price-stack {

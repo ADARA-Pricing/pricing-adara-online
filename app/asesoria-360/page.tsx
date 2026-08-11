@@ -37,6 +37,22 @@ type AdvisoryDraftRow = {
   targetMargin: number;
 };
 
+type AdvisoryPublicationRow = {
+  publication: MercadoLibreShippingCost;
+  installmentCount: number;
+  installmentLabel: string;
+};
+
+type AdvisoryPublicationGroup = {
+  key: string;
+  title: string;
+  catalogProductId: string | null;
+  domainId: string | null;
+  branchKind: "catalog_listing" | "seller_listing";
+  itemIds: string[];
+  rows: AdvisoryPublicationRow[];
+};
+
 const STORAGE_KEY = "adara-asesoria-360-draft";
 const ACCOUNT_NAME = "ADARA RS";
 const MAX_ROWS = 40;
@@ -83,6 +99,38 @@ function optionLabelForPublication(publication: MercadoLibreShippingCost) {
   return `${installments} cuotas`;
 }
 
+function publicationTags(publication: MercadoLibreShippingCost) {
+  return Array.isArray(publication.meli_tags) ? publication.meli_tags.map((tag) => String(tag)) : [];
+}
+
+function publicationBranchKind(publication: MercadoLibreShippingCost): AdvisoryPublicationGroup["branchKind"] {
+  return publicationTags(publication).includes("user_product_listing") ? "catalog_listing" : "seller_listing";
+}
+
+function publicationBranchLabel(branchKind: AdvisoryPublicationGroup["branchKind"]) {
+  return branchKind === "catalog_listing" ? "Catalogo ML" : "Publicacion vendedor";
+}
+
+function normalizedPublicationTitle(publication: MercadoLibreShippingCost) {
+  return (publication.meli_title || publication.sku || publication.meli_item_id || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(1|3|6|9|12)\s*(x|cuotas?)\b/g, "")
+    .replace(/\b(clasica|premium|sin cuotas|con cuotas)\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function publicationFamilyKey(publication: MercadoLibreShippingCost) {
+  const sku = publication.sku || "sin-sku";
+  const branchKind = publicationBranchKind(publication);
+  const catalogKey = publication.meli_catalog_product_id
+    ? `catalog:${publication.meli_catalog_product_id}`
+    : `domain:${publication.meli_domain_id || "sin-domain"}:${normalizedPublicationTitle(publication)}`;
+  return `${sku}|${catalogKey}|${branchKind}`;
+}
+
 function sortPricingOptions(options: MercadoLibrePriceOption[]) {
   const fixedOrder: Record<string, number> = { MC: 1, MP3: 2, MP6: 3, MP9: 4, MP12: 5 };
   return [...options].sort((a, b) => {
@@ -104,6 +152,7 @@ export default function Asesoria360Page() {
   const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
   const [query, setQuery] = useState("");
   const [selectedSku, setSelectedSku] = useState<string | null>(null);
+  const [expandedPublicationGroups, setExpandedPublicationGroups] = useState<Record<string, boolean>>({});
   const [selectedDate, setSelectedDate] = useState(nextWeekday(1));
   const [targetMargin, setTargetMargin] = useState(5);
   const [draftRows, setDraftRows] = useState<AdvisoryDraftRow[]>([]);
@@ -127,7 +176,7 @@ export default function Asesoria360Page() {
       taxesResponse,
       marginsResponse,
     ] = await Promise.all([
-      supabase.from("products").select("*").neq("status", "discontinued").order("sku", { ascending: true }),
+      supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).eq("meli_status", "active").order("sku", { ascending: true }),
       supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
@@ -220,6 +269,46 @@ export default function Asesoria360Page() {
 
   const selectedProduct = selectedSku ? productsBySku.get(selectedSku) || null : null;
   const selectedPublications = selectedSku ? publicationsBySku.get(selectedSku) || [] : [];
+
+  const selectedPublicationGroups = useMemo<AdvisoryPublicationGroup[]>(() => {
+    const families = new Map<string, AdvisoryPublicationGroup>();
+    selectedPublications.forEach((publication) => {
+      const key = publicationFamilyKey(publication) || publication.meli_item_id || publication.sku || "publicacion";
+      const family = families.get(key) || {
+        key,
+        title: publication.meli_title || publication.meli_item_id || "Publicacion ML",
+        catalogProductId: publication.meli_catalog_product_id || null,
+        domainId: publication.meli_domain_id || null,
+        branchKind: publicationBranchKind(publication),
+        itemIds: [],
+        rows: [],
+      };
+      if (publication.meli_item_id && !family.itemIds.includes(publication.meli_item_id)) {
+        family.itemIds.push(publication.meli_item_id);
+      }
+      family.rows.push({
+        publication,
+        installmentCount: publicationInstallments(publication) || 999,
+        installmentLabel: optionLabelForPublication(publication),
+      });
+      families.set(key, family);
+    });
+
+    return [...families.values()]
+      .map((family) => ({
+        ...family,
+        rows: [...family.rows].sort((a, b) => {
+          if (a.installmentCount !== b.installmentCount) return a.installmentCount - b.installmentCount;
+          return String(a.publication.meli_item_id || "").localeCompare(String(b.publication.meli_item_id || ""), "es");
+        }),
+      }))
+      .sort((a, b) => {
+        const firstA = a.rows[0]?.installmentCount ?? 999;
+        const firstB = b.rows[0]?.installmentCount ?? 999;
+        if (firstA !== firstB) return firstA - firstB;
+        return a.title.localeCompare(b.title, "es");
+      });
+  }, [selectedPublications]);
 
   function categoryFeeForProduct(product: Product) {
     return categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase()) || null;
@@ -413,23 +502,52 @@ export default function Asesoria360Page() {
 
           <div className="asesoria360-mla-list">
             {!selectedProduct && <div className="asesoria360-empty">Elegi un SKU para ver sus publicaciones.</div>}
-            {selectedProduct && selectedPublications.map((publication) => {
-              const offerPrice = offerPriceForPublication(selectedProduct, publication, targetMargin);
-              const disabled = draftRows.some((row) => rowKey(row.sku, row.date) === rowKey(selectedProduct.sku, selectedDate));
+            {selectedProduct && selectedPublicationGroups.map((group) => {
+              const expanded = Boolean(expandedPublicationGroups[group.key]);
+              const minSalePrice = Math.min(...group.rows.map((row) => Number(row.publication.meli_price || Infinity)));
+              const installmentText = group.rows.map((row) => row.installmentLabel).join(", ");
               return (
-                <article key={publication.id || publication.meli_item_id} className="asesoria360-mla-card">
-                  <div>
-                    <strong>{publication.meli_item_id}</strong>
-                    <span>{publication.meli_title || selectedProduct.name}</span>
-                    <small>{optionLabelForPublication(publication)}</small>
-                  </div>
-                  <div className="asesoria360-price-stack">
-                    <span>Venta {moneyWithCents(publication.meli_price)}</span>
-                    <strong>Oferta {moneyWithCents(offerPrice)}</strong>
-                  </div>
-                  <button type="button" className="button" disabled={disabled || draftRows.length >= MAX_ROWS} onClick={() => addPublication(publication)}>
-                    Agregar
+                <article key={group.key} className={`asesoria360-family-card ${expanded ? "expanded" : ""}`}>
+                  <button
+                    type="button"
+                    className="asesoria360-family-button"
+                    onClick={() => setExpandedPublicationGroups((current) => ({ ...current, [group.key]: !expanded }))}
+                  >
+                    <span className="asesoria360-family-main">
+                      <strong>{group.title}</strong>
+                      <small>{publicationBranchLabel(group.branchKind)} | {group.itemIds.length} ID(s) | {group.rows.length} variante(s)</small>
+                      <small>{group.catalogProductId ? `Grupo ML ${group.catalogProductId}` : group.domainId || "Sin grupo ML"}</small>
+                    </span>
+                    <span className="asesoria360-family-installments">{installmentText}</span>
+                    <span className="asesoria360-family-price">Desde {Number.isFinite(minSalePrice) ? moneyWithCents(minSalePrice) : "-"}</span>
+                    <span className="asesoria360-family-toggle">{expanded ? "v" : ">"}</span>
                   </button>
+
+                  {expanded && (
+                    <div className="asesoria360-family-rows">
+                      {group.rows.map((row) => {
+                        const publication = row.publication;
+                        const offerPrice = offerPriceForPublication(selectedProduct, publication, targetMargin);
+                        const disabled = draftRows.some((draft) => rowKey(draft.sku, draft.date) === rowKey(selectedProduct.sku, selectedDate));
+                        return (
+                          <article key={publication.id || publication.meli_item_id} className="asesoria360-mla-card">
+                            <div>
+                              <strong>{row.installmentLabel}</strong>
+                              <span>{publication.meli_item_id}</span>
+                              <small>{publication.meli_listing_type_name || publication.meli_listing_type_id || "Tipo sin dato"}</small>
+                            </div>
+                            <div className="asesoria360-price-stack">
+                              <span>Venta {moneyWithCents(publication.meli_price)}</span>
+                              <strong>Oferta {moneyWithCents(offerPrice)}</strong>
+                            </div>
+                            <button type="button" className="button" disabled={disabled || draftRows.length >= MAX_ROWS} onClick={() => addPublication(publication)}>
+                              Agregar
+                            </button>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
                 </article>
               );
             })}
