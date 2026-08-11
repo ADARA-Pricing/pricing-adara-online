@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, ChartNoAxesCombined, Database, RefreshCw, Search } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Check, ChartNoAxesCombined, Database, Filter, RefreshCw, Search } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import { moneyWithCents } from "@/lib/pricing";
@@ -11,6 +11,11 @@ import type { MercadoLibreOrderItem, MercadoLibreShippingCost, Product } from "@
 
 type SortKey = "productName" | "sku" | "units7" | "revenue7" | "units30" | "revenue30" | "units60" | "stock" | "stockDays" | "lastSale" | "activePublications" | "catalogCount";
 type SortDirection = "asc" | "desc";
+type FilterableColumn = "productName" | "activePublications" | "units7" | "revenue7" | "units30" | "revenue30" | "units60" | "stock" | "stockDays";
+type NumberFilterOperator = "gt" | "lt" | "between";
+type ColumnFilter =
+  | { kind: "text"; value: string }
+  | { kind: "number"; operator: NumberFilterOperator; min: string; max: string };
 
 type RotationRow = {
   sku: string;
@@ -112,6 +117,8 @@ export default function RotacionSkuPage() {
   const [rotationFilter, setRotationFilter] = useState("");
   const [onlyWithSales, setOnlyWithSales] = useState(false);
   const [onlyLowStock, setOnlyLowStock] = useState(false);
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, ColumnFilter>>>({});
+  const [openFilter, setOpenFilter] = useState<FilterableColumn | null>(null);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -275,6 +282,37 @@ export default function RotacionSkuPage() {
     });
   }, [products, publications, imagePublications, sales]);
 
+  function columnFilterIsActive(filter?: ColumnFilter) {
+    if (!filter) return false;
+    if (filter.kind === "text") return Boolean(filter.value.trim());
+    if (filter.operator === "between") return Boolean(filter.min.trim() || filter.max.trim());
+    return Boolean(filter.min.trim());
+  }
+
+  function numericFilterMatches(value: number | null | undefined, filter: Extract<ColumnFilter, { kind: "number" }>) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return false;
+    const min = Number(filter.min);
+    const max = Number(filter.max);
+    if (filter.operator === "gt") return Number.isFinite(min) ? number > min : true;
+    if (filter.operator === "lt") return Number.isFinite(min) ? number < min : true;
+    if (Number.isFinite(min) && number < min) return false;
+    if (Number.isFinite(max) && number > max) return false;
+    return Number.isFinite(min) || Number.isFinite(max);
+  }
+
+  function rowMatchesColumnFilters(row: RotationRow) {
+    return (Object.entries(columnFilters) as Array<[FilterableColumn, ColumnFilter]>).every(([column, filter]) => {
+      if (!columnFilterIsActive(filter)) return true;
+      if (filter.kind === "text") {
+        return `${row.productName} ${row.sku} ${row.category || ""}`.toLowerCase().includes(filter.value.trim().toLowerCase());
+      }
+      return numericFilterMatches(row[column] as number | null, filter);
+    });
+  }
+
+  const activeColumnFilterCount = Object.values(columnFilters).filter(columnFilterIsActive).length;
+
   const filteredRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const multiplier = sortDirection === "asc" ? 1 : -1;
@@ -288,6 +326,7 @@ export default function RotacionSkuPage() {
         if (rotationFilter === "normal" && !(row.stockDays !== null && row.stockDays >= 25)) return false;
         if (onlyWithSales && row.units30 <= 0) return false;
         if (onlyLowStock && !(row.stockDays !== null && row.stockDays < 25)) return false;
+        if (!rowMatchesColumnFilters(row)) return false;
         return true;
       })
       .sort((a, b) => {
@@ -303,7 +342,7 @@ export default function RotacionSkuPage() {
         const bv = Number(b[sortKey] ?? -1);
         return (av - bv) * multiplier;
       });
-  }, [categoryFilter, onlyLowStock, onlyWithSales, query, rotationFilter, rows, sortDirection, sortKey]);
+  }, [categoryFilter, columnFilters, onlyLowStock, onlyWithSales, query, rotationFilter, rows, sortDirection, sortKey]);
 
   const totals = useMemo(() => {
     const units30 = rows.reduce((total, row) => total + row.units30, 0);
@@ -317,7 +356,23 @@ export default function RotacionSkuPage() {
     return [...new Set(rows.map((row) => row.category).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "es"));
   }, [rows]);
 
-  const activeFilterCount = [query.trim(), categoryFilter, rotationFilter, onlyWithSales ? "sales" : "", onlyLowStock ? "stock" : ""].filter(Boolean).length;
+  const sortLabels: Record<SortKey, string> = {
+    productName: "Producto",
+    sku: "SKU",
+    activePublications: "Publicaciones",
+    catalogCount: "Catalogo",
+    units7: "Unidades 7 dias",
+    revenue7: "Venta 7 dias",
+    units30: "Unidades 30 dias",
+    revenue30: "Venta 30 dias",
+    units60: "60 dias",
+    stock: "Stock",
+    stockDays: "Dias stock",
+    lastSale: "Ultima venta",
+  };
+  const quickFilterCount = [query.trim(), categoryFilter, rotationFilter, onlyWithSales ? "sales" : "", onlyLowStock ? "stock" : ""].filter(Boolean).length;
+  const activeFilterCount = quickFilterCount + activeColumnFilterCount;
+  const defaultSortActive = sortKey === "units30" && sortDirection === "desc";
 
   function changeSort(key: SortKey) {
     if (sortKey === key) {
@@ -329,7 +384,7 @@ export default function RotacionSkuPage() {
   }
 
   function SortIcon({ column }: { column: SortKey }) {
-    if (sortKey !== column) return <ArrowUpDown aria-hidden="true" />;
+    if (sortKey !== column) return <ArrowUpDown className="idle-sort-icon" aria-hidden="true" />;
     return sortDirection === "asc" ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />;
   }
 
@@ -348,6 +403,116 @@ export default function RotacionSkuPage() {
     setRotationFilter("");
     setOnlyWithSales(false);
     setOnlyLowStock(false);
+    setColumnFilters({});
+    setOpenFilter(null);
+  }
+
+  function resetSort() {
+    setSortKey("units30");
+    setSortDirection("desc");
+  }
+
+  function updateColumnFilter(column: FilterableColumn, filter: ColumnFilter) {
+    setColumnFilters((current) => ({ ...current, [column]: filter }));
+  }
+
+  function clearColumnFilter(column: FilterableColumn) {
+    setColumnFilters((current) => {
+      const next = { ...current };
+      delete next[column];
+      return next;
+    });
+  }
+
+  function ColumnFilterPopover({ column }: { column: FilterableColumn }) {
+    const current = columnFilters[column];
+    const isText = column === "productName";
+    const active = columnFilterIsActive(current);
+    return (
+      <div className="rotation-filter-popover" onClick={(event) => event.stopPropagation()}>
+        {isText ? (
+          <label>
+            <span>Contiene</span>
+            <input
+              autoFocus
+              value={current?.kind === "text" ? current.value : ""}
+              onChange={(event) => updateColumnFilter(column, { kind: "text", value: event.target.value })}
+              placeholder="Buscar en producto"
+            />
+          </label>
+        ) : (
+          <>
+            <label>
+              <span>Condicion</span>
+              <select
+                value={current?.kind === "number" ? current.operator : "gt"}
+                onChange={(event) => updateColumnFilter(column, {
+                  kind: "number",
+                  operator: event.target.value as NumberFilterOperator,
+                  min: current?.kind === "number" ? current.min : "",
+                  max: current?.kind === "number" ? current.max : "",
+                })}
+              >
+                <option value="gt">Mayor que</option>
+                <option value="lt">Menor que</option>
+                <option value="between">Entre</option>
+              </select>
+            </label>
+            <label>
+              <span>{current?.kind === "number" && current.operator === "between" ? "Desde" : "Valor"}</span>
+              <input
+                autoFocus
+                type="number"
+                value={current?.kind === "number" ? current.min : ""}
+                onChange={(event) => updateColumnFilter(column, {
+                  kind: "number",
+                  operator: current?.kind === "number" ? current.operator : "gt",
+                  min: event.target.value,
+                  max: current?.kind === "number" ? current.max : "",
+                })}
+              />
+            </label>
+            {current?.kind === "number" && current.operator === "between" && (
+              <label>
+                <span>Hasta</span>
+                <input
+                  type="number"
+                  value={current.max}
+                  onChange={(event) => updateColumnFilter(column, { ...current, max: event.target.value })}
+                />
+              </label>
+            )}
+          </>
+        )}
+        <div className="rotation-filter-actions">
+          <button type="button" onClick={() => setOpenFilter(null)}>Aplicar</button>
+          <button type="button" disabled={!active} onClick={() => clearColumnFilter(column)}>Limpiar</button>
+        </div>
+      </div>
+    );
+  }
+
+  function HeaderTools({ column, filterColumn, children }: { column: SortKey; filterColumn?: FilterableColumn; children: ReactNode }) {
+    const activeFilter = filterColumn ? columnFilterIsActive(columnFilters[filterColumn]) : false;
+    return (
+      <div className="rotation-header-tools">
+        <SortButton column={column}>{children}</SortButton>
+        {filterColumn && (
+          <button
+            className={`rotation-filter-trigger ${activeFilter ? "active" : ""}`}
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setOpenFilter((current) => current === filterColumn ? null : filterColumn);
+            }}
+            aria-label={`Filtrar ${children}`}
+          >
+            <Filter aria-hidden="true" />
+          </button>
+        )}
+        {filterColumn && openFilter === filterColumn && <ColumnFilterPopover column={filterColumn} />}
+      </div>
+    );
   }
 
   const salesCoverage = useMemo(() => {
@@ -434,16 +599,25 @@ export default function RotacionSkuPage() {
           </select>
           <label className={`rotation-filter-chip ${onlyWithSales ? "active" : ""}`}>
             <input type="checkbox" checked={onlyWithSales} onChange={(event) => setOnlyWithSales(event.target.checked)} />
+            {onlyWithSales && <Check aria-hidden="true" />}
             Con ventas
           </label>
           <label className={`rotation-filter-chip ${onlyLowStock ? "active" : ""}`}>
             <input type="checkbox" checked={onlyLowStock} onChange={(event) => setOnlyLowStock(event.target.checked)} />
+            {onlyLowStock && <Check aria-hidden="true" />}
             Stock bajo
           </label>
         </div>
         <div className="rotation-table-status">
-          <span>{filteredRows.length} de {rows.length} SKU{activeFilterCount ? ` · ${activeFilterCount} filtros activos` : ""}</span>
-          {activeFilterCount ? <button className="button ghost small-button" type="button" onClick={clearFilters}>Limpiar filtros</button> : null}
+          <span>
+            {filteredRows.length} de {rows.length} SKU
+            {activeFilterCount ? ` · ${activeFilterCount} filtros activos` : ""}
+            {` · Ordenado por ${sortLabels[sortKey]} ${sortDirection === "asc" ? "↑" : "↓"}`}
+          </span>
+          <div className="rotation-table-actions">
+            {activeFilterCount ? <button className="button ghost small-button" type="button" onClick={clearFilters}>Limpiar filtros</button> : null}
+            {!defaultSortActive ? <button className="button ghost small-button" type="button" onClick={resetSort}>Restablecer orden</button> : null}
+          </div>
         </div>
 
         {loading ? (
@@ -469,20 +643,20 @@ export default function RotacionSkuPage() {
               </colgroup>
               <thead>
                 <tr>
-                  <th rowSpan={2}><SortButton column="productName">Producto</SortButton></th>
-                  <th rowSpan={2}><SortButton column="activePublications">Publicaciones</SortButton></th>
-                  <th colSpan={2}>Últimos 7 días</th>
-                  <th colSpan={2}>Últimos 30 días</th>
-                  <th rowSpan={2}><SortButton column="units60">60 días</SortButton></th>
-                  <th rowSpan={2}><SortButton column="stock">Stock</SortButton></th>
-                  <th rowSpan={2}><SortButton column="stockDays">Días stock</SortButton></th>
+                  <th className="sticky-product-column" rowSpan={2}><HeaderTools column="productName" filterColumn="productName">Producto</HeaderTools></th>
+                  <th rowSpan={2}><HeaderTools column="activePublications" filterColumn="activePublications">Publicaciones</HeaderTools></th>
+                  <th className="rotation-group-7" colSpan={2}>Últimos 7 días</th>
+                  <th className="rotation-group-30" colSpan={2}>Últimos 30 días</th>
+                  <th rowSpan={2}><HeaderTools column="units60" filterColumn="units60">60 días</HeaderTools></th>
+                  <th rowSpan={2}><HeaderTools column="stock" filterColumn="stock">Stock</HeaderTools></th>
+                  <th rowSpan={2}><HeaderTools column="stockDays" filterColumn="stockDays">Días stock</HeaderTools></th>
                   <th rowSpan={2}><SortButton column="lastSale">Última venta</SortButton></th>
                 </tr>
                 <tr>
-                  <th><SortButton column="units7">Unidades</SortButton></th>
-                  <th><SortButton column="revenue7">Venta</SortButton></th>
-                  <th><SortButton column="units30">Unidades</SortButton></th>
-                  <th><SortButton column="revenue30">Venta</SortButton></th>
+                  <th className="rotation-group-7"><HeaderTools column="units7" filterColumn="units7">Unidades</HeaderTools></th>
+                  <th className="rotation-group-7 rotation-group-divider"><HeaderTools column="revenue7" filterColumn="revenue7">Venta</HeaderTools></th>
+                  <th className="rotation-group-30"><HeaderTools column="units30" filterColumn="units30">Unidades</HeaderTools></th>
+                  <th className="rotation-group-30"><HeaderTools column="revenue30" filterColumn="revenue30">Venta</HeaderTools></th>
                 </tr>
               </thead>
               <tbody>
@@ -505,7 +679,7 @@ export default function RotacionSkuPage() {
                     <td className="numeric">{moneyWithCents(row.revenue7)}</td>
                     <td className="numeric">{row.units30}</td>
                     <td className="numeric">
-                      <strong>{moneyWithCents(row.revenue30)}</strong>
+                      {moneyWithCents(row.revenue30)}
                       <span>{row.avgPrice30 ? `Prom. ${moneyWithCents(row.avgPrice30)}` : "-"}</span>
                     </td>
                     <td className="numeric">{row.units60}</td>
@@ -622,6 +796,11 @@ export default function RotacionSkuPage() {
           color: #334155;
           white-space: nowrap;
         }
+        .rotation-filter-chip svg {
+          width: 13px;
+          height: 13px;
+          color: #1d4ed8;
+        }
         .rotation-filter-chip.active {
           border-color: #bfdbfe;
           background: #eff6ff;
@@ -636,6 +815,11 @@ export default function RotacionSkuPage() {
           font-size: 12px;
           font-weight: 700;
           margin-bottom: 10px;
+        }
+        .rotation-table-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
         }
         .rotation-skeleton {
           display: grid;
@@ -663,6 +847,7 @@ export default function RotacionSkuPage() {
         .rotation-col-days { width: 7%; }
         .rotation-col-date { width: 7%; }
         .rotation-table th {
+          position: relative;
           text-align: left;
           background: #f8fafc;
           color: #526580;
@@ -672,6 +857,11 @@ export default function RotacionSkuPage() {
           padding: 8px 10px;
           vertical-align: middle;
         }
+        .rotation-table thead {
+          position: sticky;
+          top: 0;
+          z-index: 8;
+        }
         .rotation-table thead tr:first-child th[colspan] {
           text-align: center;
           color: #64748b;
@@ -679,6 +869,18 @@ export default function RotacionSkuPage() {
           letter-spacing: 0.06em;
           text-transform: uppercase;
           background: #f6f8fb;
+        }
+        .rotation-table th.rotation-group-7,
+        .rotation-table th.rotation-group-30 {
+          background: #f8fafc;
+        }
+        .rotation-table th.rotation-group-7[colspan],
+        .rotation-table th.rotation-group-30[colspan] {
+          background: #f3f7fc;
+          border-top: 1px solid #e2eaf5;
+        }
+        .rotation-table .rotation-group-divider {
+          border-right: 1px solid #d7e2f0;
         }
         .rotation-table thead tr:nth-child(2) th {
           background: #f8fafc;
@@ -694,8 +896,24 @@ export default function RotacionSkuPage() {
         .rotation-table tbody tr:hover td {
           background: #f8fbff;
         }
+        .rotation-table th.sticky-product-column,
+        .rotation-table td:first-child {
+          position: sticky;
+          left: 0;
+          z-index: 5;
+          background: #fff;
+          box-shadow: 1px 0 0 #e2e8f0;
+        }
+        .rotation-table th.sticky-product-column {
+          z-index: 10;
+          background: #f8fafc;
+        }
+        .rotation-table tbody tr:hover td:first-child {
+          background: #f8fbff;
+        }
         .rotation-table .numeric {
           text-align: right;
+          font-weight: 600;
         }
         .rotation-table td span {
           display: block;
@@ -747,6 +965,101 @@ export default function RotacionSkuPage() {
           flex-shrink: 0;
           stroke-width: 1.7;
         }
+        .rotation-sort-trigger .idle-sort-icon {
+          width: 0;
+          opacity: 0;
+          transition: opacity 0.12s ease, width 0.12s ease;
+        }
+        .rotation-header-tools:hover .idle-sort-icon {
+          width: 12px;
+          opacity: 0.55;
+        }
+        .rotation-header-tools {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+        }
+        .rotation-filter-trigger {
+          all: unset;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          color: #64748b;
+          cursor: pointer;
+          opacity: 0;
+          border-radius: 6px;
+        }
+        .rotation-header-tools:hover .rotation-filter-trigger,
+        .rotation-filter-trigger.active {
+          opacity: 1;
+        }
+        .rotation-filter-trigger:hover,
+        .rotation-filter-trigger.active {
+          color: #1d4ed8;
+          background: #eff6ff;
+        }
+        .rotation-filter-trigger svg {
+          width: 12px;
+          height: 12px;
+          stroke-width: 1.8;
+        }
+        .rotation-filter-popover {
+          position: absolute;
+          top: calc(100% + 8px);
+          left: 0;
+          z-index: 30;
+          display: grid;
+          gap: 8px;
+          width: 210px;
+          padding: 10px;
+          border: 1px solid #dbe6f4;
+          border-radius: 10px;
+          background: #fff;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+          color: #0f172a;
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: none;
+          letter-spacing: 0;
+        }
+        .rotation-filter-popover label {
+          display: grid;
+          gap: 4px;
+        }
+        .rotation-filter-popover label span {
+          color: #64748b;
+          font-size: 11px;
+        }
+        .rotation-filter-popover input,
+        .rotation-filter-popover select {
+          width: 100%;
+          min-height: 32px;
+          border: 1px solid #cfe0f6;
+          border-radius: 8px;
+          padding: 0 9px;
+          background: #fff;
+          color: #0f172a;
+          font-size: 12px;
+        }
+        .rotation-filter-actions {
+          display: flex;
+          gap: 8px;
+          justify-content: flex-end;
+        }
+        .rotation-filter-actions button {
+          all: unset;
+          cursor: pointer;
+          color: #2563eb;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .rotation-filter-actions button:disabled {
+          cursor: default;
+          color: #94a3b8;
+        }
         .rotation-product-sort {
           display: flex;
           flex-direction: column;
@@ -795,7 +1108,7 @@ export default function RotacionSkuPage() {
           display: -webkit-box;
           color: #0f172a;
           font-size: 13px;
-          font-weight: 800;
+          font-weight: 600;
           line-height: 1.25;
           overflow: hidden;
           -webkit-line-clamp: 2;
