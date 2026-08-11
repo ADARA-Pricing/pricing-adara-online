@@ -1,0 +1,520 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { PageHero } from "@/components/PageHero";
+import { createClient } from "@/lib/supabase";
+import {
+  calculatePriceSummary,
+  defaultTaxSettings,
+  mercadoLibreClassicOption,
+  moneyWithCents,
+  normalizeOption,
+  percent,
+} from "@/lib/pricing";
+import type {
+  MercadoLibreCategoryFee,
+  MercadoLibreInstallmentFee,
+  MercadoLibrePriceOption,
+  MercadoLibrePromotionOpportunity,
+  MercadoLibreShippingCost,
+  Product,
+  ProductChannelMargin,
+  TaxSettings,
+} from "@/lib/types";
+
+type OpportunityType = "review" | "activate" | "future" | "missing_promo" | "data_issue";
+type OpportunityPriority = "alta" | "media" | "baja";
+
+type OpportunityAction = {
+  key: string;
+  type: OpportunityType;
+  priority: OpportunityPriority;
+  sku: string;
+  productName: string;
+  itemId?: string | null;
+  installments?: string;
+  title: string;
+  detail: string;
+  margin?: number | null;
+  buyerPrice?: number | null;
+  currentPrice?: number | null;
+  meliAmount?: number | null;
+  meliRate?: number | null;
+  startDate?: string | null;
+  href: string;
+};
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit" }).format(new Date(value));
+}
+
+function daysSince(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return (Date.now() - date.getTime()) / 86400000;
+}
+
+function publicationInstallments(publication: MercadoLibreShippingCost) {
+  const text = `${publication.meli_installments_text || ""} ${publication.notes || ""}`.toLowerCase();
+  const match = text.match(/(\d+)\s*cuota/);
+  if (match) return Number(match[1]);
+  if (text.includes("sin cuotas") || text.includes("1 pago")) return 1;
+  return null;
+}
+
+function installmentLabel(count?: number | null) {
+  if (!count || count <= 1) return "1 pago";
+  return `${count} cuotas`;
+}
+
+function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) {
+  const status = `${item.item_promotion_status || item.promotion_status || ""}`.toLowerCase();
+  return status.includes("started") || status.includes("active");
+}
+
+function isFutureOpportunity(item: MercadoLibrePromotionOpportunity, currentIso = nowIso()) {
+  if (!item.start_date) return false;
+  if (isActiveOpportunity(item)) return false;
+  return item.start_date > currentIso;
+}
+
+function sortPricingOptions(options: MercadoLibrePriceOption[]) {
+  const fixedOrder: Record<string, number> = { MC: 1, MP3: 2, MP6: 3, MP9: 4, MP12: 5 };
+  return [...options].sort((a, b) => {
+    const orderA = fixedOrder[a.code] ?? 1000;
+    const orderB = fixedOrder[b.code] ?? 1000;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.code.localeCompare(b.code, "es");
+  });
+}
+
+function priorityForMargin(type: OpportunityType, margin?: number | null, meliAmount = 0): OpportunityPriority {
+  if (type === "review") return "alta";
+  if (type === "data_issue") return "media";
+  if (Number(margin || 0) >= 10 || Number(meliAmount || 0) >= 10000) return "alta";
+  if (Number(margin || 0) >= 5) return "media";
+  return "baja";
+}
+
+function typeLabel(type: OpportunityType) {
+  if (type === "review") return "Revisar activa";
+  if (type === "activate") return "Activar promo";
+  if (type === "future") return "Futura";
+  if (type === "missing_promo") return "Sin promo";
+  return "Datos";
+}
+
+export default function OpportunitiesPage() {
+  const router = useRouter();
+  const supabase = createClient();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
+  const [opportunities, setOpportunities] = useState<MercadoLibrePromotionOpportunity[]>([]);
+  const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
+  const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
+  const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
+  const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
+  const [typeFilter, setTypeFilter] = useState<"all" | OpportunityType>("all");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | OpportunityPriority>("all");
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function checkSession() {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) router.push("/login");
+  }
+
+  async function loadData() {
+    setLoading(true);
+    setError(null);
+    const [
+      productsResponse,
+      publicationsResponse,
+      opportunitiesResponse,
+      installmentsResponse,
+      categoryFeesResponse,
+      taxesResponse,
+      marginsResponse,
+    ] = await Promise.all([
+      supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
+      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).eq("meli_status", "active"),
+      supabase.from("mercadolibre_promotion_opportunities").select("*").order("meli_amount", { ascending: false }).limit(2000),
+      supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
+      supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
+      supabase.from("tax_settings").select("*").eq("key", "default").single(),
+      supabase.from("product_channel_margins").select("*"),
+    ]);
+    setLoading(false);
+
+    if (productsResponse.error) setError(productsResponse.error.message);
+    else setProducts((productsResponse.data || []) as Product[]);
+    if (publicationsResponse.error) setError(publicationsResponse.error.message);
+    else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
+    if (opportunitiesResponse.error) setError(opportunitiesResponse.error.message);
+    else setOpportunities((opportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]);
+    if (installmentsResponse.error) setError(installmentsResponse.error.message);
+    else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
+    if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
+    else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
+    if (taxesResponse.error) setError(taxesResponse.error.message);
+    else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
+    if (marginsResponse.error) setError(marginsResponse.error.message);
+    else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
+  }
+
+  useEffect(() => {
+    checkSession();
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
+
+  const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
+    return sortPricingOptions([
+      mercadoLibreClassicOption(),
+      ...installments.map((item) =>
+        normalizeOption({
+          code: item.code,
+          name: item.name,
+          channel_type: item.channel_type,
+          installment_count: item.installment_count,
+          financing_fee_rate: item.financing_fee_rate,
+          applies_marketplace_fee: item.applies_marketplace_fee,
+          applies_shipping: item.applies_shipping,
+          applies_iibb: item.applies_iibb,
+          applies_idc: item.applies_idc,
+          applies_iigg: item.applies_iigg,
+          applies_structure: item.applies_structure,
+          applies_vat: item.applies_vat,
+          active: item.active,
+        }),
+      ),
+    ]);
+  }, [installments]);
+
+  function categoryFeeForProduct(product: Product) {
+    return categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase()) || null;
+  }
+
+  function channelSetting(productId: string | undefined, optionCode: string) {
+    return marginSettings.find((item) => item.product_id === productId && item.channel_code === optionCode);
+  }
+
+  function optionForPublication(publication: MercadoLibreShippingCost) {
+    const count = publicationInstallments(publication);
+    const byCount = pricingOptions.find((option) => Number(option.installment_count || 0) === Number(count || 0));
+    if (byCount) return byCount;
+    const financingRate = Number(publication.meli_financing_fee_rate || 0);
+    const byRate = pricingOptions.find((option) => Math.abs(Number(option.financing_fee_rate || 0) - financingRate) < 0.05);
+    return byRate || mercadoLibreClassicOption();
+  }
+
+  function marginForPublication(product: Product, publication: MercadoLibreShippingCost, salePrice?: number | null) {
+    if (!salePrice || salePrice <= 0) return null;
+    const option = normalizeOption(optionForPublication(publication));
+    const setting = channelSetting(product.id, option.code);
+    const result = calculatePriceSummary(
+      product,
+      option,
+      option.applies_marketplace_fee ? categoryFeeForProduct(product) : null,
+      taxes,
+      option.applies_shipping ? publication : null,
+      {
+        salePrice,
+        structureAmount: Number(setting?.structure_amount || 0),
+        manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
+        salesCommissionRate: Number(setting?.sales_commission_rate || 0),
+        saleAppliesVat: setting?.sale_applies_vat ?? Boolean(option.applies_vat),
+        costVatRate: Number(setting?.cost_vat_rate || 0),
+        roundTo: 100,
+        roundingMode: "nearest",
+      },
+    ) as { valid: boolean; marginOnNetSale?: number | null };
+    return result.valid ? Number(result.marginOnNetSale || 0) : null;
+  }
+
+  const actions = useMemo<OpportunityAction[]>(() => {
+    const currentIso = nowIso();
+    const activePublications = publications.filter((publication) => Boolean(productsById.get(publication.product_id)));
+    const publicationsByItemId = new Map(activePublications.map((publication) => [publication.meli_item_id, publication]));
+    const rows: OpportunityAction[] = [];
+
+    activePublications.forEach((publication) => {
+      const product = productsById.get(publication.product_id);
+      if (!product) return;
+      const sku = product.sku;
+      const name = product.name;
+      const installments = installmentLabel(publicationInstallments(publication));
+      const itemId = publication.meli_item_id || "";
+
+      if (!Number(product.cost_without_vat || 0)) {
+        rows.push({
+          key: `data-cost-${product.id}`,
+          type: "data_issue",
+          priority: "media",
+          sku,
+          productName: name,
+          title: "Producto sin costo",
+          detail: "Cargar costo para poder calcular margen real.",
+          href: "/productos",
+        });
+      }
+      if (!Number(publication.meli_price || 0)) {
+        rows.push({
+          key: `data-price-${publication.id || itemId}`,
+          type: "data_issue",
+          priority: "media",
+          sku,
+          productName: name,
+          itemId,
+          installments,
+          title: "Publicacion sin precio ML",
+          detail: "Sin precio vigente no se puede comparar contra promos.",
+          href: "/productos",
+        });
+      }
+      if (publication.free_shipping && !Number(publication.shipping_cost_amount || 0)) {
+        rows.push({
+          key: `data-shipping-${publication.id || itemId}`,
+          type: "data_issue",
+          priority: "media",
+          sku,
+          productName: name,
+          itemId,
+          installments,
+          title: "Envio gratis sin costo",
+          detail: "Revisar sincronizacion o cargar costo de envio para esta publicacion.",
+          href: "/productos",
+        });
+      }
+      if ((daysSince(publication.meli_last_sync_at || publication.updated_at || publication.created_at) ?? 99) > 1) {
+        rows.push({
+          key: `data-sync-${publication.id || itemId}`,
+          type: "data_issue",
+          priority: "baja",
+          sku,
+          productName: name,
+          itemId,
+          installments,
+          title: "Datos ML viejos",
+          detail: "Conviene sincronizar antes de decidir precio o promo.",
+          href: "/configuracion/mercadolibre",
+        });
+      }
+
+      if (Number(publication.meli_promo_price || 0) > 0) {
+        const margin = marginForPublication(product, publication, Number(publication.meli_promo_price || 0));
+        if (margin !== null && margin < 5) {
+          rows.push({
+            key: `review-${publication.id || itemId}`,
+            type: "review",
+            priority: "alta",
+            sku,
+            productName: name,
+            itemId,
+            installments,
+            title: "Promo vigente con margen bajo",
+            detail: publication.meli_promo_name || "Promo vigente",
+            margin,
+            buyerPrice: Number(publication.meli_promo_price || 0),
+            currentPrice: Number(publication.meli_price || 0) || null,
+            meliAmount: Number(publication.meli_promo_meli_amount || 0),
+            meliRate: Number(publication.meli_promo_meli_rate || 0),
+            href: "/promociones-meli",
+          });
+        }
+      }
+    });
+
+    opportunities.forEach((opportunity) => {
+      const publication = publicationsByItemId.get(opportunity.meli_item_id);
+      if (!publication) return;
+      const product = productsById.get(publication.product_id);
+      if (!product) return;
+      const margin = marginForPublication(product, publication, Number(opportunity.promo_price || 0));
+      if (margin === null || margin < 5) return;
+      const future = isFutureOpportunity(opportunity, currentIso);
+      const type: OpportunityType = future ? "future" : "activate";
+      const meliAmount = Number(opportunity.meli_amount || 0);
+      rows.push({
+        key: `${type}-${opportunity.offer_id || opportunity.promotion_id}-${opportunity.meli_item_id}`,
+        type,
+        priority: priorityForMargin(type, margin, meliAmount),
+        sku: product.sku,
+        productName: product.name,
+        itemId: opportunity.meli_item_id,
+        installments: installmentLabel(publicationInstallments(publication)),
+        title: future ? "Promo futura rentable" : "Promo rentable para activar",
+        detail: opportunity.promotion_name || opportunity.promotion_id,
+        margin,
+        buyerPrice: Number(opportunity.promo_price || 0) || null,
+        currentPrice: Number(publication.meli_price || 0) || null,
+        meliAmount,
+        meliRate: Number(opportunity.meli_percentage || 0),
+        startDate: opportunity.start_date || null,
+        href: future ? "/asesoria-360" : "/promociones-meli",
+      });
+    });
+
+    const activePromoKeys = new Set<string>();
+    activePublications.forEach((publication) => {
+      const product = productsById.get(publication.product_id);
+      if (!product) return;
+      if (!Number(publication.meli_promo_price || 0)) return;
+      activePromoKeys.add(`${product.sku}|${publicationInstallments(publication) || 1}`);
+    });
+    opportunities.filter(isActiveOpportunity).forEach((opportunity) => {
+      const publication = publicationsByItemId.get(opportunity.meli_item_id);
+      const product = publication ? productsById.get(publication.product_id) : null;
+      if (!publication || !product) return;
+      activePromoKeys.add(`${product.sku}|${publicationInstallments(publication) || 1}`);
+    });
+
+    activePublications.forEach((publication) => {
+      const product = productsById.get(publication.product_id);
+      if (!product) return;
+      const count = publicationInstallments(publication) || 1;
+      if (activePromoKeys.has(`${product.sku}|${count}`)) return;
+      rows.push({
+        key: `missing-${publication.id || publication.meli_item_id}`,
+        type: "missing_promo",
+        priority: "baja",
+        sku: product.sku,
+        productName: product.name,
+        itemId: publication.meli_item_id,
+        installments: installmentLabel(count),
+        title: "Sin promo vigente en esta cuota",
+        detail: "Puede servir para Asesoria 360 o para buscar oportunidad futura.",
+        currentPrice: Number(publication.meli_price || 0) || null,
+        href: "/asesoria-360",
+      });
+    });
+
+    const priorityOrder: Record<OpportunityPriority, number> = { alta: 1, media: 2, baja: 3 };
+    const typeOrder: Record<OpportunityType, number> = { review: 1, activate: 2, future: 3, missing_promo: 4, data_issue: 5 };
+    return rows.sort((a, b) => {
+      if (priorityOrder[a.priority] !== priorityOrder[b.priority]) return priorityOrder[a.priority] - priorityOrder[b.priority];
+      if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type];
+      return Number(b.margin || 0) - Number(a.margin || 0);
+    });
+  }, [productsById, publications, opportunities, pricingOptions, categoryFees, taxes, marginSettings]);
+
+  const filteredActions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return actions.filter((item) => {
+      const matchesType = typeFilter === "all" || item.type === typeFilter;
+      const matchesPriority = priorityFilter === "all" || item.priority === priorityFilter;
+      const text = `${item.sku} ${item.productName} ${item.itemId || ""} ${item.title} ${item.detail}`.toLowerCase();
+      return matchesType && matchesPriority && (!q || text.includes(q));
+    });
+  }, [actions, typeFilter, priorityFilter, query]);
+
+  const countsByType = useMemo(() => {
+    return actions.reduce((acc, item) => {
+      acc[item.type] = (acc[item.type] || 0) + 1;
+      return acc;
+    }, {} as Record<OpportunityType, number>);
+  }, [actions]);
+
+  return (
+    <main className="container wide opportunities-page">
+      <PageHero
+        title="Centro de Oportunidades"
+        description="Bandeja de acciones para promociones, datos incompletos y Asesoria 360."
+        onRefresh={loadData}
+        refreshLabel={loading ? "Actualizando..." : "Actualizar"}
+        refreshDisabled={loading}
+      />
+
+      {error && <div className="message error">{error}</div>}
+
+      <section className="opportunity-summary-grid">
+        <button className={`card opportunity-summary ${typeFilter === "all" ? "active" : ""}`} type="button" onClick={() => setTypeFilter("all")}>
+          <span>Total</span>
+          <strong>{actions.length}</strong>
+          <small>Todas las acciones</small>
+        </button>
+        {(["review", "activate", "future", "missing_promo", "data_issue"] as OpportunityType[]).map((type) => (
+          <button className={`card opportunity-summary ${type} ${typeFilter === type ? "active" : ""}`} type="button" onClick={() => setTypeFilter(type)} key={type}>
+            <span>{typeLabel(type)}</span>
+            <strong>{countsByType[type] || 0}</strong>
+            <small>{type === "future" ? "Para mirar fecha" : type === "data_issue" ? "Bloquean calculo" : "Accionable"}</small>
+          </button>
+        ))}
+      </section>
+
+      <section className="card opportunity-toolbar">
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, MLA, producto o promo" />
+        <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}>
+          <option value="all">Todas las prioridades</option>
+          <option value="alta">Alta</option>
+          <option value="media">Media</option>
+          <option value="baja">Baja</option>
+        </select>
+        <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}>
+          <option value="all">Todos los tipos</option>
+          <option value="review">Revisar activa</option>
+          <option value="activate">Activar promo</option>
+          <option value="future">Futuras</option>
+          <option value="missing_promo">Sin promo</option>
+          <option value="data_issue">Datos</option>
+        </select>
+      </section>
+
+      <section className="card opportunity-list-card">
+        <div className="opportunity-list-head">
+          <div>
+            <h2>Acciones</h2>
+            <p>{filteredActions.length} resultado(s) segun filtros actuales.</p>
+          </div>
+          <Link className="button ghost" href="/dashboard">Volver al dashboard</Link>
+        </div>
+
+        <div className="opportunity-action-list">
+          {filteredActions.map((item) => (
+            <article className={`opportunity-row ${item.type} priority-${item.priority}`} key={item.key}>
+              <div className="opportunity-row-main">
+                <div className="opportunity-row-title">
+                  <span className={`opportunity-pill ${item.type}`}>{typeLabel(item.type)}</span>
+                  <span className={`opportunity-priority ${item.priority}`}>{item.priority}</span>
+                  {item.startDate && <span className="opportunity-date">Desde {formatDate(item.startDate)}</span>}
+                </div>
+                <strong>{item.sku} · {item.productName}</strong>
+                <small>{item.title}: {item.detail}</small>
+                <small>{item.itemId || "-"}{item.installments ? ` | ${item.installments}` : ""}</small>
+              </div>
+
+              <div className="opportunity-row-metrics">
+                <div>
+                  <span>Margen</span>
+                  <strong className={Number(item.margin || 0) < 5 ? "danger" : "success"}>{item.margin === undefined || item.margin === null ? "-" : percent(item.margin)}</strong>
+                </div>
+                <div>
+                  <span>Comprador</span>
+                  <strong>{moneyWithCents(item.buyerPrice || item.currentPrice || null)}</strong>
+                </div>
+                <div>
+                  <span>Aporte ML</span>
+                  <strong>{moneyWithCents(item.meliAmount || 0)} · {percent(item.meliRate || 0)}</strong>
+                </div>
+              </div>
+
+              <Link className="button ghost" href={item.href}>Abrir</Link>
+            </article>
+          ))}
+          {!filteredActions.length && <div className="dashboard-empty">No hay oportunidades para los filtros elegidos.</div>}
+        </div>
+      </section>
+    </main>
+  );
+}

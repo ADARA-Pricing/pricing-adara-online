@@ -480,7 +480,7 @@ export default function DashboardPage() {
               <h2>Acciones recomendadas</h2>
               <p>Las mejores oportunidades detectadas con datos actuales.</p>
             </div>
-            <Link className="button ghost" href="/promociones-meli">Ver promos</Link>
+            <Link className="button ghost" href="/oportunidades">Ver centro</Link>
           </div>
           <div className="dashboard-action-list">
             {[...dashboardData.lowMarginActive.slice(0, 3), ...dashboardData.activationOpportunities.slice(0, 5), ...dashboardData.futureOpportunities.slice(0, 4)].slice(0, 10).map((item) => (
@@ -574,6 +574,7 @@ export default function DashboardPage() {
             </div>
             <div className="dashboard-shortcuts">
               <Link className="button" href="/promociones-meli">Promociones Meli</Link>
+              <Link className="button ghost" href="/oportunidades">Oportunidades</Link>
               <Link className="button ghost" href="/asesoria-360">Asesoria 360</Link>
               <Link className="button ghost" href="/productos">Productos</Link>
               <Link className="button ghost" href="/configuracion/mercadolibre">Conexion ML</Link>
