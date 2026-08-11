@@ -39,6 +39,7 @@ type OpportunityAction = {
   detail: string;
   margin?: number | null;
   buyerPrice?: number | null;
+  salePrice?: number | null;
   currentPrice?: number | null;
   meliAmount?: number | null;
   meliRate?: number | null;
@@ -110,6 +111,37 @@ function typeLabel(type: OpportunityType) {
   if (type === "future") return "Futura";
   if (type === "missing_promo") return "Sin promo";
   return "Datos";
+}
+
+function meliContributionAmount(
+  promoPrice?: number | null,
+  meliAmount?: number | null,
+  meliRate?: number | null,
+  originalPrice?: number | null,
+  sellerRate?: number | null,
+) {
+  const amount = Number(meliAmount || 0);
+  if (amount > 0) return amount;
+  const price = Number(promoPrice || 0);
+  const rate = Number(meliRate || 0);
+  const seller = Number(sellerRate || 0);
+  const original = Number(originalPrice || 0);
+  const totalRate = rate + seller;
+  const totalDiscount = original > 0 && price > 0 ? Math.max(original - price, 0) : 0;
+  if (totalDiscount > 0 && totalRate > 0 && rate > 0) return (totalDiscount * rate) / totalRate;
+  return 0;
+}
+
+function effectiveSalePrice(
+  promoPrice?: number | null,
+  meliAmount?: number | null,
+  meliRate?: number | null,
+  originalPrice?: number | null,
+  sellerRate?: number | null,
+) {
+  const price = Number(promoPrice || 0);
+  if (!price) return null;
+  return price + meliContributionAmount(price, meliAmount, meliRate, originalPrice, sellerRate);
 }
 
 export default function OpportunitiesPage() {
@@ -313,7 +345,15 @@ export default function OpportunitiesPage() {
       }
 
       if (Number(publication.meli_promo_price || 0) > 0) {
-        const margin = marginForPublication(product, publication, Number(publication.meli_promo_price || 0));
+        const buyerPrice = Number(publication.meli_promo_price || 0);
+        const salePrice = effectiveSalePrice(
+          buyerPrice,
+          publication.meli_promo_meli_amount,
+          publication.meli_promo_meli_rate,
+          publication.meli_original_price || publication.meli_price,
+          publication.meli_promo_seller_rate,
+        );
+        const margin = marginForPublication(product, publication, salePrice);
         if (margin !== null && margin < 5) {
           rows.push({
             key: `review-${publication.id || itemId}`,
@@ -326,7 +366,8 @@ export default function OpportunitiesPage() {
             title: "Promo vigente con margen bajo",
             detail: publication.meli_promo_name || "Promo vigente",
             margin,
-            buyerPrice: Number(publication.meli_promo_price || 0),
+            buyerPrice,
+            salePrice,
             currentPrice: Number(publication.meli_price || 0) || null,
             meliAmount: Number(publication.meli_promo_meli_amount || 0),
             meliRate: Number(publication.meli_promo_meli_rate || 0),
@@ -341,7 +382,15 @@ export default function OpportunitiesPage() {
       if (!publication) return;
       const product = productsById.get(publication.product_id);
       if (!product) return;
-      const margin = marginForPublication(product, publication, Number(opportunity.promo_price || 0));
+      const buyerPrice = Number(opportunity.promo_price || 0) || null;
+      const salePrice = effectiveSalePrice(
+        buyerPrice,
+        opportunity.meli_amount,
+        opportunity.meli_percentage,
+        opportunity.original_price || publication.meli_price,
+        opportunity.seller_percentage,
+      );
+      const margin = marginForPublication(product, publication, salePrice);
       if (margin === null || margin < 5) return;
       const future = isFutureOpportunity(opportunity, currentIso);
       const type: OpportunityType = future ? "future" : "activate";
@@ -357,7 +406,8 @@ export default function OpportunitiesPage() {
         title: future ? "Promo futura rentable" : "Promo rentable para activar",
         detail: opportunity.promotion_name || opportunity.promotion_id,
         margin,
-        buyerPrice: Number(opportunity.promo_price || 0) || null,
+        buyerPrice,
+        salePrice,
         currentPrice: Number(publication.meli_price || 0) || null,
         meliAmount,
         meliRate: Number(opportunity.meli_percentage || 0),
@@ -498,6 +548,10 @@ export default function OpportunitiesPage() {
                 <div>
                   <span>Margen</span>
                   <strong className={Number(item.margin || 0) < 5 ? "danger" : "success"}>{item.margin === undefined || item.margin === null ? "-" : percent(item.margin)}</strong>
+                </div>
+                <div>
+                  <span>Venta</span>
+                  <strong>{moneyWithCents(item.salePrice || item.currentPrice || null)}</strong>
                 </div>
                 <div>
                   <span>Comprador</span>

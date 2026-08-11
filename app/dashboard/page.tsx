@@ -34,6 +34,7 @@ type DashboardOpportunity = {
   promotionName: string;
   margin: number | null;
   buyerPrice: number | null;
+  salePrice: number | null;
   meliAmount: number;
   meliRate: number;
   startDate?: string | null;
@@ -106,6 +107,37 @@ function sortPricingOptions(options: MercadoLibrePriceOption[]) {
     if (orderA !== orderB) return orderA - orderB;
     return a.code.localeCompare(b.code, "es");
   });
+}
+
+function meliContributionAmount(
+  promoPrice?: number | null,
+  meliAmount?: number | null,
+  meliRate?: number | null,
+  originalPrice?: number | null,
+  sellerRate?: number | null,
+) {
+  const amount = Number(meliAmount || 0);
+  if (amount > 0) return amount;
+  const price = Number(promoPrice || 0);
+  const rate = Number(meliRate || 0);
+  const seller = Number(sellerRate || 0);
+  const original = Number(originalPrice || 0);
+  const totalRate = rate + seller;
+  const totalDiscount = original > 0 && price > 0 ? Math.max(original - price, 0) : 0;
+  if (totalDiscount > 0 && totalRate > 0 && rate > 0) return (totalDiscount * rate) / totalRate;
+  return 0;
+}
+
+function effectiveSalePrice(
+  promoPrice?: number | null,
+  meliAmount?: number | null,
+  meliRate?: number | null,
+  originalPrice?: number | null,
+  sellerRate?: number | null,
+) {
+  const price = Number(promoPrice || 0);
+  if (!price) return null;
+  return price + meliContributionAmount(price, meliAmount, meliRate, originalPrice, sellerRate);
 }
 
 export default function DashboardPage() {
@@ -259,7 +291,15 @@ export default function DashboardPage() {
       .map((publication): DashboardOpportunity | null => {
         const product = activeProductsById.get(publication.product_id);
         if (!product) return null;
-        const margin = marginForPublication(product, publication, Number(publication.meli_promo_price || 0));
+        const buyerPrice = Number(publication.meli_promo_price || 0) || null;
+        const salePrice = effectiveSalePrice(
+          buyerPrice,
+          publication.meli_promo_meli_amount,
+          publication.meli_promo_meli_rate,
+          publication.meli_original_price || publication.meli_price,
+          publication.meli_promo_seller_rate,
+        );
+        const margin = marginForPublication(product, publication, salePrice);
         return {
           key: `review-${publication.meli_item_id}`,
           kind: "review" as const,
@@ -269,7 +309,8 @@ export default function DashboardPage() {
           installments: installmentLabel(publicationInstallments(publication)),
           promotionName: publication.meli_promo_name || "Promo vigente",
           margin,
-          buyerPrice: Number(publication.meli_promo_price || 0) || null,
+          buyerPrice,
+          salePrice,
           meliAmount: Number(publication.meli_promo_meli_amount || 0),
           meliRate: Number(publication.meli_promo_meli_rate || 0),
         };
@@ -283,7 +324,15 @@ export default function DashboardPage() {
         if (!publication) return null;
         const product = activeProductsById.get(publication.product_id);
         if (!product) return null;
-        const margin = marginForPublication(product, publication, Number(opportunity.promo_price || 0));
+        const buyerPrice = Number(opportunity.promo_price || 0) || null;
+        const salePrice = effectiveSalePrice(
+          buyerPrice,
+          opportunity.meli_amount,
+          opportunity.meli_percentage,
+          opportunity.original_price || publication.meli_price,
+          opportunity.seller_percentage,
+        );
+        const margin = marginForPublication(product, publication, salePrice);
         const future = isFutureOpportunity(opportunity, currentIso);
         return {
           key: `${future ? "future" : "activate"}-${opportunity.offer_id || opportunity.promotion_id}-${opportunity.meli_item_id}`,
@@ -294,7 +343,8 @@ export default function DashboardPage() {
           installments: installmentLabel(publicationInstallments(publication)),
           promotionName: opportunity.promotion_name || opportunity.promotion_id,
           margin,
-          buyerPrice: Number(opportunity.promo_price || 0) || null,
+          buyerPrice,
+          salePrice,
           meliAmount: Number(opportunity.meli_amount || 0),
           meliRate: Number(opportunity.meli_percentage || 0),
           startDate: opportunity.start_date || null,
@@ -492,7 +542,8 @@ export default function DashboardPage() {
                 </div>
                 <div className="dashboard-action-metrics">
                   <span>{item.margin === null ? "-" : percent(item.margin)}</span>
-                  <small>{moneyWithCents(item.buyerPrice)}</small>
+                  <small>Venta {moneyWithCents(item.salePrice)}</small>
+                  <small>Comprador {moneyWithCents(item.buyerPrice)}</small>
                   {item.kind === "future" && <small>Desde {formatDate(item.startDate)}</small>}
                 </div>
               </div>

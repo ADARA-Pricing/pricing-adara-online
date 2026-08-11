@@ -490,7 +490,7 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
 .opportunity-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(330px, 420px) 90px;
+  grid-template-columns: minmax(0, 1fr) minmax(430px, 540px) 90px;
   gap: 12px;
   align-items: center;
   border: 1px solid #e2e8f0;
@@ -560,7 +560,7 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
 .opportunity-row-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
