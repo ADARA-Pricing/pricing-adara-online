@@ -72,6 +72,7 @@ type AdvisoryCandidate = {
   hasActivePromo: boolean;
   bestMeliContributionRate: number;
   bestMeliContributionAmount: number;
+  meliContributionCoverage: string;
 };
 
 const STORAGE_KEY = "adara-asesoria-360-draft";
@@ -496,7 +497,7 @@ export default function Asesoria360Page() {
           const itemOpportunities = publication.meli_item_id ? opportunitiesByItem.get(publication.meli_item_id) || [] : [];
           return itemOpportunities.some(isActiveOpportunity);
         });
-        const activeMeliContributions = groupPublications.flatMap((publication) => {
+        const activeMeliContributionsByPublication = groupPublications.map((publication) => {
           const currentPromoActive = publication.meli_promo_price && publication.meli_promo_status && /started|active/i.test(publication.meli_promo_status);
           const current = currentPromoActive
             ? [{
@@ -513,6 +514,14 @@ export default function Asesoria360Page() {
             }));
           return [...current, ...activeOpportunities];
         });
+        const activeMeliContributions = activeMeliContributionsByPublication.flat();
+        const publicationsWithMeliContribution = activeMeliContributionsByPublication.filter((contributions) =>
+          contributions.some((item) => item.rate > 0 || item.amount > 0),
+        ).length;
+        const meliContributionCoverageRatio = groupPublications.length
+          ? publicationsWithMeliContribution / groupPublications.length
+          : 0;
+        const meliContributionCoverage = `${publicationsWithMeliContribution}/${groupPublications.length}`;
         const bestMeliContributionRate = activeMeliContributions.length
           ? Math.max(...activeMeliContributions.map((item) => item.rate))
           : 0;
@@ -546,18 +555,28 @@ export default function Asesoria360Page() {
           score += 18;
           reasons.push("sin promo activa");
         }
-        if (bestMeliContributionRate <= 0 && bestMeliContributionAmount <= 0) {
+        if (publicationsWithMeliContribution === 0) {
           score += 22;
           reasons.push("sin aporte ML compartido");
+        } else if (meliContributionCoverageRatio < 0.5) {
+          score += 14;
+          reasons.push(`aporte ML parcial ${meliContributionCoverage}`);
         } else if (bestMeliContributionRate < 2 && bestMeliContributionAmount < 10000) {
-          score += 12;
+          score += 10;
           reasons.push(`aporte ML bajo ${bestMeliContributionRate.toFixed(1)}%`);
+        } else if (meliContributionCoverageRatio < 0.8) {
+          score -= 4;
+          reasons.push(`aporte ML parcial ${meliContributionCoverage}`);
         } else {
           score += meliContributionPenalty(bestMeliContributionRate, bestMeliContributionAmount);
         }
         if (units30 === 0 && stock > 0) {
           score += 24;
           reasons.push("sin ventas 30d");
+          if (inventoryValue >= 3000000) {
+            score += 12;
+            reasons.push("alto valor sin ventas 30d");
+          }
         } else if (stock >= 30 && units30 <= 5) {
           score += 18;
           reasons.push("baja rotacion 30d");
@@ -603,6 +622,7 @@ export default function Asesoria360Page() {
           hasActivePromo,
           bestMeliContributionRate,
           bestMeliContributionAmount,
+          meliContributionCoverage,
         };
       })
       .filter((candidate) => candidate.score > 0)
@@ -727,6 +747,7 @@ export default function Asesoria360Page() {
                 <span>30d <strong>{candidate.units30}</strong></span>
                 <span>Dias <strong>{stockDaysLabel(candidate.stockDays)}</strong></span>
                 <span>Aporte ML <strong>{candidate.bestMeliContributionRate ? `${candidate.bestMeliContributionRate.toFixed(1)}%` : moneyWithCents(candidate.bestMeliContributionAmount)}</strong></span>
+                <span>Cobertura ML <strong>{candidate.meliContributionCoverage}</strong></span>
                 <span>MLA <strong>{candidate.publications}</strong></span>
               </div>
               <div className="asesoria360-candidate-price">
