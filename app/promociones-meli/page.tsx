@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronRight } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -2144,7 +2145,10 @@ export default function PromocionesMeliPage() {
                           <small>Mejor {percent(summary.bestMargin)}</small>
                           {summary.bestBuyerPrice && <small>Desde {moneyWithCents(summary.bestBuyerPrice)}</small>}
                         </div>
-                        <span className="promociones-traffic-toggle">{expanded ? "v" : ">"}</span>
+                        <span className="item-action promociones-traffic-toggle">
+                          {expanded ? "Ocultar" : "Ver"}
+                          <ChevronRight aria-hidden="true" />
+                        </span>
                       </button>
                       {expanded && (
                         <div className="promociones-traffic-items">

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
+import { ChevronRight } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -690,7 +691,10 @@ export default function Asesoria360Page() {
                     </span>
                     <span className="asesoria360-family-installments">{installmentText}</span>
                     <span className="asesoria360-family-price">Desde {Number.isFinite(minSalePrice) ? moneyWithCents(minSalePrice) : "-"}</span>
-                    <span className="asesoria360-family-toggle">{expanded ? "v" : ">"}</span>
+                    <span className="item-action asesoria360-family-toggle">
+                      {expanded ? "Ocultar" : "Ver"}
+                      <ChevronRight aria-hidden="true" />
+                    </span>
                   </button>
 
                   {expanded && (

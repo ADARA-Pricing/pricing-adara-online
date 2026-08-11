@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
+import { ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import type { MercadoLibreShippingCost, Product } from "@/lib/types";
 import { money, toNumber } from "@/lib/pricing";
@@ -332,8 +333,6 @@ function sortPublicationsByInstallments(shippings: MercadoLibreShippingCost[]) {
     return (a.meli_title || "").localeCompare(b.meli_title || "", "es");
   });
 }
-
-
 export default function ProductsPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -1352,8 +1351,9 @@ export default function ProductsPage() {
                         )}
                       </strong>
                     </div>
-                    <button className="product-expand-button" type="button" onClick={() => setExpandedSku(expanded ? null : product.sku)}>
-                      {expanded ? "⌃" : "⌄"}
+                    <button className="item-action product-expand-button" type="button" onClick={() => setExpandedSku(expanded ? null : product.sku)}>
+                      {expanded ? "Ocultar" : "Ver"}
+                      <ChevronRight aria-hidden="true" />
                     </button>
                   </div>
 
@@ -1449,5 +1449,3 @@ export default function ProductsPage() {
     </main>
   );
 }
-
-
