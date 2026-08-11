@@ -702,6 +702,85 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   align-items: start;
 }
 
+.asesoria360-ranking {
+  padding: 18px 20px;
+}
+
+.asesoria360-ranking-list {
+  display: grid;
+  gap: 10px;
+}
+
+.asesoria360-candidate-card {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.3fr) minmax(360px, 1.6fr) 170px 88px;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #e6ebf2;
+  border-left: 4px solid #2563eb;
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.asesoria360-candidate-card > div:first-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.asesoria360-candidate-card span,
+.asesoria360-candidate-card small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asesoria360-candidate-card small {
+  color: #475569;
+  font-size: 12px;
+}
+
+.asesoria360-candidate-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.asesoria360-candidate-stats span {
+  border: 1px solid #e6ebf2;
+  border-radius: 10px;
+  padding: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.asesoria360-candidate-stats strong {
+  display: block;
+  margin-top: 2px;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.asesoria360-candidate-price {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: right;
+  font-size: 12px;
+  color: #475569;
+}
+
+.asesoria360-candidate-price strong {
+  color: #047857;
+  font-size: 14px;
+}
+
 .asesoria360-products,
 .asesoria360-publications {
   min-width: 0;
@@ -921,10 +1000,15 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   .asesoria360-workspace {
     grid-template-columns: 1fr;
   }
+
+  .asesoria360-candidate-card {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
   .asesoria360-controls,
+  .asesoria360-candidate-stats,
   .asesoria360-family-button,
   .asesoria360-mla-card,
   .asesoria360-sku {
@@ -6831,6 +6915,88 @@ textarea:focus-visible {
 
 .promociones-alerts-note strong {
   color: #0f172a;
+}
+
+.promociones-alerts-candidates {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.promociones-alerts-candidates-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #0f172a;
+}
+
+.promociones-alerts-candidates-head span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 850;
+}
+
+.promociones-alert-candidate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 78px;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #dbeafe;
+  border-left: 4px solid #2563eb;
+  border-radius: 10px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.promociones-alert-candidate.ideal {
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.promociones-alert-candidate div {
+  min-width: 0;
+}
+
+.promociones-alert-candidate strong,
+.promociones-alert-candidate small,
+.promociones-alert-candidate span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.promociones-alert-candidate small,
+.promociones-alert-candidate span {
+  color: #475569;
+  font-size: 12px;
+}
+
+.promociones-alert-candidate > div:nth-child(2) {
+  text-align: right;
+}
+
+.promociones-alert-candidate > div:nth-child(2) strong {
+  color: #047857;
+}
+
+.promociones-alerts-empty {
+  color: #475569;
+  text-align: center;
+  padding: 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
 }
 
 .promociones-alerts-actions {

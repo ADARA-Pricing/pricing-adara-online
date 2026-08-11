@@ -1471,6 +1471,28 @@ export default function PromocionesMeliPage() {
     ].filter((item) => meliContributionRateForItem(item) >= desktopAlertMeliRate || isIdealDesktopAlertItem(item));
   }, [trafficLights, desktopAlertMeliRate]);
 
+  const topDesktopAlertCandidates = useMemo(() => {
+    return [...desktopAlertCandidates]
+      .sort((a, b) => {
+        const idealDiff = Number(isIdealDesktopAlertItem(b)) - Number(isIdealDesktopAlertItem(a));
+        if (idealDiff !== 0) return idealDiff;
+        const rateDiff = meliContributionRateForItem(b) - meliContributionRateForItem(a);
+        if (rateDiff !== 0) return rateDiff;
+        return Number(b.meliAmount || 0) - Number(a.meliAmount || 0);
+      })
+      .slice(0, 8);
+  }, [desktopAlertCandidates]);
+
+  function openAlertCandidate(item: PromoTrafficLightItem) {
+    const group = groups.find((candidate) => candidate.product.sku === item.sku);
+    if (group) {
+      setSelectedKey(productKey(group.product));
+      setSelectedFamilyKey(null);
+      setSelectedInstallments({});
+    }
+    setDesktopAlertsModalOpen(false);
+  }
+
   const missingPromoGroups = useMemo<MissingPromoGroup[]>(() => {
     const result = new Map<string, MissingPromoGroup>();
 
@@ -2243,6 +2265,31 @@ export default function PromocionesMeliPage() {
                 <strong>{desktopAlertsEnabled ? "Activas" : "Inactivas"}</strong>
                 <span>Tambien avisa cuando una promo mejora margen y baja comprador contra la vigente.</span>
                 <span>Permiso navegador: {desktopAlertPermission}</span>
+              </div>
+              <div className="promociones-alerts-candidates">
+                <div className="promociones-alerts-candidates-head">
+                  <strong>Candidatas actuales</strong>
+                  <span>{desktopAlertCandidates.length}</span>
+                </div>
+                {topDesktopAlertCandidates.map((item) => (
+                  <article className={`promociones-alert-candidate ${isIdealDesktopAlertItem(item) ? "ideal" : ""}`} key={desktopAlertKey(item)}>
+                    <div>
+                      <strong>{item.sku} | {item.installmentLabel}</strong>
+                      <small>{item.promotionName}</small>
+                      <small>{isIdealDesktopAlertItem(item) ? "Mejora margen y baja comprador" : "Aporte ML alto"}</small>
+                    </div>
+                    <div>
+                      <span>ML {percent(meliContributionRateForItem(item))}</span>
+                      <strong>{moneyWithCents(item.meliAmount)}</strong>
+                    </div>
+                    <button className="button ghost" type="button" onClick={() => openAlertCandidate(item)}>
+                      Abrir
+                    </button>
+                  </article>
+                ))}
+                {!topDesktopAlertCandidates.length && (
+                  <div className="promociones-alerts-empty">No hay promos que superen los criterios actuales.</div>
+                )}
               </div>
               <div className="promociones-alerts-actions">
                 <button

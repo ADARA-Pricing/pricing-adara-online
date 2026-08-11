@@ -16,7 +16,9 @@ import {
 import type {
   MercadoLibreCategoryFee,
   MercadoLibreInstallmentFee,
+  MercadoLibreOrderItem,
   MercadoLibrePriceOption,
+  MercadoLibrePromotionOpportunity,
   MercadoLibreShippingCost,
   Product,
   ProductChannelMargin,
@@ -51,6 +53,20 @@ type AdvisoryPublicationGroup = {
   branchKind: "catalog_listing" | "seller_listing";
   itemIds: string[];
   rows: AdvisoryPublicationRow[];
+};
+
+type AdvisoryCandidate = {
+  sku: string;
+  productName: string;
+  score: number;
+  reason: string;
+  stock: number;
+  units30: number;
+  stockDays: number | null;
+  publications: number;
+  bestSalePrice: number | null;
+  bestOfferPrice: number | null;
+  hasActivePromo: boolean;
 };
 
 const STORAGE_KEY = "adara-asesoria-360-draft";
@@ -91,6 +107,23 @@ function publicationInstallments(publication: MercadoLibreShippingCost) {
   if (match) return Number(match[1]);
   if (text.includes("sin cuotas") || text.includes("1 pago")) return 1;
   return null;
+}
+
+function daysBetween(from: string) {
+  const date = new Date(from);
+  if (Number.isNaN(date.getTime())) return Infinity;
+  return (Date.now() - date.getTime()) / 86400000;
+}
+
+function stockDaysLabel(value: number | null) {
+  if (value === null) return "Sin ventas";
+  if (value < 7) return `${value.toFixed(1)} dias`;
+  return `${Math.round(value)} dias`;
+}
+
+function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) {
+  const status = `${item.item_promotion_status || item.promotion_status || ""}`.toLowerCase();
+  return status.includes("started") || status.includes("active");
 }
 
 function optionLabelForPublication(publication: MercadoLibreShippingCost) {
@@ -146,6 +179,8 @@ export default function Asesoria360Page() {
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
+  const [opportunities, setOpportunities] = useState<MercadoLibrePromotionOpportunity[]>([]);
+  const [sales, setSales] = useState<MercadoLibreOrderItem[]>([]);
   const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
   const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
@@ -172,6 +207,8 @@ export default function Asesoria360Page() {
       productsResponse,
       publicationsResponse,
       installmentsResponse,
+      opportunitiesResponse,
+      salesResponse,
       categoryFeesResponse,
       taxesResponse,
       marginsResponse,
@@ -179,6 +216,8 @@ export default function Asesoria360Page() {
       supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).eq("meli_status", "active").order("sku", { ascending: true }),
       supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
+      supabase.from("mercadolibre_promotion_opportunities").select("*").order("meli_amount", { ascending: false }).limit(2000),
+      supabase.from("mercadolibre_order_items").select("*").gte("order_date", new Date(Date.now() - 65 * 86400000).toISOString()).neq("status", "cancelled"),
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
       supabase.from("tax_settings").select("*").eq("key", "default").single(),
       supabase.from("product_channel_margins").select("*"),
@@ -191,6 +230,10 @@ export default function Asesoria360Page() {
     else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
     if (installmentsResponse.error) setError(installmentsResponse.error.message);
     else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
+    if (opportunitiesResponse.error) setError(opportunitiesResponse.error.message);
+    else setOpportunities((opportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]);
+    if (salesResponse.error) setSales([]);
+    else setSales((salesResponse.data || []) as MercadoLibreOrderItem[]);
     if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
     else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
     if (taxesResponse.error) setError(taxesResponse.error.message);
@@ -351,6 +394,97 @@ export default function Asesoria360Page() {
     return result.valid ? Number(result.roundedPrice || 0) : null;
   }
 
+  const advisoryCandidates = useMemo<AdvisoryCandidate[]>(() => {
+    const salesBySku = new Map<string, MercadoLibreOrderItem[]>();
+    sales.forEach((sale) => {
+      const sku = (sale.sku || "").toUpperCase();
+      if (!sku) return;
+      salesBySku.set(sku, [...(salesBySku.get(sku) || []), sale]);
+    });
+
+    const opportunitiesByItem = new Map<string, MercadoLibrePromotionOpportunity[]>();
+    opportunities.forEach((opportunity) => {
+      if (!opportunity.meli_item_id) return;
+      opportunitiesByItem.set(opportunity.meli_item_id, [...(opportunitiesByItem.get(opportunity.meli_item_id) || []), opportunity]);
+    });
+
+    return productGroups
+      .map(({ product, publications: groupPublications }) => {
+        const skuSales = salesBySku.get(product.sku.toUpperCase()) || [];
+        const units30 = skuSales
+          .filter((sale) => daysBetween(sale.order_date) <= 30)
+          .reduce((total, sale) => total + Number(sale.quantity || 0), 0);
+        const units7 = skuSales
+          .filter((sale) => daysBetween(sale.order_date) <= 7)
+          .reduce((total, sale) => total + Number(sale.quantity || 0), 0);
+        const stock = groupPublications.length
+          ? Math.max(...groupPublications.map((publication) => Number(publication.meli_stock || 0)))
+          : Number(product.stock || 0);
+        const dailyUnits = Math.max(units7 / 7, units30 / 30);
+        const stockDays = dailyUnits > 0 ? stock / dailyUnits : null;
+        const hasActivePromo = groupPublications.some((publication) => {
+          if (publication.meli_promo_price && publication.meli_promo_status && /started|active/i.test(publication.meli_promo_status)) return true;
+          const itemOpportunities = publication.meli_item_id ? opportunitiesByItem.get(publication.meli_item_id) || [] : [];
+          return itemOpportunities.some(isActiveOpportunity);
+        });
+        const bestSalePrice = Math.min(
+          ...groupPublications
+            .map((publication) => Number(publication.meli_price || 0))
+            .filter((price) => price > 0),
+        );
+        const offerPrices = groupPublications
+          .map((publication) => offerPriceForPublication(product, publication, targetMargin))
+          .filter((price): price is number => Boolean(price && price > 0));
+        const bestOfferPrice = offerPrices.length ? Math.min(...offerPrices) : null;
+        const reasons: string[] = [];
+        let score = 0;
+
+        if (!hasActivePromo) {
+          score += 30;
+          reasons.push("sin promo activa");
+        }
+        if (stock >= 30 && units30 <= 5) {
+          score += 28;
+          reasons.push("stock alto y baja rotacion");
+        } else if (stock >= 15 && units30 <= 2) {
+          score += 20;
+          reasons.push("stock quieto");
+        }
+        if (stockDays !== null && stockDays > 45) {
+          score += 18;
+          reasons.push("muchos dias de stock");
+        }
+        if (groupPublications.length >= 2) {
+          score += 8;
+          reasons.push("varias MLA para rotar");
+        }
+        if (bestOfferPrice && Number.isFinite(bestSalePrice) && bestSalePrice > 0) {
+          const discount = ((bestSalePrice - bestOfferPrice) / bestSalePrice) * 100;
+          if (discount >= 8) {
+            score += 10;
+            reasons.push(`oferta sugerida ${discount.toFixed(1)}% menor`);
+          }
+        }
+
+        return {
+          sku: product.sku,
+          productName: product.name,
+          score,
+          reason: reasons.length ? reasons.slice(0, 3).join(" | ") : "candidato estable",
+          stock,
+          units30,
+          stockDays,
+          publications: groupPublications.length,
+          bestSalePrice: Number.isFinite(bestSalePrice) ? bestSalePrice : null,
+          bestOfferPrice,
+          hasActivePromo,
+        };
+      })
+      .filter((candidate) => candidate.score > 0)
+      .sort((a, b) => b.score - a.score || b.stock - a.stock)
+      .slice(0, 12);
+  }, [productGroups, sales, opportunities, targetMargin]);
+
   function rowKey(sku: string, date: string) {
     return `${sku}|${date}`;
   }
@@ -444,6 +578,42 @@ export default function Asesoria360Page() {
       />
 
       {error && <div className="message error">{error}</div>}
+
+      <section className="card asesoria360-ranking">
+        <div className="asesoria360-panel-head">
+          <div>
+            <h2>Ranking automatico</h2>
+            <p>Candidatos para cargar en Asesoria 360 segun stock, rotacion y promos vigentes.</p>
+          </div>
+          <span className="badge">{advisoryCandidates.length}</span>
+        </div>
+        <div className="asesoria360-ranking-list">
+          {advisoryCandidates.map((candidate) => (
+            <article className="asesoria360-candidate-card" key={candidate.sku}>
+              <div>
+                <strong>{candidate.sku}</strong>
+                <span>{candidate.productName}</span>
+                <small>{candidate.reason}</small>
+              </div>
+              <div className="asesoria360-candidate-stats">
+                <span>Score <strong>{candidate.score}</strong></span>
+                <span>Stock <strong>{candidate.stock}</strong></span>
+                <span>30d <strong>{candidate.units30}</strong></span>
+                <span>Dias <strong>{stockDaysLabel(candidate.stockDays)}</strong></span>
+                <span>MLA <strong>{candidate.publications}</strong></span>
+              </div>
+              <div className="asesoria360-candidate-price">
+                <span>Venta {moneyWithCents(candidate.bestSalePrice)}</span>
+                <strong>Oferta {moneyWithCents(candidate.bestOfferPrice)}</strong>
+              </div>
+              <button className="button" type="button" onClick={() => setSelectedSku(candidate.sku)}>
+                Usar
+              </button>
+            </article>
+          ))}
+          {!advisoryCandidates.length && <div className="asesoria360-empty">Sin candidatos automaticos con los datos actuales.</div>}
+        </div>
+      </section>
 
       <section className="card asesoria360-workspace">
         <div className="asesoria360-products">
