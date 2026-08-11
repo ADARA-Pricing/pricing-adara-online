@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, ChevronDown, ChevronRight, ChevronUp, CircleCheck, FileSpreadsheet, Info, Package, PackageMinus, Plus, RefreshCw, Search } from "lucide-react";
@@ -84,6 +84,11 @@ type MeliImportPreview = {
 };
 
 type ProductEditorTab = "manual" | "excel" | "meli";
+
+function isProductRowInteractiveTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest("button, a, input, select, textarea, label, summary, [contenteditable='true'], [data-no-row-toggle]"));
+}
 
 function normalizeHeader(value: unknown) {
   return String(value || "")
@@ -1310,10 +1315,30 @@ export default function ProductsPage() {
               const bestPrice = bestMeliPrice(shippings);
               const shippingCostRange = moneyRange(shippings.map((item) => item.shipping_cost_amount));
               const fixedFeeRange = moneyRange(shippings.map((item) => item.fixed_fee_amount));
+              const detailId = `product-detail-${String(product.id || product.sku).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+              const toggleProductRow = () => setExpandedSku(expanded ? null : product.sku);
+              const handleProductRowClick = (event: MouseEvent<HTMLDivElement>) => {
+                if (isProductRowInteractiveTarget(event.target)) return;
+                toggleProductRow();
+              };
+              const handleProductRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+                if (isProductRowInteractiveTarget(event.target)) return;
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                toggleProductRow();
+              };
               return (
                 <article key={product.id || product.sku} className={`product-row-card ${expanded ? "expanded" : ""}`}>
-                  <div className="product-row-main">
-                    <button className="product-select-box" type="button" aria-label="Seleccionar producto" />
+                  <div
+                    className="product-row-main"
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={expanded}
+                    aria-controls={detailId}
+                    onClick={handleProductRowClick}
+                    onKeyDown={handleProductRowKeyDown}
+                  >
+                    <button className="product-select-box" type="button" aria-label="Seleccionar producto" onClick={(event) => event.stopPropagation()} />
                     <div className="product-thumb">
                       {thumbnail ? <img src={thumbnail} alt="" /> : productInitial(product)}
                     </div>
@@ -1361,14 +1386,13 @@ export default function ProductsPage() {
                         )}
                       </strong>
                     </div>
-                    <button className="item-action product-expand-button" type="button" onClick={() => setExpandedSku(expanded ? null : product.sku)}>
-                      {expanded ? "Cerrar detalle" : "Ver detalle"}
+                    <button className="product-expand-button" type="button" aria-label={expanded ? "Cerrar detalle" : "Ver detalle"} onClick={(event) => { event.stopPropagation(); toggleProductRow(); }}>
                       {expanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                     </button>
                   </div>
 
                   {expanded && (
-                    <div className="product-expanded-panel">
+                    <div className="product-expanded-panel" id={detailId}>
                       <div className="product-detail-grid">
                         <div className="product-detail-section">
                           <h3>Producto</h3>
