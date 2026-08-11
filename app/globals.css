@@ -9005,7 +9005,7 @@ textarea:focus,
 }
 
 .product-expanded-panel {
-  padding: 10px 13px 13px;
+  padding: 8px 12px 12px;
   border-top: 1px solid #dbeafe;
   background: #f8fbff;
 }
@@ -9013,12 +9013,12 @@ textarea:focus,
 .product-detail-grid {
   display: grid;
   grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 0.85fr) minmax(260px, 1.35fr);
-  gap: 12px 24px;
+  gap: 10px 20px;
   justify-content: stretch;
   align-items: start;
   border-radius: 10px;
   border: 1px solid #e2e8f0;
-  padding: 12px 13px;
+  padding: 10px 12px;
   background: #ffffff;
 }
 
@@ -9094,6 +9094,31 @@ textarea:focus,
   overflow-wrap: anywhere;
 }
 
+.product-note-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.product-note-summary span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.product-note-summary strong {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.product-note-summary svg {
+  width: 14px;
+  height: 14px;
+  color: #64748b;
+  stroke-width: 1.9;
+}
+
 .product-publications-section {
   margin-top: 12px;
   margin-left: 8px;
@@ -9134,10 +9159,24 @@ textarea:focus,
   border-collapse: collapse;
 }
 
+.product-publications-table > table > thead {
+  display: none;
+}
+
 .product-publications-table th {
   position: sticky;
   top: 0;
   z-index: 1;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.product-publication-subheader th {
+  position: static;
   background: #f8fafc;
   color: #475569;
   font-size: 11px;
@@ -9221,6 +9260,37 @@ textarea:focus,
   line-height: 1.25;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.product-catalog-badge {
+  margin-left: 6px;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.product-row-actions {
+  gap: 8px;
+}
+
+.product-detail-action {
+  min-height: 34px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.product-detail-action svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.9;
+}
+
+.product-detail-action.primary {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .product-publications-table td:first-child .small {

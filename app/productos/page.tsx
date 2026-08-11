@@ -3,7 +3,7 @@
 import { ChangeEvent, FormEvent, Fragment, KeyboardEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, ChevronDown, ChevronRight, ChevronUp, CircleCheck, FileSpreadsheet, Info, Package, PackageMinus, Plus, RefreshCw, Search } from "lucide-react";
+import { BadgeCheck, ChevronDown, ChevronRight, ChevronUp, CircleCheck, Copy, FileSpreadsheet, Info, Package, PackageMinus, Pencil, Plus, RefreshCw, Search, Tags, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import type { MercadoLibreShippingCost, Product } from "@/lib/types";
 import { money, toNumber } from "@/lib/pricing";
@@ -122,6 +122,18 @@ function formatTechnicalLabel(value?: string | null) {
     .replace(/\s+/g, " ")
     .toLowerCase()
     .replace(/^\w/, (letter) => letter.toUpperCase());
+}
+
+function productNoteSummary(value?: string | null) {
+  if (!value || value === "-") return { label: "-", detail: "" };
+  const itemId = value.match(/MLA\d+/i)?.[0]?.toUpperCase();
+  if (/mercadolibre/i.test(value) || itemId) {
+    return {
+      label: itemId ? `MercadoLibre · ${itemId}` : "MercadoLibre",
+      detail: value,
+    };
+  }
+  return { label: value, detail: value };
 }
 
 function publicationTags(publication: MercadoLibreShippingCost) {
@@ -1440,6 +1452,7 @@ export default function ProductsPage() {
               const shippingCostRange = moneyRange(shippings.map((item) => item.shipping_cost_amount));
               const fixedFeeRange = moneyRange(shippings.map((item) => item.fixed_fee_amount));
               const productNotes = product.description || shippings[0]?.notes || "-";
+              const noteSummary = productNoteSummary(productNotes);
               const detailId = `product-detail-${String(product.id || product.sku).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
               const toggleProductRow = () => setExpandedSku(expanded ? null : product.sku);
               const handleProductRowClick = (event: MouseEvent<HTMLDivElement>) => {
@@ -1543,7 +1556,11 @@ export default function ProductsPage() {
                         </div>
                         <div className="product-detail-section product-detail-notes">
                           <h3>Notas</h3>
-                          <p title={productNotes}>{productNotes}</p>
+                          <p className="product-note-summary" title={noteSummary.detail || productNotes}>
+                            <span>Origen</span>
+                            <strong>{noteSummary.label}</strong>
+                            {noteSummary.detail && noteSummary.detail !== noteSummary.label ? <Info aria-hidden="true" /> : null}
+                          </p>
                         </div>
                       </div>
 
@@ -1592,13 +1609,29 @@ export default function ProductsPage() {
                                       </button>
                                     </td>
                                   </tr>
+                                  {groupExpanded && (
+                                    <tr className="product-publication-subheader">
+                                      <th>Publicación</th>
+                                      <th>Estado</th>
+                                      <th>Precio venta</th>
+                                      <th>Envío</th>
+                                      <th>Fijo</th>
+                                      <th>Cuotas / Tipo ML</th>
+                                      <th>Stock publicado</th>
+                                      <th>Última sync</th>
+                                      <th>Acción</th>
+                                    </tr>
+                                  )}
                                   {groupExpanded && sortPublicationsByInstallments(group.rows).map((shipping) => {
                                 return (
                                   <tr key={shipping.id || `${product.sku}-${shipping.meli_item_id}`}>
                                     <td>
                                       <strong className="product-publication-title" title={shipping.meli_title || product.name}>{shipping.meli_title || product.name}</strong>
                                       <br />
-                                      <span className="small">{shipping.meli_item_id || "-"} · {formatTechnicalLabel(shipping.meli_logistic_type || shipping.shipping_method)}</span>
+                                      <span className="small">
+                                        {shipping.meli_item_id || "-"} · {formatTechnicalLabel(shipping.meli_logistic_type || shipping.shipping_method)}
+                                        {shipping.meli_catalog_listing ? <span className="badge product-catalog-badge">Catálogo</span> : null}
+                                      </span>
                                     </td>
                                     <td><span className={`badge meli-status-${shipping.meli_status || "none"}`}>{meliStatusLabel(shipping.meli_status)}</span></td>
                                     <td className="numeric"><strong>{shipping.meli_price ? money(shipping.meli_price) : "-"}</strong></td>
@@ -1621,10 +1654,10 @@ export default function ProductsPage() {
                       )}
 
                       <div className="product-row-actions">
-                        <button className="button ghost" onClick={() => editProduct(product)}>Editar</button>
-                        <button className="button ghost" onClick={() => duplicateProduct(product)}>Duplicar</button>
-                        <a className="button ghost" href={`/precios?sku=${encodeURIComponent(product.sku)}`}>Ver precios</a>
-                        <button className="button danger" onClick={() => deleteProduct(product)}>Eliminar</button>
+                        <button className="button product-detail-action primary" onClick={() => editProduct(product)}><Pencil aria-hidden="true" />Editar</button>
+                        <button className="button ghost product-detail-action" onClick={() => duplicateProduct(product)}><Copy aria-hidden="true" />Duplicar</button>
+                        <a className="button ghost product-detail-action" href={`/precios?sku=${encodeURIComponent(product.sku)}`}><Tags aria-hidden="true" />Ver precios</a>
+                        <button className="button danger product-detail-action" onClick={() => deleteProduct(product)}><Trash2 aria-hidden="true" />Eliminar</button>
                       </div>
                     </div>
                   )}
