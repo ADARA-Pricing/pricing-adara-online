@@ -816,7 +816,7 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
 .asesoria360-candidate-card {
   display: grid;
-  grid-template-columns: minmax(260px, 1.3fr) minmax(360px, 1.6fr) 170px 88px;
+  grid-template-columns: minmax(260px, 1.15fr) minmax(520px, 1.85fr) 170px 88px;
   gap: 12px;
   align-items: center;
   border: 1px solid #e6ebf2;
@@ -848,7 +848,7 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
 .asesoria360-candidate-stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 8px;
 }
 
@@ -867,6 +867,7 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   margin-top: 2px;
   color: #0f172a;
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .asesoria360-candidate-price {

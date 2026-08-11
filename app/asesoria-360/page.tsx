@@ -62,12 +62,16 @@ type AdvisoryCandidate = {
   score: number;
   reason: string;
   stock: number;
+  productStock: number;
   units30: number;
+  inventoryValue: number;
   stockDays: number | null;
   publications: number;
   bestSalePrice: number | null;
   bestOfferPrice: number | null;
   hasActivePromo: boolean;
+  bestMeliContributionRate: number;
+  bestMeliContributionAmount: number;
 };
 
 const STORAGE_KEY = "adara-asesoria-360-draft";
@@ -125,6 +129,42 @@ function stockDaysLabel(value: number | null) {
 function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) {
   const status = `${item.item_promotion_status || item.promotion_status || ""}`.toLowerCase();
   return status.includes("started") || status.includes("active");
+}
+
+function cappedScore(value: number, max: number) {
+  return Math.min(Math.max(value, 0), max);
+}
+
+function costWithVat(product: Product) {
+  const explicit = Number(product.cost_with_vat || 0);
+  if (explicit > 0) return explicit;
+  const base = Number(product.cost_without_vat || 0);
+  const vat = Number(product.vat_rate || 0);
+  return base > 0 ? base * (1 + vat / 100) : 0;
+}
+
+function inventoryValueScore(value: number) {
+  if (value >= 5000000) return 35;
+  if (value >= 2500000) return 28;
+  if (value >= 1000000) return 20;
+  if (value >= 500000) return 14;
+  if (value >= 200000) return 8;
+  return 0;
+}
+
+function stockAmountScore(stock: number) {
+  if (stock >= 100) return 18;
+  if (stock >= 50) return 14;
+  if (stock >= 20) return 9;
+  if (stock > 0) return 4;
+  return 0;
+}
+
+function meliContributionPenalty(rate: number, amount: number) {
+  if (rate >= 4 || amount >= 25000) return -18;
+  if (rate >= 2 || amount >= 10000) return -10;
+  if (rate > 0 || amount > 0) return -4;
+  return 0;
 }
 
 function optionLabelForPublication(publication: MercadoLibreShippingCost) {
@@ -418,16 +458,42 @@ export default function Asesoria360Page() {
         const units7 = skuSales
           .filter((sale) => daysBetween(sale.order_date) <= 7)
           .reduce((total, sale) => total + Number(sale.quantity || 0), 0);
-        const stock = groupPublications.length
+        const meliStock = groupPublications.length
           ? Math.max(...groupPublications.map((publication) => Number(publication.meli_stock || 0)))
-          : Number(product.stock || 0);
+          : 0;
+        const productStock = Number(product.stock || 0);
+        const stock = Math.max(meliStock, productStock);
         const dailyUnits = Math.max(units7 / 7, units30 / 30);
         const stockDays = dailyUnits > 0 ? stock / dailyUnits : null;
+        const inventoryValue = stock * costWithVat(product);
         const hasActivePromo = groupPublications.some((publication) => {
           if (publication.meli_promo_price && publication.meli_promo_status && /started|active/i.test(publication.meli_promo_status)) return true;
           const itemOpportunities = publication.meli_item_id ? opportunitiesByItem.get(publication.meli_item_id) || [] : [];
           return itemOpportunities.some(isActiveOpportunity);
         });
+        const activeMeliContributions = groupPublications.flatMap((publication) => {
+          const currentPromoActive = publication.meli_promo_price && publication.meli_promo_status && /started|active/i.test(publication.meli_promo_status);
+          const current = currentPromoActive
+            ? [{
+              rate: Number(publication.meli_promo_meli_rate || 0),
+              amount: Number(publication.meli_promo_meli_amount || 0),
+            }]
+            : [];
+          const itemOpportunities = publication.meli_item_id ? opportunitiesByItem.get(publication.meli_item_id) || [] : [];
+          const activeOpportunities = itemOpportunities
+            .filter(isActiveOpportunity)
+            .map((opportunity) => ({
+              rate: Number(opportunity.meli_percentage || 0),
+              amount: Number(opportunity.meli_amount || 0),
+            }));
+          return [...current, ...activeOpportunities];
+        });
+        const bestMeliContributionRate = activeMeliContributions.length
+          ? Math.max(...activeMeliContributions.map((item) => item.rate))
+          : 0;
+        const bestMeliContributionAmount = activeMeliContributions.length
+          ? Math.max(...activeMeliContributions.map((item) => item.amount))
+          : 0;
         const bestSalePrice = Math.min(
           ...groupPublications
             .map((publication) => Number(publication.meli_price || 0))
@@ -440,32 +506,61 @@ export default function Asesoria360Page() {
         const reasons: string[] = [];
         let score = 0;
 
+        score += inventoryValueScore(inventoryValue);
+        score += stockAmountScore(stock);
+
+        if (inventoryValue >= 1000000) {
+          reasons.push(`stock valorizado ${moneyWithCents(inventoryValue)}`);
+        } else if (inventoryValue >= 200000) {
+          reasons.push(`valor parado ${moneyWithCents(inventoryValue)}`);
+        }
+        if (stock > 0) {
+          reasons.push(`stock disponible ${stock}`);
+        }
         if (!hasActivePromo) {
-          score += 30;
+          score += 18;
           reasons.push("sin promo activa");
         }
-        if (stock >= 30 && units30 <= 5) {
-          score += 28;
-          reasons.push("stock alto y baja rotacion");
+        if (bestMeliContributionRate <= 0 && bestMeliContributionAmount <= 0) {
+          score += 22;
+          reasons.push("sin aporte ML compartido");
+        } else if (bestMeliContributionRate < 2 && bestMeliContributionAmount < 10000) {
+          score += 12;
+          reasons.push(`aporte ML bajo ${bestMeliContributionRate.toFixed(1)}%`);
+        } else {
+          score += meliContributionPenalty(bestMeliContributionRate, bestMeliContributionAmount);
+        }
+        if (units30 === 0 && stock > 0) {
+          score += 24;
+          reasons.push("sin ventas 30d");
+        } else if (stock >= 30 && units30 <= 5) {
+          score += 18;
+          reasons.push("baja rotacion 30d");
         } else if (stock >= 15 && units30 <= 2) {
-          score += 20;
+          score += 14;
           reasons.push("stock quieto");
         }
         if (stockDays !== null && stockDays > 45) {
-          score += 18;
+          score += stockDays > 90 ? 18 : 12;
           reasons.push("muchos dias de stock");
         }
+        if (stock > 0 && units30 > 0) {
+          const turnover = units30 / stock;
+          if (turnover <= 0.1) score += 12;
+          else if (turnover <= 0.25) score += 7;
+        }
         if (groupPublications.length >= 2) {
-          score += 8;
+          score += 6;
           reasons.push("varias MLA para rotar");
         }
         if (bestOfferPrice && Number.isFinite(bestSalePrice) && bestSalePrice > 0) {
           const discount = ((bestSalePrice - bestOfferPrice) / bestSalePrice) * 100;
           if (discount >= 8) {
-            score += 10;
+            score += 8;
             reasons.push(`oferta sugerida ${discount.toFixed(1)}% menor`);
           }
         }
+        score = Math.round(cappedScore(score, 100));
 
         return {
           sku: product.sku,
@@ -473,16 +568,20 @@ export default function Asesoria360Page() {
           score,
           reason: reasons.length ? reasons.slice(0, 3).join(" | ") : "candidato estable",
           stock,
+          productStock,
           units30,
+          inventoryValue,
           stockDays,
           publications: groupPublications.length,
           bestSalePrice: Number.isFinite(bestSalePrice) ? bestSalePrice : null,
           bestOfferPrice,
           hasActivePromo,
+          bestMeliContributionRate,
+          bestMeliContributionAmount,
         };
       })
       .filter((candidate) => candidate.score > 0)
-      .sort((a, b) => b.score - a.score || b.stock - a.stock)
+      .sort((a, b) => b.score - a.score || b.inventoryValue - a.inventoryValue || b.stock - a.stock)
       .slice(0, 12);
   }, [productGroups, sales, opportunities, targetMargin]);
 
@@ -584,7 +683,7 @@ export default function Asesoria360Page() {
         <div className="asesoria360-panel-head">
           <div>
             <h2>Ranking automatico</h2>
-            <p>Candidatos para cargar en Asesoria 360 segun stock, rotacion y promos vigentes.</p>
+            <p>Candidatos segun valor de stock parado, ventas 30d, disponibilidad y aporte compartido de ML.</p>
           </div>
           <span className="badge">{advisoryCandidates.length}</span>
         </div>
@@ -599,8 +698,10 @@ export default function Asesoria360Page() {
               <div className="asesoria360-candidate-stats">
                 <span>Score <strong>{candidate.score}</strong></span>
                 <span>Stock <strong>{candidate.stock}</strong></span>
+                <span>Valor <strong>{moneyWithCents(candidate.inventoryValue)}</strong></span>
                 <span>30d <strong>{candidate.units30}</strong></span>
                 <span>Dias <strong>{stockDaysLabel(candidate.stockDays)}</strong></span>
+                <span>Aporte ML <strong>{candidate.bestMeliContributionRate ? `${candidate.bestMeliContributionRate.toFixed(1)}%` : moneyWithCents(candidate.bestMeliContributionAmount)}</strong></span>
                 <span>MLA <strong>{candidate.publications}</strong></span>
               </div>
               <div className="asesoria360-candidate-price">
