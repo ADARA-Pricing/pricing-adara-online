@@ -251,6 +251,14 @@ function bestMeliPrice(shippings: MercadoLibreShippingCost[]) {
   return prices.length ? Math.min(...prices) : null;
 }
 
+function moneyRange(values: Array<number | null | undefined>) {
+  const amounts = values.map((value) => Number(value || 0)).filter((value) => Number.isFinite(value) && value > 0);
+  if (!amounts.length) return "-";
+  const min = Math.min(...amounts);
+  const max = Math.max(...amounts);
+  return min === max ? money(min) : `${money(min)} - ${money(max)}`;
+}
+
 function installmentCampaignTag(shipping?: MercadoLibreShippingCost | null) {
   if (!shipping?.meli_tags || !Array.isArray(shipping.meli_tags)) return null;
   const tags = shipping.meli_tags.map((tag) => String(tag).toLowerCase());
@@ -1291,6 +1299,8 @@ export default function ProductsPage() {
                 .reverse()[0];
               const thumbnail = productImage(shippings);
               const bestPrice = bestMeliPrice(shippings);
+              const shippingCostRange = moneyRange(shippings.map((item) => item.shipping_cost_amount));
+              const fixedFeeRange = moneyRange(shippings.map((item) => item.fixed_fee_amount));
               return (
                 <article key={product.id || product.sku} className={`product-row-card ${expanded ? "expanded" : ""}`}>
                   <div className="product-row-main">
@@ -1315,6 +1325,14 @@ export default function ProductsPage() {
                     <div className="product-row-stat">
                       <span>Precio ML</span>
                       <strong>{bestPrice ? money(bestPrice) : "-"}</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Envio ML</span>
+                      <strong>{shippingCostRange}</strong>
+                    </div>
+                    <div className="product-row-stat">
+                      <span>Fijo ML</span>
+                      <strong>{fixedFeeRange}</strong>
                     </div>
                     <div className="product-row-stat">
                       <span>Publicaciones ML</span>

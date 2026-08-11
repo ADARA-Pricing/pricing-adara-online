@@ -4859,7 +4859,7 @@ td strong {
 
 .product-row-main {
   display: grid;
-  grid-template-columns: 28px 74px minmax(280px, 1.35fr) repeat(5, minmax(96px, 0.5fr)) 44px;
+  grid-template-columns: 28px 74px minmax(260px, 1.25fr) repeat(7, minmax(92px, 0.48fr)) 44px;
   gap: 12px;
   align-items: center;
   padding: 16px;
