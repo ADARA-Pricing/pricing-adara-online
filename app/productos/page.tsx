@@ -3,7 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, ChevronRight, CircleCheck, FileSpreadsheet, Package, PackageMinus, Plus, RefreshCw, Search } from "lucide-react";
+import { BadgeCheck, ChevronDown, ChevronRight, ChevronUp, CircleCheck, FileSpreadsheet, Info, Package, PackageMinus, Plus, RefreshCw, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import type { MercadoLibreShippingCost, Product } from "@/lib/types";
 import { money, toNumber } from "@/lib/pricing";
@@ -1362,43 +1362,51 @@ export default function ProductsPage() {
                       </strong>
                     </div>
                     <button className="item-action product-expand-button" type="button" onClick={() => setExpandedSku(expanded ? null : product.sku)}>
-                      {expanded ? "Cerrar" : "Abrir"}
-                      <ChevronRight aria-hidden="true" />
+                      {expanded ? "Cerrar detalle" : "Ver detalle"}
+                      {expanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                     </button>
                   </div>
 
                   {expanded && (
                     <div className="product-expanded-panel">
                       <div className="product-detail-grid">
-                        <div>
+                        <div className="product-detail-section">
+                          <h3>Producto</h3>
                           <h4>Dimensiones</h4>
                           <p>{dimensions(product)}</p>
                           <h4>Peso</h4>
                           <p>{product.weight_kg ? `${product.weight_kg} kg` : "-"}</p>
-                        </div>
-                        <div>
                           <h4>Marca / modelo</h4>
                           <p>{product.brand || "-"} {product.model || ""}</p>
                           <h4>Garantía</h4>
                           <p>{product.warranty_months ? `${product.warranty_months} meses` : "-"}</p>
                         </div>
-                        <div>
-                          <h4>MercadoLibre</h4>
-                          <p>Publicaciones vinculadas: {publicationCount || 0}</p>
-                          <p>Stock compartido: {publicationCount ? sharedMlStock : "-"}</p>
-                          <p>Activas: {activePublications}</p>
-                          <p>Pausadas: {pausedPublications}</p>
+                        <div className="product-detail-section product-detail-ml">
+                          <h3>MercadoLibre</h3>
+                          <p><strong>{publicationCount || 0}</strong> publicaciones vinculadas</p>
+                          <p><strong>{publicationCount ? sharedMlStock : "-"}</strong> stock compartido</p>
+                          <div className="product-detail-badges">
+                            <span className="badge meli-status-active">{activePublications} activas</span>
+                            <span className="badge meli-status-paused">{pausedPublications} pausadas</span>
+                          </div>
                           <p>Última sync: {formatDateTime(latestSync)}</p>
-                          <p className="small">No se suma el stock porque las publicaciones comparten el mismo inventario.</p>
+                          <p className="product-stock-note"><Info aria-hidden="true" />El stock corresponde a un inventario compartido entre las publicaciones.</p>
                         </div>
-                        <div>
-                          <h4>Notas</h4>
+                        <div className="product-detail-section product-detail-notes">
+                          <h3>Notas</h3>
                           <p>{product.description || shippings[0]?.notes || "-"}</p>
                         </div>
                       </div>
 
                       {publicationCount > 0 && (
-                        <div className="table-wrap product-publications-table">
+                        <div className="product-publications-section">
+                          <div className="product-publications-header">
+                            <div>
+                              <h3>Publicaciones MercadoLibre</h3>
+                              <p>{publicationCount} publicaciones vinculadas</p>
+                            </div>
+                          </div>
+                          <div className="table-wrap product-publications-table">
                           <table>
                             <thead>
                               <tr>
@@ -1429,12 +1437,13 @@ export default function ProductsPage() {
                                     <td><span className="badge">{installmentLabel(shipping, shippings)}</span></td>
                                     <td>{shipping.meli_stock ?? "-"}</td>
                                     <td>{formatDateTime(shipping.meli_last_sync_at || shipping.updated_at)}</td>
-                                    <td>{shipping.meli_permalink ? <a className="button ghost small-button" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir</a> : null}</td>
+                                    <td>{shipping.meli_permalink ? <a className="item-action product-publication-open" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir <ChevronRight aria-hidden="true" /></a> : null}</td>
                                   </tr>
                                 );
                               })}
                             </tbody>
                           </table>
+                          </div>
                         </div>
                       )}
 
