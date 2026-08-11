@@ -6884,6 +6884,22 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+.promo-meli-support-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid rgba(22, 163, 74, 0.22);
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #047857;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-top: 4px;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
 .promociones-traffic-light {
   margin-top: 18px;
 }

@@ -124,6 +124,7 @@ type PromoTrafficLightItem = {
     margin: number;
     netProfit: number;
   } | null;
+  recommendationReason?: "better_meli_support";
 };
 
 type PromoTrafficLightGroup = {
@@ -517,6 +518,26 @@ function promoBuyerPrice(item: PromoComparison) {
   return Number(item.promoPrice || item.effectiveSalePrice || 0);
 }
 
+function promoImprovesMeliSupport(candidate: PromoComparison, active: PromoComparison) {
+  const candidateMeliRate = Number(candidate.meliRate || 0);
+  const activeMeliRate = Number(active.meliRate || 0);
+  const candidateMeliAmount = Number(candidate.meliAmount || 0);
+  const activeMeliAmount = Number(active.meliAmount || 0);
+  const candidateSellerRate = Number(candidate.sellerRate || 0);
+  const activeSellerRate = Number(active.sellerRate || 0);
+  const candidateSellerAmount = Number(candidate.sellerAmount || 0);
+  const activeSellerAmount = Number(active.sellerAmount || 0);
+
+  const improvesMeli =
+    candidateMeliRate > activeMeliRate + 0.05 ||
+    candidateMeliAmount > activeMeliAmount + 1;
+  const lowersSeller =
+    (activeSellerRate > 0 && candidateSellerRate > 0 && candidateSellerRate < activeSellerRate - 0.05) ||
+    (activeSellerAmount > 0 && candidateSellerAmount > 0 && candidateSellerAmount < activeSellerAmount - 1);
+
+  return improvesMeli && lowersSeller;
+}
+
 function meliContributionRateForItem(item: PromoTrafficLightItem) {
   const directRate = Number(item.meliRate || 0);
   if (directRate > 0) return directRate;
@@ -788,7 +809,7 @@ export default function PromocionesMeliPage() {
   }
 
   function isIdealDesktopAlertItem(item: PromoTrafficLightItem) {
-    return Boolean(
+    const improvesMarginAndBuyer = Boolean(
       item.activeMargin !== null &&
       item.activeMargin !== undefined &&
       item.activePromoPrice &&
@@ -796,6 +817,7 @@ export default function PromocionesMeliPage() {
       item.margin > item.activeMargin &&
       item.promoPrice < item.activePromoPrice,
     );
+    return improvesMarginAndBuyer || item.recommendationReason === "better_meli_support";
   }
 
   function readNotifiedDesktopAlertKeys() {
@@ -1216,9 +1238,12 @@ export default function PromocionesMeliPage() {
           !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)) &&
           !activePromos.some((activeItem) => samePromotionEconomics(activeItem.promo, item.promo)) &&
           (!activePromos.length || activePromos.some((activeItem) =>
-            promoBuyerPrice(item.promo) > 0 &&
-            promoBuyerPrice(activeItem.promo) > 0 &&
-            promoBuyerPrice(item.promo) < promoBuyerPrice(activeItem.promo)
+            (
+              promoBuyerPrice(item.promo) > 0 &&
+              promoBuyerPrice(activeItem.promo) > 0 &&
+              promoBuyerPrice(item.promo) < promoBuyerPrice(activeItem.promo)
+            ) ||
+            promoImprovesMeliSupport(item.promo, activeItem.promo)
           )) &&
           !calculatedPromos.some((scheduledItem) =>
             scheduledItem.promo.status === "Para activar" &&
@@ -1330,6 +1355,9 @@ export default function PromocionesMeliPage() {
             })
             .forEach((candidate) => {
               const promo = candidate.promo;
+              const supportComparison = activePromos.find((activeItem) => promoImprovesMeliSupport(promo, activeItem.promo)) || null;
+              const activeComparisonSource = supportComparison || bestActive;
+              const improvesMeliSupport = Boolean(supportComparison);
               addItem(yellow, {
                 key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}`,
                 sku: group.product.sku,
@@ -1350,23 +1378,24 @@ export default function PromocionesMeliPage() {
                 margin: candidate.margin,
                 netProfit: candidate.netProfit,
                 status: promo.status,
-                activeMargin: bestActive?.margin ?? null,
-                activePromoPrice: bestActive?.promo.promoPrice ?? null,
-                activeComparison: bestActive ? {
-                  key: `${group.product.sku}-${publication.meli_item_id}-${bestActive.promo.key}-${promo.key}-active-comparison`,
-                  promotionName: bestActive.promo.name,
-                  promoPrice: bestActive.promo.promoPrice,
-                  effectiveSalePrice: bestActive.promo.effectiveSalePrice,
-                  originalPrice: bestActive.promo.originalPrice,
-                  meliAmount: bestActive.promo.meliAmount,
-                  meliRate: bestActive.promo.meliRate,
-                  sellerAmount: bestActive.promo.sellerAmount,
-                  sellerRate: bestActive.promo.sellerRate,
-                  startDate: bestActive.promo.startDate,
-                  endDate: bestActive.promo.endDate,
-                  margin: bestActive.margin,
-                  netProfit: bestActive.netProfit,
+                activeMargin: activeComparisonSource?.margin ?? null,
+                activePromoPrice: activeComparisonSource?.promo.promoPrice ?? null,
+                activeComparison: activeComparisonSource ? {
+                  key: `${group.product.sku}-${publication.meli_item_id}-${activeComparisonSource.promo.key}-${promo.key}-active-comparison`,
+                  promotionName: activeComparisonSource.promo.name,
+                  promoPrice: activeComparisonSource.promo.promoPrice,
+                  effectiveSalePrice: activeComparisonSource.promo.effectiveSalePrice,
+                  originalPrice: activeComparisonSource.promo.originalPrice,
+                  meliAmount: activeComparisonSource.promo.meliAmount,
+                  meliRate: activeComparisonSource.promo.meliRate,
+                  sellerAmount: activeComparisonSource.promo.sellerAmount,
+                  sellerRate: activeComparisonSource.promo.sellerRate,
+                  startDate: activeComparisonSource.promo.startDate,
+                  endDate: activeComparisonSource.promo.endDate,
+                  margin: activeComparisonSource.margin,
+                  netProfit: activeComparisonSource.netProfit,
                 } : null,
+                recommendationReason: improvesMeliSupport ? "better_meli_support" : undefined,
               });
             });
         }
@@ -1431,6 +1460,22 @@ export default function PromocionesMeliPage() {
           })[0];
 
         if (lowerBuyerPrice) selected.push(lowerBuyerPrice);
+
+        const betterMeliSupport = sameInstallmentItems
+          .filter((item) =>
+            item.key !== marginWinner.key &&
+            item.key !== lowerBuyerPrice?.key &&
+            item.recommendationReason === "better_meli_support"
+          )
+          .sort((a, b) => {
+            const meliDiff = Number(b.meliRate || 0) - Number(a.meliRate || 0);
+            if (meliDiff !== 0) return meliDiff;
+            const sellerDiff = Number(a.sellerRate || 0) - Number(b.sellerRate || 0);
+            if (sellerDiff !== 0) return sellerDiff;
+            return b.margin - a.margin;
+          })[0];
+
+        if (betterMeliSupport) selected.push(betterMeliSupport);
       });
 
       const grouped = new Map<string, PromoTrafficLightGroup>();
@@ -1559,7 +1604,9 @@ export default function PromocionesMeliPage() {
     const best = [...(idealItems.length ? idealItems : newItems)].sort((a, b) => Number(b.meliAmount || 0) - Number(a.meliAmount || 0))[0];
     const extraCount = newItems.length > 1 ? ` y ${newItems.length - 1} mas` : "";
     const idealText = isIdealDesktopAlertItem(best)
-      ? ` | Comprador ${moneyWithCents(best.activePromoPrice || 0)} -> ${moneyWithCents(best.promoPrice || 0)} | Margen ${percent(best.activeMargin || 0)} -> ${percent(best.margin)}`
+      ? best.recommendationReason === "better_meli_support"
+        ? ` | Baja vendedor y suma aporte ML | Margen ${percent(best.activeMargin || 0)} -> ${percent(best.margin)}`
+        : ` | Comprador ${moneyWithCents(best.activePromoPrice || 0)} -> ${moneyWithCents(best.promoPrice || 0)} | Margen ${percent(best.activeMargin || 0)} -> ${percent(best.margin)}`
       : "";
     const notification = new Notification(`${isIdealDesktopAlertItem(best) ? "Promo ideal Meli" : "Promo Meli con aporte alto"}${extraCount}`, {
       body: `${best.sku} ${best.installmentLabel}: ${best.promotionName} | ML ${percent(meliContributionRateForItem(best))} (${moneyWithCents(best.meliAmount)}) | Comprador ${best.promoPrice ? moneyWithCents(best.promoPrice) : "-"}${idealText}`,
@@ -2194,6 +2241,9 @@ export default function PromocionesMeliPage() {
                                 {futureStartLabel(item.startDate) && (
                                   <span className="promo-date-badge">{futureStartLabel(item.startDate)}</span>
                                 )}
+                                {item.recommendationReason === "better_meli_support" && (
+                                  <span className="promo-meli-support-badge">Conviene: baja vendedor y suma aporte ML</span>
+                                )}
                                 <span>
                                   Comprador {item.promoPrice ? moneyWithCents(item.promoPrice) : "-"} | Venta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
                                 </span>
@@ -2280,7 +2330,7 @@ export default function PromocionesMeliPage() {
                     <div>
                       <strong>{item.sku} | {item.installmentLabel}</strong>
                       <small>{item.promotionName}</small>
-                      <small>{isIdealDesktopAlertItem(item) ? "Mejora margen y baja comprador" : "Aporte ML alto"}</small>
+                      <small>{item.recommendationReason === "better_meli_support" ? "Baja tu aporte y suma ML" : isIdealDesktopAlertItem(item) ? "Mejora margen y baja comprador" : "Aporte ML alto"}</small>
                     </div>
                     <div>
                       <span>ML {percent(meliContributionRateForItem(item))}</span>
