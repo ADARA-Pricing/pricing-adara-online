@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, Fragment, KeyboardEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, ChevronDown, ChevronRight, ChevronUp, CircleCheck, FileSpreadsheet, Info, Package, PackageMinus, Plus, RefreshCw, Search } from "lucide-react";
@@ -122,6 +122,79 @@ function formatTechnicalLabel(value?: string | null) {
     .replace(/\s+/g, " ")
     .toLowerCase()
     .replace(/^\w/, (letter) => letter.toUpperCase());
+}
+
+function publicationTags(publication: MercadoLibreShippingCost) {
+  return Array.isArray(publication.meli_tags) ? publication.meli_tags.map((tag) => String(tag)) : [];
+}
+
+function publicationBranchKind(publication: MercadoLibreShippingCost): "catalog_listing" | "seller_listing" {
+  return publicationTags(publication).includes("user_product_listing") ? "catalog_listing" : "seller_listing";
+}
+
+function publicationBranchLabel(branchKind: "catalog_listing" | "seller_listing") {
+  return branchKind === "catalog_listing" ? "Catálogo ML" : "Publicación vendedor";
+}
+
+function normalizedPublicationTitle(publication: MercadoLibreShippingCost) {
+  return (publication.meli_title || publication.sku || publication.meli_item_id || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(1|3|6|9|12)\s*(x|cuotas?)\b/g, "")
+    .replace(/\b(clasica|premium|sin cuotas|con cuotas)\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function publicationFamilyKey(publication: MercadoLibreShippingCost) {
+  const sku = normalizeProductSku(publication.sku);
+  const branchKind = publicationBranchKind(publication);
+  const catalogKey = publication.meli_catalog_product_id
+    ? `catalog:${publication.meli_catalog_product_id}`
+    : `domain:${publication.meli_domain_id || "sin-domain"}:${normalizedPublicationTitle(publication)}`;
+  return `${sku || "sin-sku"}|${catalogKey}|${branchKind}`;
+}
+
+function groupProductPublications(publications: MercadoLibreShippingCost[]) {
+  const groups = new Map<string, {
+    key: string;
+    title: string;
+    branchKind: "catalog_listing" | "seller_listing";
+    itemIds: string[];
+    rows: MercadoLibreShippingCost[];
+  }>();
+
+  publications.forEach((publication) => {
+    const key = publicationFamilyKey(publication) || publication.meli_item_id || publication.sku || "publicacion";
+    const current = groups.get(key) || {
+      key,
+      title: publication.meli_title || publication.meli_item_id || "Publicación ML",
+      branchKind: publicationBranchKind(publication),
+      itemIds: [],
+      rows: [],
+    };
+
+    if (publication.meli_item_id && !current.itemIds.includes(publication.meli_item_id)) {
+      current.itemIds.push(publication.meli_item_id);
+    }
+    current.rows.push(publication);
+    groups.set(key, current);
+  });
+
+  return [...groups.values()].sort((a, b) => {
+    if (a.branchKind !== b.branchKind) return a.branchKind === "catalog_listing" ? -1 : 1;
+    return a.title.localeCompare(b.title, "es");
+  });
+}
+
+function sharedStockFromPublications(publications: MercadoLibreShippingCost[]) {
+  const activePublications = publications.filter((publication) => publication.meli_status === "active");
+  const stockSourcePublications = activePublications.length ? activePublications : publications;
+  const stocks = stockSourcePublications
+    .map((publication) => Number(publication.meli_stock || 0))
+    .filter((stock) => Number.isFinite(stock) && stock >= 0);
+  return stocks.length ? Math.max(...stocks) : 0;
 }
 
 function normalizeHeader(value: unknown) {
@@ -1350,9 +1423,8 @@ export default function ProductsPage() {
               const publicationCount = shippings.length;
               const activePublications = shippings.filter((item) => item.meli_status === "active").length;
               const pausedPublications = shippings.filter((item) => item.meli_status === "paused").length;
-              const sharedMlStock = shippings.length
-                ? Math.max(...shippings.map((item) => Number(item.meli_stock || 0)))
-                : 0;
+              const publicationGroups = groupProductPublications(shippings);
+              const sharedMlStock = sharedStockFromPublications(shippings);
               const latestSync = shippings
                 .map((item) => item.meli_last_sync_at || item.updated_at)
                 .filter(Boolean)
@@ -1494,7 +1566,15 @@ export default function ProductsPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {sortPublicationsByInstallments(shippings).map((shipping) => {
+                              {publicationGroups.map((group) => (
+                                <Fragment key={group.key}>
+                                  <tr className="product-publication-group-row">
+                                    <td colSpan={9}>
+                                      <strong>{group.title}</strong>
+                                      <span>{publicationBranchLabel(group.branchKind)} · {group.itemIds.length} MLA · {group.rows.length} variante{group.rows.length === 1 ? "" : "s"}</span>
+                                    </td>
+                                  </tr>
+                                  {sortPublicationsByInstallments(group.rows).map((shipping) => {
                                 return (
                                   <tr key={shipping.id || `${product.sku}-${shipping.meli_item_id}`}>
                                     <td>
@@ -1512,7 +1592,9 @@ export default function ProductsPage() {
                                     <td>{shipping.meli_permalink ? <a className="item-action product-publication-open" href={shipping.meli_permalink} target="_blank" rel="noreferrer">Abrir <ChevronRight aria-hidden="true" /></a> : null}</td>
                                   </tr>
                                 );
-                              })}
+                                  })}
+                                </Fragment>
+                              ))}
                             </tbody>
                           </table>
                           </div>

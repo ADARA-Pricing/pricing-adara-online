@@ -9160,6 +9160,29 @@ textarea:focus,
   background: #f8fbff;
 }
 
+.product-publication-group-row td {
+  background: #f1f6ff !important;
+  color: #334155;
+  font-size: 12px;
+}
+
+.product-publication-group-row strong {
+  display: block;
+  max-width: 720px;
+  overflow: hidden;
+  color: #0f172a;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-publication-group-row span {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+}
+
 .product-publication-title {
   display: -webkit-box;
   max-width: 620px;

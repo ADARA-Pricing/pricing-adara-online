@@ -484,11 +484,13 @@ export default function Asesoria360Page() {
         const units7 = skuSales
           .filter((sale) => daysBetween(sale.order_date) <= 7)
           .reduce((total, sale) => total + Number(sale.quantity || 0), 0);
-        const meliStock = groupPublications.length
-          ? Math.max(...groupPublications.map((publication) => Number(publication.meli_stock || 0)))
+        const activePublications = groupPublications.filter((publication) => publication.meli_status === "active");
+        const stockSourcePublications = activePublications.length ? activePublications : groupPublications;
+        const meliStock = stockSourcePublications.length
+          ? Math.max(...stockSourcePublications.map((publication) => Number(publication.meli_stock || 0)))
           : 0;
         const productStock = Number(product.stock || 0);
-        const stock = Math.max(meliStock, productStock);
+        const stock = groupPublications.length ? meliStock : productStock;
         const dailyUnits = Math.max(units7 / 7, units30 / 30);
         const stockDays = dailyUnits > 0 ? stock / dailyUnits : null;
         const inventoryValue = stock * costWithVat(product);

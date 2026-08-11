@@ -174,8 +174,10 @@ export default function RotacionSkuPage() {
       const sku = product.sku.toUpperCase();
       const skuSales = salesBySku.get(sku) || [];
       const skuPublications = pubsBySku.get(sku) || [];
-      const stockFromMl = skuPublications.length ? Math.max(...skuPublications.map((item) => numberValue(item.meli_stock))) : 0;
-      const stock = numberValue(product.stock) || stockFromMl;
+      const activePublications = skuPublications.filter((item) => item.meli_status === "active");
+      const stockSourcePublications = activePublications.length ? activePublications : skuPublications;
+      const stockFromMl = stockSourcePublications.length ? Math.max(...stockSourcePublications.map((item) => numberValue(item.meli_stock))) : 0;
+      const stock = skuPublications.length ? stockFromMl : numberValue(product.stock);
 
       const byDays = (days: number) => skuSales.filter((sale) => daysBetween(sale.order_date) <= days);
       const lastSale = skuSales[0]?.order_date || null;
