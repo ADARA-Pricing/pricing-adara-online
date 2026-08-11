@@ -4010,11 +4010,11 @@ td strong {
 .sidebar-sublink {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-height: 46px;
   border-radius: 14px;
   padding: 0 14px;
-  color: #25324a;
+  color: #334155;
   text-decoration: none;
   border: 1px solid transparent;
   font-weight: 750;
@@ -4046,18 +4046,19 @@ td strong {
 .sidebar-sublink:hover {
   background: #f4f7fb;
   border-color: #dbeafe;
+  color: #2563eb;
 }
 
 .sidebar-link.active,
 .sidebar-sublink.active {
   background: #eef4ff;
-  color: #1455f5;
+  color: #2563eb;
   border-color: #dbeafe;
 }
 
 .sidebar-icon {
-  width: 28px;
-  height: 28px;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4069,17 +4070,18 @@ td strong {
   width: 18px;
   height: 18px;
   display: block;
-  stroke-width: 1.9;
+  flex-shrink: 0;
 }
 
 .sidebar-section {
   margin-top: 10px;
-  color: #1455f5;
+  color: #334155;
 }
 
 .sidebar-section.active-section {
-  background: transparent;
-  border-color: transparent;
+  background: #eef4ff;
+  border-color: #dbeafe;
+  color: #2563eb;
 }
 
 .sidebar-caret {
@@ -4100,9 +4102,9 @@ td strong {
   padding-left: 0;
 }
 
-.sidebar-collapsed .sidebar-dot {
-  width: 10px;
-  height: 10px;
+.sidebar-collapsed .sidebar-subicon {
+  width: 16px;
+  height: 16px;
 }
 
 .sidebar-sublink {
@@ -4111,15 +4113,10 @@ td strong {
   padding-left: 12px;
 }
 
-.sidebar-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #a8b4c8;
-}
-
-.sidebar-sublink.active .sidebar-dot {
-  background: #2563eb;
+.sidebar-subicon,
+.sidebar-subicon .sidebar-icon-svg {
+  width: 16px;
+  height: 16px;
 }
 
 .sidebar-bottom {
@@ -5898,7 +5895,7 @@ textarea:focus-visible {
 }
 
 .sidebar-link.active .sidebar-icon,
-.sidebar-sublink.active .sidebar-dot {
+.sidebar-sublink.active .sidebar-icon {
   color: var(--primary);
 }
 
