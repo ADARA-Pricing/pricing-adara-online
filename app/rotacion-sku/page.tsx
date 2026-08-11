@@ -166,6 +166,14 @@ export default function RotacionSkuPage() {
     setSyncing(true);
     setError(null);
     try {
+      const stockResponse = await fetch("/api/mercadolibre/sync-shipping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "shipping" }),
+      });
+      const stockData = await stockResponse.json();
+      if (!stockResponse.ok) throw new Error(stockData?.error || "No se pudo sincronizar stock de publicaciones ML.");
+
       const response = await fetch("/api/mercadolibre/sync-sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -173,7 +181,7 @@ export default function RotacionSkuPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudieron sincronizar ventas.");
-      setSyncInfo(`Ventas ML: ${data.saved || 0} items guardados, ${data.scanned || 0} ordenes revisadas en ${data.windows || 1} ventanas.`);
+      setSyncInfo(`Stock ML: ${stockData.updated || 0} publicaciones actualizadas. Ventas ML: ${data.saved || 0} items guardados, ${data.scanned || 0} ordenes revisadas en ${data.windows || 1} ventanas.`);
       await loadData();
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "No se pudieron sincronizar ventas.");
@@ -212,9 +220,9 @@ export default function RotacionSkuPage() {
       const skuPublications = pubsBySku.get(sku) || [];
       const skuImagePublications = imagePubsBySku.get(sku) || skuPublications;
       const activePublications = skuPublications.filter((item) => item.meli_status === "active");
-      const stockSourcePublications = activePublications.length ? activePublications : skuPublications;
+      const stockSourcePublications = activePublications.length ? activePublications : skuImagePublications;
       const stockFromMl = stockSourcePublications.length ? Math.max(...stockSourcePublications.map((item) => numberValue(item.meli_stock))) : 0;
-      const stock = skuPublications.length ? stockFromMl : numberValue(product.stock);
+      const stock = stockSourcePublications.length ? stockFromMl : numberValue(product.stock);
 
       const byDays = (days: number) => skuSales.filter((sale) => daysBetween(sale.order_date) <= days);
       const lastSale = skuSales[0]?.order_date || null;
@@ -349,7 +357,7 @@ export default function RotacionSkuPage() {
             <Link className="button ghost page-back-button rotation-back-button" href="/dashboard"><ArrowLeft aria-hidden="true" />Volver al dashboard</Link>
             <button className="button" type="button" onClick={syncSales} disabled={syncing}>
               <RefreshCw aria-hidden="true" />
-              {syncing ? "Sincronizando..." : "Sincronizar ventas ML"}
+              {syncing ? "Sincronizando..." : "Sincronizar stock y ventas ML"}
             </button>
           </>
         )}
