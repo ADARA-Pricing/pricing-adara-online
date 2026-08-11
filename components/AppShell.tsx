@@ -32,17 +32,6 @@ function IconChannels() {
   );
 }
 
-function IconShipping() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sidebar-icon-svg" aria-hidden="true">
-      <path d="M3 7h11v8H3z" />
-      <path d="M14 10h3l3 3v2h-6z" />
-      <circle cx="8" cy="18" r="1.8" fill="currentColor" stroke="none" />
-      <circle cx="18" cy="18" r="1.8" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
 function IconTaxes() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sidebar-icon-svg" aria-hidden="true">
@@ -115,7 +104,6 @@ const mainItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: <IconPrices /> },
   { href: "/productos", label: "Productos", icon: <IconProducts /> },
   { href: "/mercadolibre", label: "Costo x canal", icon: <IconChannels /> },
-  { href: "/envios-meli", label: "Envíos", icon: <IconShipping /> },
   { href: "/impuestos", label: "Impuestos", icon: <IconTaxes /> },
   { href: "/precios", label: "Precios", icon: <IconPrices /> },
   { href: "/promociones-meli", label: "Promociones Meli", icon: <IconPromotions /> },

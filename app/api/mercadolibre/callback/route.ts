@@ -8,11 +8,11 @@ export async function GET(request: NextRequest) {
   const error = url.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL(`/envios-meli?meli_error=${encodeURIComponent(error)}`, request.url));
+    return NextResponse.redirect(new URL(`/configuracion/mercadolibre?meli_error=${encodeURIComponent(error)}`, request.url));
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL("/envios-meli?meli_error=missing_code", request.url));
+    return NextResponse.redirect(new URL("/configuracion/mercadolibre?meli_error=missing_code", request.url));
   }
 
   try {
@@ -46,9 +46,9 @@ export async function GET(request: NextRequest) {
 
     if (upsertError) throw new Error(upsertError.message);
 
-    return NextResponse.redirect(new URL("/envios-meli?meli_connected=1", request.url));
+    return NextResponse.redirect(new URL("/configuracion/mercadolibre?meli_connected=1", request.url));
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo conectar MercadoLibre.";
-    return NextResponse.redirect(new URL(`/envios-meli?meli_error=${encodeURIComponent(message)}`, request.url));
+    return NextResponse.redirect(new URL(`/configuracion/mercadolibre?meli_error=${encodeURIComponent(message)}`, request.url));
   }
 }

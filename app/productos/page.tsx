@@ -1377,6 +1377,8 @@ export default function ProductsPage() {
                                 <th>Publicación</th>
                                 <th>Estado</th>
                                 <th>Precio venta</th>
+                                <th>Envio</th>
+                                <th>Fijo</th>
                                 <th>Cuotas / tipo ML</th>
                                 <th>Stock publicado</th>
                                 <th>Última sync</th>
@@ -1394,6 +1396,8 @@ export default function ProductsPage() {
                                     </td>
                                     <td><span className={`badge meli-status-${shipping.meli_status || "none"}`}>{meliStatusLabel(shipping.meli_status)}</span></td>
                                     <td><strong>{shipping.meli_price ? money(shipping.meli_price) : "-"}</strong></td>
+                                    <td>{money(Number(shipping.shipping_cost_amount || 0))}</td>
+                                    <td>{money(Number(shipping.fixed_fee_amount || 0))}</td>
                                     <td><span className="badge">{installmentLabel(shipping, shippings)}</span></td>
                                     <td>{shipping.meli_stock ?? "-"}</td>
                                     <td>{formatDateTime(shipping.meli_last_sync_at || shipping.updated_at)}</td>

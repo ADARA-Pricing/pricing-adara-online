@@ -1197,6 +1197,10 @@ function financingFeeRate(listingPrice: MeliListingPrice | null) {
   return Number.isFinite(rate) && rate > 0 ? rate : 0;
 }
 
+function fixedFeeAmount(listingPrice: MeliListingPrice | null) {
+  return positiveFeeNumber(listingPrice?.sale_fee_details?.fixed_fee);
+}
+
 function optionCodeForInstallments(count: number | null) {
   if (!count || count <= 1) return "MC";
   return `MP${count}`;
@@ -1355,7 +1359,9 @@ export async function POST(request: NextRequest) {
     async function listingPriceForMatchedItem(item: MeliItem) {
       if (listingPriceByItem.has(item.id)) return listingPriceByItem.get(item.id) || null;
 
-      const detailedItem = detailedItemsByItem.get(item.id) || await getDetailedItemForPricing(item, account);
+      const detailedItem = item.price && item.listing_type_id
+        ? detailedItemsByItem.get(item.id) || item
+        : detailedItemsByItem.get(item.id) || await getDetailedItemForPricing(item, account);
       detailedItemsByItem.set(item.id, detailedItem);
       const result = await getListingPriceForItem(detailedItem, account);
       listingPriceByItem.set(item.id, result);
@@ -1388,7 +1394,10 @@ export async function POST(request: NextRequest) {
 
       if (shippingOnly) {
         detailedItemsByItem.set(item.id, item);
-        await shippingCostForMatchedItem(item);
+        await Promise.all([
+          shippingCostForMatchedItem(item),
+          listingPriceForMatchedItem(item),
+        ]);
         return;
       }
 
@@ -1611,9 +1620,10 @@ export async function POST(request: NextRequest) {
         const promotionResult = shippingOnly ? null : await promotionForMatchedItem(item);
         const detailedItem = detailedItemsByItem.get(item.id) || item;
         const priceToWinResult = shippingOnly ? null : await priceToWinForMatchedItem(item);
-        const listingPriceResult = shippingOnly ? null : await listingPriceForMatchedItem(item);
+        const listingPriceResult = await listingPriceForMatchedItem(item);
         const meliCategoryResult = shippingOnly ? null : await meliCategoryForMatchedItem(item);
         const newShippingCost = Number(shippingResult?.cost || 0);
+        const newFixedFeeAmount = fixedFeeAmount(listingPriceResult);
         const shippingSource = shippingResult?.source || null;
         const { data: current } = await supabase
           .from("mercadolibre_shipping_costs")
@@ -1705,7 +1715,7 @@ export async function POST(request: NextRequest) {
           const shippingPayload: Record<string, unknown> = {
             product_id: product.id,
             sku: product.sku,
-            fixed_fee_amount: Number(current?.fixed_fee_amount || 0),
+            fixed_fee_amount: newFixedFeeAmount || Number(current?.fixed_fee_amount || 0),
             shipping_cost_amount: oldShippingCost,
             free_shipping: Boolean(current?.free_shipping ?? item.shipping?.free_shipping ?? true),
             shipping_method: current?.shipping_method || item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
@@ -1738,7 +1748,7 @@ export async function POST(request: NextRequest) {
         const shippingPayload: Record<string, unknown> = {
           product_id: product.id,
           sku: product.sku,
-          fixed_fee_amount: Number(current?.fixed_fee_amount || 0),
+          fixed_fee_amount: newFixedFeeAmount || Number(current?.fixed_fee_amount || 0),
           shipping_cost_amount: newShippingCost,
           free_shipping: Boolean(item.shipping?.free_shipping ?? true),
           shipping_method: item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
