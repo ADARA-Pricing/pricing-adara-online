@@ -1220,13 +1220,17 @@ function financingFeeRate(listingPrice: MeliListingPrice | null) {
   const financingAmount = positiveFeeNumber(details.financing_add_on_fee);
   if (!financingAmount) return 0;
 
+  // MercadoLibre puede devolver financing_add_on_fee como porcentaje (ej: 12.3)
+  // o como importe. La tabla maestra de canales espera porcentaje, no decimal.
+  if (financingAmount > 1 && financingAmount <= 100) return financingAmount;
+
   const baseAmount =
     positiveFeeNumber(details.gross_amount) ||
     positiveFeeNumber(listingPrice?.sale_fee_amount);
   if (!baseAmount) return 0;
 
   const rate = (financingAmount / baseAmount) * 100;
-  return Number.isFinite(rate) && rate > 0 ? rate : 0;
+  return Number.isFinite(rate) && rate > 1 ? rate : 0;
 }
 
 function fixedFeeAmount(listingPrice: MeliListingPrice | null) {
