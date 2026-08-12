@@ -3874,6 +3874,148 @@ td strong {
 /* v7.39 - Simulaciones guardadas */
 .saved-simulations-card {
   margin-top: 22px;
+  display: none;
+}
+
+.simulator-loaded-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.simulator-loaded-note svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.simulator-loaded-note button {
+  all: unset;
+  cursor: pointer;
+  color: #334155;
+  font-weight: 800;
+}
+
+.simulator-library-backdrop {
+  align-items: flex-start;
+  padding: 40px 18px;
+}
+
+.simulator-library-modal {
+  width: min(1080px, calc(100vw - 36px));
+  max-height: 84vh;
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.simulator-library-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.simulator-library-header h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.simulator-library-header p {
+  margin: 0;
+  color: #526580;
+  font-size: 13px;
+}
+
+.simulator-library-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 180px 180px 150px 170px;
+  gap: 10px;
+  padding: 14px 20px 8px;
+  background: #fff;
+}
+
+.simulator-library-toolbar select {
+  min-height: 38px;
+  border: 1px solid #cfe0f6;
+  border-radius: 9px;
+  background: #fff;
+  padding: 0 10px;
+  color: #0f172a;
+  font-weight: 650;
+}
+
+.simulator-library-count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 20px 12px;
+  color: #526580;
+  font-size: 12px;
+  font-weight: 800;
+  background: #fff;
+}
+
+.simulator-library-body {
+  overflow: auto;
+  padding: 0 20px 20px;
+}
+
+.simulator-library-table {
+  min-width: 920px;
+}
+
+.simulator-library-table th,
+.simulator-library-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.simulator-library-table td.numeric {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.simulator-library-table td:first-child span {
+  display: block;
+  margin-top: 3px;
+  color: #526580;
+  font-size: 12px;
+}
+
+.simulator-library-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 42px 20px;
+  color: #526580;
+  text-align: center;
+}
+
+.simulator-library-empty svg {
+  width: 28px;
+  height: 28px;
+  color: #94a3b8;
+}
+
+.simulator-library-empty strong {
+  color: #0f172a;
+  font-size: 16px;
 }
 
 .saved-simulations-table td:first-child {
