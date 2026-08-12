@@ -5,7 +5,7 @@ set financing_fee_rate = case code
   when 'MP3' then 8.4
   when 'MP6' then 12.3
   when 'MP9' then 15.7
-  when 'MP12' then 20
+  when 'MP12' then 19.2
   else financing_fee_rate
 end,
 notes = case
