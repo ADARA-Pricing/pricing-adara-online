@@ -1028,8 +1028,8 @@ export default function SimulatorPage() {
       </section>
 
       {simulationLibraryOpen && (
-        <div className="modal-backdrop simulator-library-backdrop" onMouseDown={() => setSimulationLibraryOpen(false)}>
-          <section className="modal-card simulator-library-modal" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-backdrop simulator-library-backdrop" onClick={() => setSimulationLibraryOpen(false)}>
+          <section className="modal-card simulator-library-modal" onClick={(event) => event.stopPropagation()}>
             <div className="simulator-library-header">
               <div>
                 <h2>Cargar simulación</h2>
@@ -1142,7 +1142,10 @@ export default function SimulatorPage() {
                                     <ExternalLink aria-hidden="true" />
                                   </a>
                                 )}
-                                <button className="item-action" type="button" onClick={() => loadSimulation(item)}>
+                                <button className="item-action" type="button" onClick={(event) => {
+                                  event.stopPropagation();
+                                  loadSimulation(item);
+                                }}>
                                   Cargar <ChevronRight aria-hidden="true" />
                                 </button>
                                 <button className="button danger ghost small-button" type="button" onClick={() => deleteSimulation(item)} title="Eliminar simulación">
