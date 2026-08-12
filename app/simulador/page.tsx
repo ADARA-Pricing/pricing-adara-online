@@ -1136,7 +1136,7 @@ export default function SimulatorPage() {
                             <td>{statusLabel(item.desired_margin_rate).label}</td>
                             <td>{formatDateTime(item.updated_at || item.created_at)}</td>
                             <td>
-                              <div className="saved-simulation-actions">
+                              <div className="saved-simulation-actions" onClick={(event) => event.stopPropagation()}>
                                 {item.publication_url && (
                                   <a className="item-action icon-only" href={item.publication_url} target="_blank" rel="noreferrer" title="Ver publicación" aria-label="Ver publicación">
                                     <ExternalLink aria-hidden="true" />

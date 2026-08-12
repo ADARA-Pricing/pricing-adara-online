@@ -3994,6 +3994,26 @@ td strong {
   background: #f8fbff;
 }
 
+.simulator-library-table th:last-child,
+.simulator-library-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  min-width: 168px;
+  text-align: right;
+  background: #fff;
+  box-shadow: -1px 0 0 #e2e8f0;
+}
+
+.simulator-library-table thead th:last-child {
+  z-index: 2;
+  background: #f8fafc;
+}
+
+.simulator-library-row:hover td:last-child {
+  background: #f8fbff;
+}
+
 .simulator-library-table td.numeric {
   text-align: right;
   white-space: nowrap;
