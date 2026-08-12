@@ -1123,7 +1123,7 @@ export default function SimulatorPage() {
                       {filteredSavedSimulations.map((item) => {
                         const product = products.find((candidate) => normalizeSearch(candidate.name) === normalizeSearch(item.name));
                         return (
-                          <tr key={item.id}>
+                          <tr key={item.id} className="simulator-library-row" onClick={() => loadSimulation(item)}>
                             <td>
                               <strong>{item.name}</strong>
                               <span>{product?.sku ? `${product.sku} · ` : ""}{item.publication_url ? "Con link" : "Sin link"}</span>

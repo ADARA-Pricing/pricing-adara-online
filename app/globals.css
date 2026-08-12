@@ -3986,6 +3986,14 @@ td strong {
   font-variant-numeric: tabular-nums;
 }
 
+.simulator-library-row {
+  cursor: pointer;
+}
+
+.simulator-library-row:hover td {
+  background: #f8fbff;
+}
+
 .simulator-library-table td.numeric {
   text-align: right;
   white-space: nowrap;
