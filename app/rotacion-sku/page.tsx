@@ -118,7 +118,7 @@ export default function RotacionSkuPage() {
   const [onlyWithSales, setOnlyWithSales] = useState(false);
   const [onlyLowStock, setOnlyLowStock] = useState(false);
   const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, ColumnFilter>>>({});
-  const [openFilter, setOpenFilter] = useState<FilterableColumn | null>(null);
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -370,9 +370,32 @@ export default function RotacionSkuPage() {
     stockDays: "Dias stock",
     lastSale: "Ultima venta",
   };
+  const columnFilterLabels: Record<FilterableColumn, string> = {
+    productName: "Producto",
+    activePublications: "Publicaciones",
+    units7: "Unidades 7d",
+    revenue7: "Venta 7d",
+    units30: "Unidades 30d",
+    revenue30: "Venta 30d",
+    units60: "60 dias",
+    stock: "Stock",
+    stockDays: "Dias stock",
+  };
   const quickFilterCount = [query.trim(), categoryFilter, rotationFilter, onlyWithSales ? "sales" : "", onlyLowStock ? "stock" : ""].filter(Boolean).length;
   const activeFilterCount = quickFilterCount + activeColumnFilterCount;
   const defaultSortActive = sortKey === "units30" && sortDirection === "desc";
+  const rotationFilterLabels: Record<string, string> = {
+    low_stock: "Stock bajo",
+    normal: "Stock normal",
+    no_sales: "Sin ventas 30d",
+  };
+  const activeQuickFilterEntries = [
+    query.trim() ? { key: "query", label: `Busqueda "${query.trim()}"`, clear: () => setQuery("") } : null,
+    categoryFilter ? { key: "category", label: `Categoria ${categoryFilter}`, clear: () => setCategoryFilter("") } : null,
+    rotationFilter ? { key: "rotation", label: rotationFilterLabels[rotationFilter] ?? rotationFilter, clear: () => setRotationFilter("") } : null,
+    onlyWithSales ? { key: "with-sales", label: "Con ventas", clear: () => setOnlyWithSales(false) } : null,
+    onlyLowStock ? { key: "low-stock", label: "Stock bajo", clear: () => setOnlyLowStock(false) } : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; clear: () => void }>;
 
   function changeSort(key: SortKey) {
     if (sortKey === key) {
@@ -404,7 +427,6 @@ export default function RotacionSkuPage() {
     setOnlyWithSales(false);
     setOnlyLowStock(false);
     setColumnFilters({});
-    setOpenFilter(null);
   }
 
   function resetSort() {
@@ -424,12 +446,36 @@ export default function RotacionSkuPage() {
     });
   }
 
-  function ColumnFilterPopover({ column }: { column: FilterableColumn }) {
+  function formatColumnFilterValue(column: FilterableColumn, filter: ColumnFilter) {
+    if (filter.kind === "text") return `${columnFilterLabels[column]} contiene "${filter.value.trim()}"`;
+    const unit = column === "revenue7" || column === "revenue30" ? "$" : "";
+    const min = filter.min.trim();
+    const max = filter.max.trim();
+    if (filter.operator === "gt") return `${columnFilterLabels[column]} > ${unit}${min}`;
+    if (filter.operator === "lt") return `${columnFilterLabels[column]} < ${unit}${min}`;
+    return `${columnFilterLabels[column]} ${min ? `>= ${unit}${min}` : ""}${min && max ? " y " : ""}${max ? `<= ${unit}${max}` : ""}`;
+  }
+
+  function activeColumnFilterEntries() {
+    return (Object.entries(columnFilters) as Array<[FilterableColumn, ColumnFilter]>)
+      .filter(([, filter]) => columnFilterIsActive(filter));
+  }
+
+  function clearAdvancedFilters() {
+    setColumnFilters({});
+  }
+
+  function renderAdvancedFilterField(column: FilterableColumn) {
     const current = columnFilters[column];
     const isText = column === "productName";
-    const active = columnFilterIsActive(current);
     return (
-      <div className="rotation-filter-popover" onClick={(event) => event.stopPropagation()}>
+      <div className={`rotation-advanced-field ${columnFilterIsActive(current) ? "active" : ""}`} key={column}>
+        <div className="rotation-advanced-field-head">
+          <span>{columnFilterLabels[column]}</span>
+          {columnFilterIsActive(current) && (
+            <button type="button" onClick={() => clearColumnFilter(column)} aria-label={`Quitar filtro ${columnFilterLabels[column]}`}>x</button>
+          )}
+        </div>
         {isText ? (
           <label>
             <span>Contiene</span>
@@ -484,33 +530,6 @@ export default function RotacionSkuPage() {
             )}
           </>
         )}
-        <div className="rotation-filter-actions">
-          <button type="button" onClick={() => setOpenFilter(null)}>Aplicar</button>
-          <button type="button" disabled={!active} onClick={() => clearColumnFilter(column)}>Limpiar</button>
-        </div>
-      </div>
-    );
-  }
-
-  function HeaderTools({ column, filterColumn, children }: { column: SortKey; filterColumn?: FilterableColumn; children: ReactNode }) {
-    const activeFilter = filterColumn ? columnFilterIsActive(columnFilters[filterColumn]) : false;
-    return (
-      <div className="rotation-header-tools">
-        <SortButton column={column}>{children}</SortButton>
-        {filterColumn && (
-          <button
-            className={`rotation-filter-trigger ${activeFilter ? "active" : ""}`}
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setOpenFilter((current) => current === filterColumn ? null : filterColumn);
-            }}
-            aria-label={`Filtrar ${children}`}
-          >
-            <Filter aria-hidden="true" />
-          </button>
-        )}
-        {filterColumn && openFilter === filterColumn && <ColumnFilterPopover column={filterColumn} />}
       </div>
     );
   }
@@ -607,13 +626,49 @@ export default function RotacionSkuPage() {
             {onlyLowStock && <Check aria-hidden="true" />}
             Stock bajo
           </label>
+          <button
+            className={`rotation-advanced-toggle ${advancedFiltersOpen || activeColumnFilterCount ? "active" : ""}`}
+            type="button"
+            onClick={() => setAdvancedFiltersOpen((current) => !current)}
+          >
+            <Filter aria-hidden="true" />
+            Filtros avanzados{activeColumnFilterCount ? ` · ${activeColumnFilterCount}` : ""}
+          </button>
         </div>
+        {advancedFiltersOpen && (
+          <div className="rotation-advanced-panel">
+            <div className="rotation-advanced-grid">
+              {renderAdvancedFilterField("productName")}
+              {renderAdvancedFilterField("activePublications")}
+              {renderAdvancedFilterField("units7")}
+              {renderAdvancedFilterField("revenue7")}
+              {renderAdvancedFilterField("units30")}
+              {renderAdvancedFilterField("revenue30")}
+              {renderAdvancedFilterField("units60")}
+              {renderAdvancedFilterField("stock")}
+              {renderAdvancedFilterField("stockDays")}
+            </div>
+            <div className="rotation-advanced-actions">
+              <button className="button ghost small-button" type="button" onClick={() => setAdvancedFiltersOpen(false)}>Cerrar</button>
+              <button className="button ghost small-button" type="button" onClick={clearAdvancedFilters} disabled={!activeColumnFilterCount}>Limpiar filtros avanzados</button>
+            </div>
+          </div>
+        )}
         <div className="rotation-table-status">
-          <span>
-            {filteredRows.length} de {rows.length} SKU
-            {activeFilterCount ? ` · ${activeFilterCount} filtros activos` : ""}
-            {` · Ordenado por ${sortLabels[sortKey]} ${sortDirection === "asc" ? "↑" : "↓"}`}
-          </span>
+          <div className="rotation-active-context">
+            <span>{filteredRows.length} de {rows.length} SKU</span>
+            {activeQuickFilterEntries.map((filter) => (
+              <button className="rotation-active-filter" type="button" key={filter.key} onClick={filter.clear}>
+                {filter.label} <span aria-hidden="true">x</span>
+              </button>
+            ))}
+            {activeColumnFilterEntries().map(([column, filter]) => (
+              <button className="rotation-active-filter" type="button" key={column} onClick={() => clearColumnFilter(column)}>
+                {formatColumnFilterValue(column, filter)} <span aria-hidden="true">x</span>
+              </button>
+            ))}
+            <span>Ordenado por {sortLabels[sortKey]} {sortDirection === "asc" ? "↑" : "↓"}</span>
+          </div>
           <div className="rotation-table-actions">
             {activeFilterCount ? <button className="button ghost small-button" type="button" onClick={clearFilters}>Limpiar filtros</button> : null}
             {!defaultSortActive ? <button className="button ghost small-button" type="button" onClick={resetSort}>Restablecer orden</button> : null}
@@ -643,20 +698,20 @@ export default function RotacionSkuPage() {
               </colgroup>
               <thead>
                 <tr>
-                  <th className="sticky-product-column" rowSpan={2}><HeaderTools column="productName" filterColumn="productName">Producto</HeaderTools></th>
-                  <th rowSpan={2}><HeaderTools column="activePublications" filterColumn="activePublications">Publicaciones</HeaderTools></th>
+                  <th className="sticky-product-column" rowSpan={2}><SortButton column="productName">Producto</SortButton></th>
+                  <th className="numeric-header" rowSpan={2}><SortButton column="activePublications">Publicaciones</SortButton></th>
                   <th className="rotation-group-7" colSpan={2}>Últimos 7 días</th>
                   <th className="rotation-group-30" colSpan={2}>Últimos 30 días</th>
-                  <th rowSpan={2}><HeaderTools column="units60" filterColumn="units60">60 días</HeaderTools></th>
-                  <th rowSpan={2}><HeaderTools column="stock" filterColumn="stock">Stock</HeaderTools></th>
-                  <th rowSpan={2}><HeaderTools column="stockDays" filterColumn="stockDays">Días stock</HeaderTools></th>
-                  <th rowSpan={2}><SortButton column="lastSale">Última venta</SortButton></th>
+                  <th className="numeric-header" rowSpan={2}><SortButton column="units60">60 días</SortButton></th>
+                  <th className="numeric-header" rowSpan={2}><SortButton column="stock">Stock</SortButton></th>
+                  <th className="numeric-header" rowSpan={2}><SortButton column="stockDays">Días stock</SortButton></th>
+                  <th className="date-header" rowSpan={2}><SortButton column="lastSale">Última venta</SortButton></th>
                 </tr>
                 <tr>
-                  <th className="rotation-group-7"><HeaderTools column="units7" filterColumn="units7">Unidades</HeaderTools></th>
-                  <th className="rotation-group-7 rotation-group-divider"><HeaderTools column="revenue7" filterColumn="revenue7">Venta</HeaderTools></th>
-                  <th className="rotation-group-30"><HeaderTools column="units30" filterColumn="units30">Unidades</HeaderTools></th>
-                  <th className="rotation-group-30"><HeaderTools column="revenue30" filterColumn="revenue30">Venta</HeaderTools></th>
+                  <th className="rotation-group-7 numeric-header"><SortButton column="units7">Unidades</SortButton></th>
+                  <th className="rotation-group-7 rotation-group-divider numeric-header"><SortButton column="revenue7">Venta</SortButton></th>
+                  <th className="rotation-group-30 numeric-header"><SortButton column="units30">Unidades</SortButton></th>
+                  <th className="rotation-group-30 numeric-header"><SortButton column="revenue30">Venta</SortButton></th>
                 </tr>
               </thead>
               <tbody>
@@ -687,7 +742,7 @@ export default function RotacionSkuPage() {
                     <td>
                       <span className={`stock-pill ${statusClass(row.stockDays, row.stock)}`}>{stockLabel(row.stockDays)}</span>
                     </td>
-                    <td>{shortDate(row.lastSale)}</td>
+                    <td className="date-cell">{shortDate(row.lastSale)}</td>
                   </tr>
                 ))}
                 {!filteredRows.length && (
@@ -771,7 +826,7 @@ export default function RotacionSkuPage() {
         }
         .rotation-toolbar {
           display: grid;
-          grid-template-columns: minmax(280px, 1fr) 190px 180px auto auto;
+          grid-template-columns: minmax(280px, 1fr) 190px 180px auto auto auto;
           gap: 12px;
           align-items: center;
           margin-bottom: 10px;
@@ -806,6 +861,109 @@ export default function RotacionSkuPage() {
           background: #eff6ff;
           color: #1d4ed8;
         }
+        .rotation-advanced-toggle {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          min-height: 36px;
+          border: 1px solid #dbe4f0;
+          border-radius: 9px;
+          background: #fff;
+          color: #2563eb;
+          padding: 0 11px;
+          font-size: 12px;
+          font-weight: 800;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .rotation-advanced-toggle:hover,
+        .rotation-advanced-toggle.active {
+          border-color: #bfdbfe;
+          background: #eff6ff;
+        }
+        .rotation-advanced-toggle svg {
+          width: 14px;
+          height: 14px;
+          stroke-width: 1.9;
+        }
+        .rotation-advanced-panel {
+          display: grid;
+          gap: 12px;
+          margin: 0 0 12px;
+          padding: 12px;
+          border: 1px solid #dbe6f4;
+          border-radius: 10px;
+          background: #f8fafc;
+        }
+        .rotation-advanced-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .rotation-advanced-field {
+          display: grid;
+          gap: 7px;
+          min-width: 0;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          background: #fff;
+          padding: 10px;
+        }
+        .rotation-advanced-field.active {
+          border-color: #bfdbfe;
+          background: #f8fbff;
+        }
+        .rotation-advanced-field-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          color: #0f172a;
+          font-size: 12px;
+          font-weight: 800;
+        }
+        .rotation-advanced-field-head button {
+          all: unset;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          color: #64748b;
+          cursor: pointer;
+        }
+        .rotation-advanced-field-head button:hover {
+          background: #e2e8f0;
+          color: #0f172a;
+        }
+        .rotation-advanced-field label {
+          display: grid;
+          gap: 4px;
+        }
+        .rotation-advanced-field label span {
+          color: #64748b;
+          font-size: 11px;
+          font-weight: 700;
+        }
+        .rotation-advanced-field input,
+        .rotation-advanced-field select {
+          width: 100%;
+          min-height: 34px;
+          border: 1px solid #cfe0f6;
+          border-radius: 8px;
+          padding: 0 9px;
+          background: #fff;
+          color: #0f172a;
+          font-size: 12px;
+          font-variant-numeric: tabular-nums;
+        }
+        .rotation-advanced-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+        }
         .rotation-table-status {
           display: flex;
           align-items: center;
@@ -815,6 +973,32 @@ export default function RotacionSkuPage() {
           font-size: 12px;
           font-weight: 700;
           margin-bottom: 10px;
+        }
+        .rotation-active-context {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          flex-wrap: wrap;
+          min-width: 0;
+        }
+        .rotation-active-filter {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          min-height: 24px;
+          border: 1px solid #bfdbfe;
+          border-radius: 999px;
+          background: #eff6ff;
+          color: #1d4ed8;
+          padding: 0 8px;
+          font-size: 11px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+        .rotation-active-filter span {
+          color: inherit;
+          font-size: 12px;
+          margin: 0;
         }
         .rotation-table-actions {
           display: inline-flex;
@@ -887,6 +1071,13 @@ export default function RotacionSkuPage() {
           padding-top: 7px;
           padding-bottom: 7px;
         }
+        .rotation-table th.numeric-header {
+          text-align: right;
+        }
+        .rotation-table th.date-header,
+        .rotation-table td.date-cell {
+          text-align: right;
+        }
         .rotation-table td {
           border-bottom: 1px solid #e4edf8;
           padding: 8px 10px;
@@ -921,144 +1112,51 @@ export default function RotacionSkuPage() {
           font-size: 12px;
           margin-top: 3px;
         }
-        .rotation-sort-trigger {
+        :global(.rotation-page .rotation-sort-trigger) {
           all: unset;
           appearance: none !important;
           -webkit-appearance: none !important;
           display: inline-flex;
           align-items: center;
+          justify-content: inherit;
           gap: 4px;
           width: auto;
-          height: auto !important;
-          min-height: 0 !important;
           border: 0 !important;
           border-radius: 0 !important;
           background: transparent !important;
           box-shadow: none !important;
           color: inherit;
           cursor: pointer;
-          padding: 2px 0 !important;
           font: inherit;
           font-size: inherit;
           font-weight: inherit;
-          line-height: 1.2;
-          text-align: left;
-          white-space: nowrap;
-        }
-        :global(.rotation-page .rotation-sort-trigger) {
-          border: 0 !important;
-          background: transparent !important;
-          box-shadow: none !important;
           min-height: 0 !important;
           height: auto !important;
+          line-height: 1.2;
           padding: 2px 0 !important;
+          text-align: inherit;
+          white-space: nowrap;
         }
-        .rotation-sort-trigger:hover {
+        :global(.rotation-page .rotation-sort-trigger:hover) {
           color: #2563eb;
         }
-        .rotation-sort-trigger.active {
+        :global(.rotation-page .rotation-sort-trigger.active) {
           color: #1d4ed8;
         }
-        .rotation-sort-trigger svg {
+        :global(.rotation-page .rotation-sort-trigger svg) {
           width: 12px;
           height: 12px;
           flex-shrink: 0;
           stroke-width: 1.7;
         }
-        .rotation-sort-trigger .idle-sort-icon {
+        :global(.rotation-page .rotation-sort-trigger .idle-sort-icon) {
           width: 0;
           opacity: 0;
           transition: opacity 0.12s ease, width 0.12s ease;
         }
-        .rotation-header-tools:hover .idle-sort-icon {
+        :global(.rotation-page .rotation-sort-trigger:hover .idle-sort-icon) {
           width: 12px;
           opacity: 0.55;
-        }
-        .rotation-header-tools {
-          position: relative;
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
-        }
-        .rotation-filter-trigger {
-          all: unset;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 18px;
-          height: 18px;
-          color: #64748b;
-          cursor: pointer;
-          opacity: 0;
-          border-radius: 6px;
-        }
-        .rotation-header-tools:hover .rotation-filter-trigger,
-        .rotation-filter-trigger.active {
-          opacity: 1;
-        }
-        .rotation-filter-trigger:hover,
-        .rotation-filter-trigger.active {
-          color: #1d4ed8;
-          background: #eff6ff;
-        }
-        .rotation-filter-trigger svg {
-          width: 12px;
-          height: 12px;
-          stroke-width: 1.8;
-        }
-        .rotation-filter-popover {
-          position: absolute;
-          top: calc(100% + 8px);
-          left: 0;
-          z-index: 30;
-          display: grid;
-          gap: 8px;
-          width: 210px;
-          padding: 10px;
-          border: 1px solid #dbe6f4;
-          border-radius: 10px;
-          background: #fff;
-          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
-          color: #0f172a;
-          font-size: 12px;
-          font-weight: 600;
-          text-transform: none;
-          letter-spacing: 0;
-        }
-        .rotation-filter-popover label {
-          display: grid;
-          gap: 4px;
-        }
-        .rotation-filter-popover label span {
-          color: #64748b;
-          font-size: 11px;
-        }
-        .rotation-filter-popover input,
-        .rotation-filter-popover select {
-          width: 100%;
-          min-height: 32px;
-          border: 1px solid #cfe0f6;
-          border-radius: 8px;
-          padding: 0 9px;
-          background: #fff;
-          color: #0f172a;
-          font-size: 12px;
-        }
-        .rotation-filter-actions {
-          display: flex;
-          gap: 8px;
-          justify-content: flex-end;
-        }
-        .rotation-filter-actions button {
-          all: unset;
-          cursor: pointer;
-          color: #2563eb;
-          font-size: 12px;
-          font-weight: 700;
-        }
-        .rotation-filter-actions button:disabled {
-          cursor: default;
-          color: #94a3b8;
         }
         .rotation-product-sort {
           display: flex;
@@ -1152,6 +1250,13 @@ export default function RotacionSkuPage() {
           }
           .rotation-toolbar {
             grid-template-columns: 1fr;
+          }
+          .rotation-advanced-grid {
+            grid-template-columns: 1fr;
+          }
+          .rotation-table-status {
+            align-items: flex-start;
+            flex-direction: column;
           }
         }
       `}</style>
