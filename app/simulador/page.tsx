@@ -54,6 +54,10 @@ type SimulationForm = {
   salePrice: string;
   vatCondition: VatCondition;
   shippingGross: string;
+  iibbRate: string;
+  idcRate: string;
+  iiggRate: string;
+  structureAmount: string;
 };
 
 type SavedSimulation = {
@@ -81,6 +85,10 @@ const initialForm: SimulationForm = {
   salePrice: "317000",
   vatCondition: "iva_21",
   shippingGross: "0",
+  iibbRate: "",
+  idcRate: "",
+  iiggRate: "",
+  structureAmount: "0",
 };
 
 const channelOrder = ["MC", "MP3", "MP6", "MP9", "MP12", "EF"];
@@ -263,7 +271,16 @@ export default function SimulatorPage() {
     else setCategories((categoriesResponse.data || []) as MercadoLibreCategoryFee[]);
 
     if (taxesResponse.error) setError(taxesResponse.error.message);
-    else if (taxesResponse.data) setTaxes(taxesResponse.data as TaxSettings);
+    else if (taxesResponse.data) {
+      const loadedTaxes = taxesResponse.data as TaxSettings;
+      setTaxes(loadedTaxes);
+      setForm((current) => ({
+        ...current,
+        iibbRate: current.iibbRate || formatPercentInput(loadedTaxes.iibb_rate),
+        idcRate: current.idcRate || formatPercentInput(loadedTaxes.idc_rate),
+        iiggRate: current.iiggRate || formatPercentInput(loadedTaxes.iigg_rate),
+      }));
+    }
 
     if (productsResponse.error) setError(productsResponse.error.message);
     else setProducts((productsResponse.data || []) as Product[]);
@@ -389,6 +406,10 @@ export default function SimulatorPage() {
       salePrice: "",
       vatCondition: "iva_21",
       shippingGross: "0",
+      iibbRate: formatPercentInput(taxes.iibb_rate),
+      idcRate: formatPercentInput(taxes.idc_rate),
+      iiggRate: formatPercentInput(taxes.iigg_rate),
+      structureAmount: "0",
     });
     setLastEdited("price");
     setLoadedSimulation(null);
@@ -446,6 +467,10 @@ export default function SimulatorPage() {
       salePrice: String(Math.round(Number(item.sale_price || 0))),
       vatCondition: item.vat_condition || "iva_21",
       shippingGross: String(Math.round(Number(item.shipping_gross || 0))),
+      iibbRate: formatPercentInput(taxes.iibb_rate),
+      idcRate: formatPercentInput(taxes.idc_rate),
+      iiggRate: formatPercentInput(taxes.iigg_rate),
+      structureAmount: "0",
     });
     setLastEdited("price");
     setLoadedSimulation(item);
@@ -574,6 +599,13 @@ export default function SimulatorPage() {
     const appliesVat = saleAppliesVat(form.vatCondition);
     const shippingGross = Number(toNumber(form.shippingGross) || 0);
     const shippingNet = shippingGross / 1.21;
+    const simulationTaxes: TaxSettings = {
+      ...taxes,
+      iibb_rate: Number(toNumber(form.iibbRate) || 0),
+      idc_rate: Number(toNumber(form.idcRate) || 0),
+      iigg_rate: Number(toNumber(form.iiggRate) || 0),
+    };
+    const structureAmount = Number(toNumber(form.structureAmount) || 0);
 
     const product: Product = {
       sku: "SIM",
@@ -595,6 +627,7 @@ export default function SimulatorPage() {
       saleAppliesVat: appliesVat,
       costVatRate: 0,
       manualShippingAmount: shippingNet,
+      structureAmount,
       roundTo: 100,
       roundingMode: "nearest" as const,
     };
@@ -615,7 +648,7 @@ export default function SimulatorPage() {
       product,
       baseOption,
       categoryFee,
-      taxes,
+      simulationTaxes,
       shippingCost,
       {
         ...commonTarget,
@@ -633,7 +666,7 @@ export default function SimulatorPage() {
         product,
         option,
         categoryFee,
-        taxes,
+        simulationTaxes,
         shippingCost,
         {
           ...commonTarget,
@@ -645,7 +678,7 @@ export default function SimulatorPage() {
         product,
         option,
         categoryFee,
-        taxes,
+        simulationTaxes,
         shippingCost,
         {
           ...commonTarget,
@@ -680,9 +713,9 @@ export default function SimulatorPage() {
         : 0;
 
     const taxesAppliedRate =
-      Number(taxes.iibb_rate || 0) +
-      Number(taxes.idc_rate || 0) +
-      Number(taxes.iigg_rate || 0);
+      Number(simulationTaxes.iibb_rate || 0) +
+      Number(simulationTaxes.idc_rate || 0) +
+      Number(simulationTaxes.iigg_rate || 0);
 
     const taxesAppliedAmount =
       Number(summary?.iibbAmount || 0) +
@@ -696,8 +729,10 @@ export default function SimulatorPage() {
       grossSalePrice: linkedSalePrice,
       appliesVat,
       productVatRate,
+      simulationTaxes,
       shippingGross,
       shippingNet,
+      structureAmount,
       averageShippingForSelectedCategory,
       categoryFee,
       categoryCommissionAmount,
@@ -968,10 +1003,56 @@ export default function SimulatorPage() {
             <div><span>Categoría</span><strong>{form.category || "-"}</strong></div>
             <div><span>Comisión categoría</span><strong>{percent(simulation.categoryFee?.marketplace_fee_rate || 0)}</strong></div>
             <div><span>Envío promedio categoría</span><strong>{simulation.averageShippingForSelectedCategory ? moneyWithCents(simulation.averageShippingForSelectedCategory) : "-"}</strong></div>
-            <div><span>IIBB</span><strong>{percent(taxes.iibb_rate || 0)}</strong></div>
-            <div><span>IDC</span><strong>{percent(taxes.idc_rate || 0)}</strong></div>
-            <div><span>IIGG</span><strong>{percent(taxes.iigg_rate || 0)}</strong></div>
-            <div><span>Estructura</span><strong>{moneyWithCents(0)}</strong></div>
+            <label className="simulator-base-edit-row">
+              <span>IIBB</span>
+              <div className="input-suffix simulator-base-input">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.iibbRate}
+                  onChange={(event) => update("iibbRate", event.target.value)}
+                  aria-label="IIBB"
+                />
+                <span>%</span>
+              </div>
+            </label>
+            <label className="simulator-base-edit-row">
+              <span>IDC</span>
+              <div className="input-suffix simulator-base-input">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.idcRate}
+                  onChange={(event) => update("idcRate", event.target.value)}
+                  aria-label="IDC"
+                />
+                <span>%</span>
+              </div>
+            </label>
+            <label className="simulator-base-edit-row">
+              <span>IIGG</span>
+              <div className="input-suffix simulator-base-input">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.iiggRate}
+                  onChange={(event) => update("iiggRate", event.target.value)}
+                  aria-label="IIGG"
+                />
+                <span>%</span>
+              </div>
+            </label>
+            <label className="simulator-base-edit-row">
+              <span>Estructura</span>
+              <input
+                className="simulator-base-money-input"
+                type="text"
+                inputMode="decimal"
+                value={form.structureAmount}
+                onChange={(event) => update("structureAmount", event.target.value)}
+                aria-label="Estructura"
+              />
+            </label>
             <div><span>Observaciones</span><strong>Simulación automática</strong></div>
           </div>}
           </div>
