@@ -4544,6 +4544,18 @@ td strong {
   margin-top: 2px;
 }
 
+.cost-channel-base-cell strong {
+  display: block;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cost-channel-base-cell small {
+  color: #74839a;
+  font-size: 11px;
+}
+
 .cost-channel-total-cell strong {
   display: block;
   color: #0f172a;

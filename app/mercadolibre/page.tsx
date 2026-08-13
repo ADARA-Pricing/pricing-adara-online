@@ -145,6 +145,14 @@ function boolLabel(value?: boolean | null) {
   return value ? "Sí" : "No";
 }
 
+function tablePercent(value?: number | null) {
+  if (value === undefined || value === null || Number.isNaN(value)) return "-";
+  return `${Number(value).toLocaleString("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}%`;
+}
+
 function dateLabel(value?: string | null) {
   if (!value) return "-";
   return new Date(value).toLocaleString("es-AR", {
@@ -961,20 +969,20 @@ export default function MercadoLibrePage() {
                         </div>
                       </div>
                     </td>
-                    <td className="numeric-cell">{percent(row.marketplaceRate)}</td>
-                    <td className="numeric-cell">{percent(row.financingRate)}</td>
-                    <td className="numeric-cell">{percent(row.taxRate)}</td>
+                    <td className="numeric-cell">{tablePercent(row.marketplaceRate)}</td>
+                    <td className="numeric-cell">{tablePercent(row.financingRate)}</td>
+                    <td className="numeric-cell">{tablePercent(row.taxRate)}</td>
                     <td className="numeric-cell">
                       {row.missingShippingCount >= row.productCount && row.productCount > 0 ? <span className="badge badge-warning">No configurado</span> : moneyWithCents(row.shippingAmount)}
                     </td>
                     <td className="numeric-cell">{moneyWithCents(row.fixedFeeAmount + row.structureAmount + row.salesCommissionAmount)}</td>
-                    <td className="numeric-cell">
+                    <td className="numeric-cell cost-channel-base-cell">
                       <strong>{moneyWithCents(row.basePrice)}</strong>
                       <small>{row.productCount} productos</small>
                     </td>
                     <td className="numeric-cell cost-channel-total-cell">
                       <strong>{moneyWithCents(row.totalCostAmount)}</strong>
-                      <small>{percent(row.totalCostRate)}</small>
+                      <small>{tablePercent(row.totalCostRate)}</small>
                     </td>
                   </tr>
                 ))}
@@ -1004,15 +1012,15 @@ export default function MercadoLibrePage() {
                         <span>{row.productCount} productos activos</span>
                       </div>
                     </td>
-                    <td className="numeric-cell">{percent(row.marketplaceRate)}</td>
+                    <td className="numeric-cell">{tablePercent(row.marketplaceRate)}</td>
                     <td className="numeric-cell">
                       {row.missingShippingCount >= row.productCount * row.channelCount && row.productCount > 0 ? <span className="badge badge-warning">No configurado</span> : moneyWithCents(row.shippingAmount)}
                     </td>
-                    <td className="numeric-cell">{percent(row.taxRate)}</td>
+                    <td className="numeric-cell">{tablePercent(row.taxRate)}</td>
                     <td className="numeric-cell">{row.channelCount}</td>
                     <td className="numeric-cell cost-channel-total-cell">
                       <strong>{moneyWithCents(row.totalCostAmount)}</strong>
-                      <small>{percent(row.totalCostRate)}</small>
+                      <small>{tablePercent(row.totalCostRate)}</small>
                     </td>
                   </tr>
                 ))}
