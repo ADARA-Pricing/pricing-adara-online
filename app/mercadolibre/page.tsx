@@ -141,7 +141,7 @@ function numberValue(value: number | null | undefined) {
 }
 
 function boolLabel(value?: boolean | null) {
-  return value ? "SÃ­" : "No";
+  return value ? "Sí" : "No";
 }
 
 function dateLabel(value?: string | null) {
@@ -267,7 +267,7 @@ export default function MercadoLibrePage() {
       if (!response.ok) throw new Error(data?.error || "No se pudo sincronizar MercadoLibre.");
 
       setMessage(
-        `MercadoLibre sincronizado: ${data.category_fee_updates || 0} categorias y ${data.installment_fee_updates || 0} costos de cuotas actualizados.`
+        `MercadoLibre sincronizado: ${data.category_fee_updates || 0} categorías y ${data.installment_fee_updates || 0} costos de cuotas actualizados.`
       );
       await loadData();
     } catch (syncError) {
@@ -285,7 +285,7 @@ export default function MercadoLibrePage() {
     try {
       const response = await fetch("/api/mercadolibre/import-categories");
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "No se pudieron leer las categorias de MercadoLibre.");
+      if (!response.ok) throw new Error(data?.error || "No se pudieron leer las categorías de MercadoLibre.");
 
       const rows = Array.isArray(data?.rows) ? data.rows : [];
       const names = rows.reduce((acc: Record<string, string>, row: MeliCategoryImportRow) => {
@@ -304,7 +304,7 @@ export default function MercadoLibrePage() {
       setSelectedCategoryIds([]);
       setShowCategoryImport(true);
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : "No se pudieron leer las categorias de MercadoLibre.");
+      setError(importError instanceof Error ? importError.message : "No se pudieron leer las categorías de MercadoLibre.");
     } finally {
       setCategoryImportLoading(false);
     }
@@ -342,7 +342,7 @@ export default function MercadoLibrePage() {
         .filter((entry) => entry.category);
 
       if (categoriesToImport.length === 0) {
-        setError("Selecciona al menos una categoria y asignale un nombre.");
+        setError("Seleccioná al menos una categoría y asignale un nombre.");
         return;
       }
 
@@ -352,14 +352,14 @@ export default function MercadoLibrePage() {
         body: JSON.stringify({ categories: categoriesToImport }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "No se pudieron importar las categorias.");
+      if (!response.ok) throw new Error(data?.error || "No se pudieron importar las categorías.");
 
-      setMessage(`Categorias importadas: ${data.imported || 0}.`);
+      setMessage(`Categorías importadas: ${data.imported || 0}.`);
       setSelectedCategoryIds([]);
       await loadData();
       await loadCategoryImportPreview();
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : "No se pudieron importar las categorias.");
+      setError(importError instanceof Error ? importError.message : "No se pudieron importar las categorías.");
     } finally {
       setCategoryImportSaving(false);
     }
@@ -425,7 +425,7 @@ export default function MercadoLibrePage() {
     };
 
     if (!payload.code || !payload.name) {
-      setError("CÃ³digo y nombre son obligatorios.");
+      setError("Código y nombre son obligatorios.");
       setSaving(false);
       return;
     }
@@ -458,7 +458,7 @@ export default function MercadoLibrePage() {
     };
 
     if (!payload.category) {
-      setError("La categorÃ­a es obligatoria.");
+      setError("La categoría es obligatoria.");
       setSaving(false);
       return;
     }
@@ -471,14 +471,14 @@ export default function MercadoLibrePage() {
       return;
     }
 
-    setMessage(`ComisiÃ³n por categorÃ­a guardada: ${payload.category}`);
+    setMessage(`Comisión por categoría guardada: ${payload.category}`);
     setCategoryForm(emptyCategory);
     setShowCategoryForm(false);
     await loadData();
   }
 
   async function deleteInstallment(item: MercadoLibreInstallmentFee) {
-    const ok = window.confirm(`Â¿Seguro que querÃ©s eliminar el canal ${item.code} - ${item.name}?`);
+    const ok = window.confirm(`¿Seguro que querés eliminar el canal ${item.code} - ${item.name}?`);
     if (!ok) return;
     setError(null);
     setMessage(null);
@@ -491,14 +491,14 @@ export default function MercadoLibrePage() {
   }
 
   async function deleteCategory(item: MercadoLibreCategoryFee) {
-    const ok = window.confirm(`Â¿Seguro que querÃ©s eliminar la categorÃ­a ${item.category}?`);
+    const ok = window.confirm(`¿Seguro que querés eliminar la categoría ${item.category}?`);
     if (!ok) return;
     setError(null);
     setMessage(null);
     const { error } = await supabase.from("mercadolibre_category_fees").delete().eq("category", item.category);
     if (error) setError(error.message);
     else {
-      setMessage(`CategorÃ­a eliminada: ${item.category}`);
+      setMessage(`Categoría eliminada: ${item.category}`);
       await loadData();
     }
   }
@@ -529,7 +529,7 @@ export default function MercadoLibrePage() {
     setShowChannelForm(false);
     setShowCategoryImport(false);
     setShowCategoryForm(true);
-    setMessage(`Editando categorÃ­a ${item.category}.`);
+    setMessage(`Editando categoría ${item.category}.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -682,7 +682,7 @@ export default function MercadoLibrePage() {
           channelCode: option.code,
           channelName: option.name,
           channelType: normalizedOption.channel_type || "otro",
-          category: product.category || "Sin categoria",
+          category: product.category || "Sin categoría",
           productId: product.id,
           sku: product.sku,
           marketplaceAmount,
@@ -893,15 +893,15 @@ export default function MercadoLibrePage() {
         <div className="cost-channel-toolbar">
           <label className="search-control">
             <Search aria-hidden="true" />
-            <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar canal o categoria..." />
+            <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar canal o categoría..." />
           </label>
           <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-            <option value="">Todas las categorias</option>
+            <option value="">Todas las categorías</option>
             {productCategories.map((category) => <option key={category} value={category}>{category}</option>)}
           </select>
           <div className="cost-channel-tabs" role="tablist" aria-label="Vista de costo">
             <button type="button" className={viewMode === "channel" ? "active" : ""} onClick={() => setViewMode("channel")}>Por canal</button>
-            <button type="button" className={viewMode === "category" ? "active" : ""} onClick={() => setViewMode("category")}>Por categoria</button>
+            <button type="button" className={viewMode === "category" ? "active" : ""} onClick={() => setViewMode("category")}>Por categoría</button>
           </div>
         </div>
       </section>
@@ -909,11 +909,11 @@ export default function MercadoLibrePage() {
       <section className="card cost-channel-table-card">
         <div className="cost-channel-table-header">
           <div>
-            <h2>{viewMode === "channel" ? "Comparativa por canal" : "Comparativa por categoria"}</h2>
+            <h2>{viewMode === "channel" ? "Comparativa por canal" : "Comparativa por categoría"}</h2>
             <p className="small">
               {viewMode === "channel"
                 ? `${filteredChannelRows.length} canal(es) calculados sobre productos activos.`
-                : `${filteredCategoryRows.length} categoria(s) con productos activos.`}
+                : `${filteredCategoryRows.length} categoría(s) con productos activos.`}
             </p>
           </div>
           {(query || categoryFilter) && (
@@ -929,7 +929,7 @@ export default function MercadoLibrePage() {
           <div className="cost-channel-empty">
             <ChartNoAxesCombined aria-hidden="true" />
             <h2>No hay costos por canal configurados</h2>
-            <p>Configura los parametros comerciales para poder comparar los canales.</p>
+            <p>Configurá los parámetros comerciales para poder comparar los canales.</p>
           </div>
         ) : viewMode === "channel" ? (
           <div className="table-wrap cost-channel-table-wrap">
@@ -937,10 +937,10 @@ export default function MercadoLibrePage() {
               <thead>
                 <tr>
                   <th><ChannelSortButton column="code">Canal</ChannelSortButton></th>
-                  <th className="numeric-header"><ChannelSortButton column="marketplaceRate">Comision</ChannelSortButton></th>
+                  <th className="numeric-header"><ChannelSortButton column="marketplaceRate">Comisión</ChannelSortButton></th>
                   <th className="numeric-header"><ChannelSortButton column="financingRate">Cuotas</ChannelSortButton></th>
                   <th className="numeric-header"><ChannelSortButton column="taxRate">Impuestos</ChannelSortButton></th>
-                  <th className="numeric-header"><ChannelSortButton column="shippingAmount">Envio</ChannelSortButton></th>
+                  <th className="numeric-header"><ChannelSortButton column="shippingAmount">Envío</ChannelSortButton></th>
                   <th className="numeric-header">Otros</th>
                   <th className="numeric-header"><ChannelSortButton column="basePrice">Base</ChannelSortButton></th>
                   <th className="numeric-header cost-channel-total-head"><ChannelSortButton column="totalCostAmount">Costo total</ChannelSortButton></th>
@@ -955,7 +955,7 @@ export default function MercadoLibrePage() {
                         <span>{row.name}</span>
                         <div className="cost-channel-row-badges">
                           {relationBadge(row)}
-                          {row.missingShippingCount > 0 && <span className="badge badge-neutral">Envio incompleto</span>}
+                          {row.missingShippingCount > 0 && <span className="badge badge-neutral">Envío incompleto</span>}
                         </div>
                       </div>
                     </td>
@@ -985,9 +985,9 @@ export default function MercadoLibrePage() {
             <table className="cost-channel-table">
               <thead>
                 <tr>
-                  <th><CategorySortButton column="category">Categoria</CategorySortButton></th>
-                  <th className="numeric-header"><CategorySortButton column="marketplaceRate">Comision</CategorySortButton></th>
-                  <th className="numeric-header"><CategorySortButton column="shippingAmount">Envio prom.</CategorySortButton></th>
+                  <th><CategorySortButton column="category">Categoría</CategorySortButton></th>
+                  <th className="numeric-header"><CategorySortButton column="marketplaceRate">Comisión</CategorySortButton></th>
+                  <th className="numeric-header"><CategorySortButton column="shippingAmount">Envío prom.</CategorySortButton></th>
                   <th className="numeric-header"><CategorySortButton column="taxRate">Impuestos</CategorySortButton></th>
                   <th className="numeric-header">Canales</th>
                   <th className="numeric-header"><CategorySortButton column="totalCostAmount">Costo</CategorySortButton></th>
@@ -1014,7 +1014,7 @@ export default function MercadoLibrePage() {
                     </td>
                   </tr>
                 ))}
-                {filteredCategoryRows.length === 0 && <tr><td colSpan={6}>No hay categorias que coincidan con los filtros.</td></tr>}
+                {filteredCategoryRows.length === 0 && <tr><td colSpan={6}>No hay categorías que coincidan con los filtros.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1024,21 +1024,21 @@ export default function MercadoLibrePage() {
       <section className="card channel-actions-card">
         <div className="channel-actions-header">
           <div>
-            <h2 style={{ marginTop: 0, marginBottom: 6 }}>ConfiguraciÃ³n de canales y categorÃ­as</h2>
-            <p className="small" style={{ marginBottom: 0 }}>MercadoLibre puede actualizar comisiones por categorÃ­a y costo de cuotas desde las publicaciones sincronizadas.</p>
+            <h2 style={{ marginTop: 0, marginBottom: 6 }}>Configuración de canales y categorías</h2>
+            <p className="small" style={{ marginBottom: 0 }}>MercadoLibre puede actualizar comisiones por categoría y costo de cuotas desde las publicaciones sincronizadas.</p>
           </div>
           <div className="channel-actions-buttons">
             <button type="button" className="button" onClick={syncFromMercadoLibre} disabled={syncingMeli}>
               {syncingMeli ? "Sincronizando..." : "Actualizar costos ML"}
             </button>
             <button type="button" className={`button ${showCategoryImport ? "secondary" : "ghost"}`} onClick={startCategoryImport} disabled={categoryImportLoading}>
-              {categoryImportLoading ? "Leyendo ML..." : showCategoryImport ? "Ocultar importador" : "Importar categorias ML"}
+              {categoryImportLoading ? "Leyendo ML..." : showCategoryImport ? "Ocultar importador" : "Importar categorías ML"}
             </button>
             <button type="button" className={`button ${showChannelForm ? "secondary" : "ghost"}`} onClick={startNewChannel}>
               {showChannelForm ? "Ocultar canal" : "Agregar canal"}
             </button>
             <button type="button" className={`button ${showCategoryForm ? "secondary" : "ghost"}`} onClick={startNewCategory}>
-              {showCategoryForm ? "Ocultar categorÃ­a" : "Agregar categorÃ­a"}
+              {showCategoryForm ? "Ocultar categoría" : "Agregar categoría"}
             </button>
           </div>
         </div>
@@ -1048,9 +1048,9 @@ export default function MercadoLibrePage() {
         <section className="card channel-card channel-editor-card meli-category-import-card" style={{ marginBottom: 20 }}>
           <div className="section-title-row">
             <div>
-              <h2 style={{ marginTop: 0, marginBottom: 6 }}>Importar categorias desde MercadoLibre</h2>
+              <h2 style={{ marginTop: 0, marginBottom: 6 }}>Importar categorías desde MercadoLibre</h2>
               <p className="small" style={{ marginBottom: 0 }}>
-                Trae las categorias con publicaciones activas o pausadas, calcula la comision detectada y te deja elegir cuales guardar.
+                Trae las categorías con publicaciones activas o pausadas, calcula la comisión detectada y te deja elegir cuáles guardar.
               </p>
             </div>
             <div className="channel-actions-buttons">
@@ -1065,7 +1065,7 @@ export default function MercadoLibrePage() {
 
           {categoryImportPreview && (
             <div className="category-import-summary">
-              <span className="badge">{categoryImportPreview.total_categories} categorias ML</span>
+              <span className="badge">{categoryImportPreview.total_categories} categorías ML</span>
               <span className="badge">{categoryImportPreview.total_items} publicaciones</span>
               <span className="badge">{categoryImportPreview.missing} nuevas</span>
               <span className="badge">{categoryImportPreview.existing} ya cargadas</span>
@@ -1087,7 +1087,7 @@ export default function MercadoLibrePage() {
               onClick={() => setSelectedCategoryIds([])}
               disabled={selectedCategoryIds.length === 0}
             >
-              Limpiar seleccion
+              Limpiar selección
             </button>
             <button
               type="button"
@@ -1099,16 +1099,16 @@ export default function MercadoLibrePage() {
             </button>
           </div>
 
-          {categoryImportLoading && !categoryImportPreview ? <p>Cargando categorias desde MercadoLibre...</p> : (
+          {categoryImportLoading && !categoryImportPreview ? <p>Cargando categorías desde MercadoLibre...</p> : (
             <div className="table-wrap category-import-table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Importar</th>
                     <th>Nombre en la app</th>
-                    <th>Categoria MercadoLibre</th>
+                    <th>Categoría MercadoLibre</th>
                     <th>Publicaciones</th>
-                    <th>Comision</th>
+                    <th>Comisión</th>
                     <th>Estado</th>
                     <th>Ejemplos</th>
                   </tr>
@@ -1125,7 +1125,7 @@ export default function MercadoLibrePage() {
                               checked={selected}
                               onChange={(event) => toggleCategorySelection(row.meli_category_id, event.target.checked)}
                             />
-                            <span>{selected ? "Si" : "No"}</span>
+                            <span>{selected ? "Sí" : "No"}</span>
                           </label>
                         </td>
                         <td>
@@ -1151,7 +1151,7 @@ export default function MercadoLibrePage() {
                     );
                   })}
                   {!categoryImportLoading && (!categoryImportPreview || categoryImportPreview.rows.length === 0) && (
-                    <tr><td colSpan={7}>No encontramos categorias con publicaciones en MercadoLibre.</td></tr>
+                    <tr><td colSpan={7}>No encontramos categorías con publicaciones en MercadoLibre.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1165,7 +1165,7 @@ export default function MercadoLibrePage() {
           <div className="section-title-row">
             <div>
               <h2 style={{ marginTop: 0, marginBottom: 6 }}>Condiciones de venta / canales</h2>
-              <p className="small" style={{ marginBottom: 0 }}>ConfigurÃ¡ canales como MercadoLibre, efectivo, transferencia, Tienda Nube, Posnet u otros. Los checks definen quÃ© costos/impuestos aplican en el cÃ¡lculo.</p>
+              <p className="small" style={{ marginBottom: 0 }}>Configurá canales como MercadoLibre, efectivo, transferencia, Tienda Nube, Posnet u otros. Los checks definen qué costos/impuestos aplican en el cálculo.</p>
             </div>
             <button
               type="button"
@@ -1180,7 +1180,7 @@ export default function MercadoLibrePage() {
           </div>
           <form onSubmit={saveInstallment}>
             <div className="channel-form-grid">
-              <div className="field"><label>CÃ³digo *</label><input value={installmentForm.code} onChange={(e) => updateInstallment("code", e.target.value)} placeholder="EF, MP6, TN" required /></div>
+              <div className="field"><label>Código *</label><input value={installmentForm.code} onChange={(e) => updateInstallment("code", e.target.value)} placeholder="EF, MP6, TN" required /></div>
               <div className="field"><label>Nombre *</label><input value={installmentForm.name} onChange={(e) => updateInstallment("name", e.target.value)} placeholder="Efectivo / ML Premium 6 cuotas" required /></div>
               <div className="field"><label>Tipo de canal</label><select value={installmentForm.channel_type || "mercadolibre"} onChange={(e) => applyChannelPreset(e.target.value)}><option value="mercadolibre">MercadoLibre</option><option value="directo">Directo / efectivo</option><option value="web">Web / Tienda Nube</option><option value="posnet">Posnet</option><option value="otro">Otro</option></select></div>
               <div className="field"><label>Cuotas</label><input type="number" min="0" value={numberValue(installmentForm.installment_count)} onChange={(e) => updateInstallment("installment_count", toNumber(e.target.value))} /></div>
@@ -1189,8 +1189,8 @@ export default function MercadoLibrePage() {
             </div>
 
             <div className="channel-flags">
-              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_marketplace_fee)} onChange={(e) => updateInstallment("applies_marketplace_fee", e.target.checked)} /><span>Aplica comisiÃ³n ML por categorÃ­a</span></label>
-              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_shipping)} onChange={(e) => updateInstallment("applies_shipping", e.target.checked)} /><span>Aplica envÃ­o ML</span></label>
+              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_marketplace_fee)} onChange={(e) => updateInstallment("applies_marketplace_fee", e.target.checked)} /><span>Aplica comisión ML por categoría</span></label>
+              <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_shipping)} onChange={(e) => updateInstallment("applies_shipping", e.target.checked)} /><span>Aplica envío ML</span></label>
               <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_iibb)} onChange={(e) => updateInstallment("applies_iibb", e.target.checked)} /><span>Aplica IIBB</span></label>
               <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_idc)} onChange={(e) => updateInstallment("applies_idc", e.target.checked)} /><span>Aplica IDC</span></label>
               <label className="checkbox-row"><input type="checkbox" checked={Boolean(installmentForm.applies_iigg)} onChange={(e) => updateInstallment("applies_iigg", e.target.checked)} /><span>Aplica IIGG</span></label>
@@ -1210,8 +1210,8 @@ export default function MercadoLibrePage() {
         <section className="card channel-card channel-editor-card" style={{ marginBottom: 20 }}>
           <div className="section-title-row">
             <div>
-              <h2 style={{ marginTop: 0, marginBottom: 6 }}>Comisiones por categorÃ­a / canal</h2>
-              <p className="small" style={{ marginBottom: 0 }}>Esta comisiÃ³n cambia segÃºn la categorÃ­a del producto y se usa solo en canales que tengan activo â€œAplica comisiÃ³n ML por categorÃ­aâ€.</p>
+              <h2 style={{ marginTop: 0, marginBottom: 6 }}>Comisiones por categoría / canal</h2>
+              <p className="small" style={{ marginBottom: 0 }}>Esta comisión cambia según la categoría del producto y se usa solo en canales que tengan activo "Aplica comisión ML por categoría".</p>
             </div>
             <button
               type="button"
@@ -1226,12 +1226,12 @@ export default function MercadoLibrePage() {
           </div>
           <form onSubmit={saveCategory}>
             <div className="category-form-grid">
-              <div className="field"><label>CategorÃ­a *</label><input value={categoryForm.category} onChange={(e) => updateCategory("category", e.target.value)} placeholder="TV" required /></div>
-              <div className="field"><label>ComisiÃ³n MercadoLibre %</label><input type="number" step="0.01" value={categoryForm.marketplace_fee_rate} onChange={(e) => updateCategory("marketplace_fee_rate", Number(e.target.value))} /></div>
+              <div className="field"><label>Categoría *</label><input value={categoryForm.category} onChange={(e) => updateCategory("category", e.target.value)} placeholder="TV" required /></div>
+              <div className="field"><label>Comisión MercadoLibre %</label><input type="number" step="0.01" value={categoryForm.marketplace_fee_rate} onChange={(e) => updateCategory("marketplace_fee_rate", Number(e.target.value))} /></div>
               <div className="field"><label>Estado</label><select value={categoryForm.active ? "true" : "false"} onChange={(e) => updateCategory("active", e.target.value === "true")}><option value="true">Activa</option><option value="false">Inactiva</option></select></div>
               <div className="field"><label>Notas</label><input value={categoryForm.notes || ""} onChange={(e) => updateCategory("notes", e.target.value)} /></div>
             </div>
-            <button className="button" disabled={saving} style={{ marginTop: 14 }}>{saving ? "Guardando..." : "Guardar categorÃ­a"}</button>
+            <button className="button" disabled={saving} style={{ marginTop: 14 }}>{saving ? "Guardando..." : "Guardar categoría"}</button>
           </form>
         </section>
       )}
@@ -1242,7 +1242,7 @@ export default function MercadoLibrePage() {
           {loading ? <p>Cargando...</p> : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>CÃ³digo</th><th>Nombre</th><th>Tipo</th><th>Cuotas</th><th>Costo %</th><th>ML</th><th>Env.</th><th>IIBB</th><th>IIGG</th><th>IVA</th><th>Estado</th><th></th></tr></thead>
+                <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Cuotas</th><th>Costo %</th><th>ML</th><th>Env.</th><th>IIBB</th><th>IIGG</th><th>IVA</th><th>Estado</th><th></th></tr></thead>
                 <tbody>
                   {installments.map((item) => {
                     const isMl = item.channel_type === "mercadolibre" || item.code.startsWith("MP") || item.code === "MC";
@@ -1271,11 +1271,11 @@ export default function MercadoLibrePage() {
         </div>
 
         <div className="card channel-table-card">
-          <h2 style={{ marginTop: 0 }}>Tabla de categorÃ­as</h2>
+          <h2 style={{ marginTop: 0 }}>Tabla de categorías</h2>
           {loading ? <p>Cargando...</p> : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>CategorÃ­a</th><th>ComisiÃ³n</th><th>CategorÃ­as ML</th><th>Sync ML</th><th>Estado</th><th>Notas</th><th></th></tr></thead>
+                <thead><tr><th>Categoría</th><th>Comisión</th><th>Categorías ML</th><th>Sync ML</th><th>Estado</th><th>Notas</th><th></th></tr></thead>
                 <tbody>
                   {categories.map((item) => (
                     <tr key={item.id || item.category}>
@@ -1288,7 +1288,7 @@ export default function MercadoLibrePage() {
                       <td className="actions-cell"><button className="button ghost small-button" onClick={() => editCategory(item)}>Editar</button><button className="button danger small-button" onClick={() => deleteCategory(item)}>Eliminar</button></td>
                     </tr>
                   ))}
-                  {categories.length === 0 && <tr><td colSpan={7}>Sin categorÃ­as cargadas.</td></tr>}
+                  {categories.length === 0 && <tr><td colSpan={7}>Sin categorías cargadas.</td></tr>}
                 </tbody>
               </table>
             </div>
