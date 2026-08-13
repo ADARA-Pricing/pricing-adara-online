@@ -7,6 +7,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   ChartNoAxesCombined,
+  RefreshCw,
   Search,
 } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
@@ -854,6 +855,7 @@ export default function MercadoLibrePage() {
         actions={(
           <>
             <button type="button" className="button ghost" onClick={syncFromMercadoLibre} disabled={syncingMeli}>
+              <RefreshCw aria-hidden="true" />
               {syncingMeli ? "Sincronizando..." : "Sincronizar ML"}
             </button>
             <button type="button" className="button ghost" onClick={loadData} disabled={loading}>
@@ -938,7 +940,7 @@ export default function MercadoLibrePage() {
                 <tr>
                   <th><ChannelSortButton column="code">Canal</ChannelSortButton></th>
                   <th className="numeric-header"><ChannelSortButton column="marketplaceRate">Comisión</ChannelSortButton></th>
-                  <th className="numeric-header"><ChannelSortButton column="financingRate">Cuotas</ChannelSortButton></th>
+                  <th className="numeric-header"><ChannelSortButton column="financingRate">Financiación</ChannelSortButton></th>
                   <th className="numeric-header"><ChannelSortButton column="taxRate">Impuestos</ChannelSortButton></th>
                   <th className="numeric-header"><ChannelSortButton column="shippingAmount">Envío</ChannelSortButton></th>
                   <th className="numeric-header">Otros</th>
