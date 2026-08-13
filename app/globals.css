@@ -10875,7 +10875,10 @@ textarea:focus,
 }
 
 .prices-page .products-list-table .row-actions .prices-edit-action {
-  color: var(--ui-primary);
+  background: #ffffff !important;
+  border-color: var(--ui-primary-border) !important;
+  color: var(--ui-primary) !important;
+  box-shadow: none !important;
 }
 
 .prices-page .products-list-table .row-actions .prices-edit-action:hover,
@@ -10947,21 +10950,28 @@ textarea:focus,
 .pricing-modal-v2 {
   width: min(1280px, 94vw);
   max-height: 90vh;
-  overflow: auto;
+  overflow: hidden;
   border-radius: 14px;
   padding: 0;
   background: #ffffff;
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .pricing-modal-header {
-  position: sticky;
-  top: 0;
   z-index: 5;
   background: rgba(255, 255, 255, 0.96);
   border-bottom: 1px solid #e5eaf1;
   padding: 18px 20px;
   margin-bottom: 0;
+}
+
+.pricing-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 18px;
 }
 
 .pricing-modal-header h2 {
@@ -11017,15 +11027,15 @@ textarea:focus,
 .pricing-card-blue,
 .pricing-card-green,
 .pricing-card-purple {
-  box-shadow: inset 3px 0 0 var(--ui-primary);
+  box-shadow: none;
 }
 
 .pricing-card-green {
-  box-shadow: inset 3px 0 0 #10b981;
+  box-shadow: none;
 }
 
 .pricing-card-purple {
-  box-shadow: inset 3px 0 0 #7c3aed;
+  box-shadow: none;
 }
 
 .pricing-card-title h3 {
@@ -11088,9 +11098,9 @@ textarea:focus,
 
 .summary-panel-v2 {
   position: sticky;
-  top: 88px;
-  max-height: calc(90vh - 108px);
-  overflow: auto;
+  top: 14px;
+  max-height: none;
+  overflow: visible;
   background: #fbfdff;
 }
 
@@ -11163,6 +11173,10 @@ textarea:focus,
   font-variant-numeric: tabular-nums;
 }
 
+.summary-line.debit strong {
+  color: #dc2626;
+}
+
 .pricing-conditions-card {
   margin: 14px 20px 0;
   border-radius: 10px;
@@ -11231,9 +11245,9 @@ textarea:focus,
 }
 
 .pricing-modal-footer {
-  position: sticky;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.96);
+  position: relative;
+  z-index: 5;
+  background: #ffffff;
   padding: 14px 20px;
   border-top: 1px solid #e5eaf1;
 }

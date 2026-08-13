@@ -1194,8 +1194,9 @@ export default function PricesPage() {
               </button>
             </div>
 
-            <div className="pricing-top-grid">
-              <section className="pricing-card pricing-card-blue">
+            <div className="pricing-modal-body">
+              <div className="pricing-top-grid">
+                <section className="pricing-card pricing-card-blue">
                 <div className="pricing-card-title">
                   <span className="section-icon blue"><SlidersHorizontal aria-hidden="true" /></span>
                   <h3>Condición seleccionada</h3>
@@ -1268,9 +1269,9 @@ export default function PricesPage() {
                 <p className="small">
                   Si elegís otro canal en el resumen, estos campos modifican ese canal. Si activás aplicar a todos, las demás condiciones toman el valor de MC y quedan bloqueadas.
                 </p>
-              </section>
+                </section>
 
-              <section className="pricing-card pricing-card-green">
+                <section className="pricing-card pricing-card-green">
                 <div className="pricing-card-title">
                   <span className="section-icon green"><ReceiptText aria-hidden="true" /></span>
                   <h3>Impuestos para esta prueba</h3>
@@ -1308,9 +1309,9 @@ export default function PricesPage() {
                 <button className="button ghost tax-reset-button accent-green" type="button" onClick={resetTaxOverrides}>
                   Restablecer impuestos globales
                 </button>
-              </section>
+                </section>
 
-              <section className="pricing-card pricing-card-purple">
+                <section className="pricing-card pricing-card-purple">
                 <div className="pricing-card-title">
                   <span className="section-icon purple"><BadgePercent aria-hidden="true" /></span>
                   <h3>Costos extra del canal elegido</h3>
@@ -1388,9 +1389,9 @@ export default function PricesPage() {
                 ) : (
                   <span className="message error">No se pudo calcular el canal seleccionado.</span>
                 )}
-              </section>
+                </section>
 
-              <aside className="pricing-card summary-panel-v2">
+                <aside className="pricing-card summary-panel-v2">
                 <div className="pricing-card-title summary-title-row">
                   <span className="section-icon neutral"><CircleDollarSign aria-hidden="true" /></span>
                   <h3>Resumen</h3>
@@ -1438,32 +1439,32 @@ export default function PricesPage() {
                         <div className="summary-line"><span>Precio promo publicado</span><strong>{selectedPromoPrice ? moneyWithCents(selectedPromoPrice) : "-"}</strong></div>
                       </>
                     )}
-                    <div className="summary-line"><span>IVA venta</span><strong>-{moneyWithCents(selectedSummaryRow.result.vatAmount)}</strong></div>
+                    <div className="summary-line debit"><span>IVA venta</span><strong>-{moneyWithCents(selectedSummaryRow.result.vatAmount)}</strong></div>
                     <div className="summary-line"><span>Precio sin IVA</span><strong>{moneyWithCents(selectedSummaryRow.result.netSalePrice)}</strong></div>
-                    <div className="summary-line"><span>Comisión canal</span><strong>-{moneyWithCents(selectedSummaryRow.result.marketplaceFeeAmount)}</strong></div>
+                    <div className="summary-line debit"><span>Comisión canal</span><strong>-{moneyWithCents(selectedSummaryRow.result.marketplaceFeeAmount)}</strong></div>
                     {allowsExtraSalesCommission(selectedSummaryRow.option) && (
-                      <div className="summary-line"><span>Comisión venta extra</span><strong>-{moneyWithCents(selectedSummaryRow.result.salesCommissionAmount)}</strong></div>
+                      <div className="summary-line debit"><span>Comisión venta extra</span><strong>-{moneyWithCents(selectedSummaryRow.result.salesCommissionAmount)}</strong></div>
                     )}
-                    <div className="summary-line"><span>Ingresos brutos</span><strong>-{moneyWithCents(selectedSummaryRow.result.iibbAmount)}</strong></div>
+                    <div className="summary-line debit"><span>Ingresos brutos</span><strong>-{moneyWithCents(selectedSummaryRow.result.iibbAmount)}</strong></div>
                     <div className="summary-divider" />
-                    <div className="summary-line"><span>Envío s/IVA</span><strong>-{moneyWithCents(selectedSummaryRow.result.shippingCostAmount)}</strong></div>
-                    <div className="summary-line"><span>Fijo ML s/IVA</span><strong>-{moneyWithCents(selectedSummaryRow.result.fixedFeeAmount || 0)}</strong></div>
-                    <div className="summary-line"><span>Gasto de estructura</span><strong>-{moneyWithCents(selectedSummaryRow.result.structureAmount)}</strong></div>
-                    <div className="summary-line"><span>IVA atribuido al costo</span><strong>-{moneyWithCents(selectedSummaryRow.result.costVatAmount || 0)}</strong></div>
-                    <div className="summary-line"><span>Costo usado</span><strong>-{moneyWithCents(selectedSummaryRow.result.costForProfit)}</strong></div>
+                    <div className="summary-line debit"><span>Envío s/IVA</span><strong>-{moneyWithCents(selectedSummaryRow.result.shippingCostAmount)}</strong></div>
+                    <div className="summary-line debit"><span>Fijo ML s/IVA</span><strong>-{moneyWithCents(selectedSummaryRow.result.fixedFeeAmount || 0)}</strong></div>
+                    <div className="summary-line debit"><span>Gasto de estructura</span><strong>-{moneyWithCents(selectedSummaryRow.result.structureAmount)}</strong></div>
+                    <div className="summary-line debit"><span>IVA atribuido al costo</span><strong>-{moneyWithCents(selectedSummaryRow.result.costVatAmount || 0)}</strong></div>
+                    <div className="summary-line debit"><span>Costo usado</span><strong>-{moneyWithCents(selectedSummaryRow.result.costForProfit)}</strong></div>
                     <div className="summary-divider" />
                     <div className="summary-line"><span>Margen bruto</span><strong>{moneyWithCents(selectedSummaryRow.result.grossProfit)}</strong></div>
-                    <div className="summary-line"><span>Imp. Ganancias</span><strong>-{moneyWithCents(selectedSummaryRow.result.incomeTaxAmount)}</strong></div>
+                    <div className="summary-line debit"><span>Imp. Ganancias</span><strong>-{moneyWithCents(selectedSummaryRow.result.incomeTaxAmount)}</strong></div>
                   </div>
                 ) : (
                   <span className="message error">
                     {selectedSummaryRow?.result?.error || "No se pudo calcular el resumen."}
                   </span>
                 )}
-              </aside>
-            </div>
+                </aside>
+              </div>
 
-            <section className="pricing-conditions-card">
+              <section className="pricing-conditions-card">
               <div className="pricing-conditions-header">
                 <div>
                   <h3>Condiciones de venta</h3>
@@ -1612,7 +1613,8 @@ export default function PricesPage() {
                   </tbody>
                 </table>
               </div>
-            </section>
+              </section>
+            </div>
 
             <div className="pricing-modal-footer">
               <button className="button ghost" onClick={() => setModal(null)}>
