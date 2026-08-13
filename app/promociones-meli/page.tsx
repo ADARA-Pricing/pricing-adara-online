@@ -1006,13 +1006,14 @@ export default function PromocionesMeliPage() {
 
   function rentabilityForProductRow(product: Product, row: PublicationPromoRow, salePrice?: number | null) {
     if (!salePrice || salePrice <= 0) return null;
-    const option =
-      pricingOptions.find((item) => optionMatchesInstallment(item, row.installmentCount)) ||
-      mercadoLibreClassicOption();
+    const optionByInstallment = pricingOptions.find((item) => optionMatchesInstallment(item, row.installmentCount));
+    const option = optionByInstallment || mercadoLibreClassicOption();
     const publicationFinancingRate = validFinancingFeeRate(row.publication.meli_financing_fee_rate);
     const normalizedOption = normalizeOption({
       ...option,
-      financing_fee_rate: publicationFinancingRate ?? Number(option.financing_fee_rate || 0),
+      financing_fee_rate: optionByInstallment
+        ? Number(option.financing_fee_rate || 0)
+        : publicationFinancingRate ?? Number(option.financing_fee_rate || 0),
     });
     const setting = channelSetting(product.id, normalizedOption.code);
     const result = calculatePriceSummary(

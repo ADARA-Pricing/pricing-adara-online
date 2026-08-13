@@ -252,9 +252,11 @@ export default function PricesPage() {
 
   function shippingCostForOption(product: Product, option: MercadoLibrePriceOption) {
     const normalizedOption = normalizeOption(option);
-    const candidates = shippingCosts.filter(
+    const productCandidates = shippingCosts.filter(
       (item) => item.product_id === product.id || item.sku === product.sku,
     );
+    const activeCandidates = productCandidates.filter((item) => item.active !== false && item.meli_status !== "closed");
+    const candidates = activeCandidates.length ? activeCandidates : productCandidates;
     if (!candidates.length) return null;
 
     return [...candidates].sort((a, b) => {
@@ -264,6 +266,7 @@ export default function PricesPage() {
         if (item.meli_status === "active") value += 100;
         if (item.active !== false) value += 50;
         if (item.product_id === product.id) value += 20;
+        if (item.meli_last_sync_at) value += 10;
         if (Number(item.fixed_fee_amount || 0) > 0) value += 8;
         if (Number(item.shipping_cost_amount || 0) > 0) value += 4;
         if (item.meli_item_id) value += 2;

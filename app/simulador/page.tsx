@@ -4,13 +4,20 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Calculator,
+  ChartColumn,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
+  CircleDollarSign,
   ExternalLink,
   FolderOpen,
+  RefreshCw,
   RotateCcw,
   Save,
   Search,
   SearchX,
+  Settings2,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
@@ -174,6 +181,10 @@ function compareText(a?: string | null, b?: string | null) {
   return String(a || "").localeCompare(String(b || ""), "es", { sensitivity: "base" });
 }
 
+function isCurrentShippingCost(shipping: MercadoLibreShippingCost) {
+  return shipping.active !== false && shipping.meli_status !== "closed";
+}
+
 export default function SimulatorPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -189,6 +200,7 @@ export default function SimulatorPage() {
   const [loading, setLoading] = useState(true);
   const [savingSimulation, setSavingSimulation] = useState(false);
   const [simulationLibraryOpen, setSimulationLibraryOpen] = useState(false);
+  const [baseDetailsOpen, setBaseDetailsOpen] = useState(false);
   const [loadedSimulation, setLoadedSimulation] = useState<SavedSimulation | null>(null);
   const [libraryQuery, setLibraryQuery] = useState("");
   const [libraryProviderFilter, setLibraryProviderFilter] = useState("");
@@ -291,6 +303,7 @@ export default function SimulatorPage() {
     );
 
     const values = shippingCosts
+      .filter(isCurrentShippingCost)
       .filter((shipping) => {
         const matchesId = shipping.product_id && productIds.has(shipping.product_id);
         const matchesSku = shipping.sku && productSkus.has(shipping.sku);
@@ -317,6 +330,7 @@ export default function SimulatorPage() {
 
   function shippingForProduct(product: Product) {
     const values = shippingCosts
+      .filter(isCurrentShippingCost)
       .filter((shipping) => {
         const matchesId = product.id && shipping.product_id === product.id;
         const matchesSku = product.sku && shipping.sku === product.sku;
@@ -694,11 +708,13 @@ export default function SimulatorPage() {
     };
   }, [form, categories, options, taxes, lastEdited, products, shippingCosts]);
 
+  const summaryStatus = statusLabel(simulation.summary?.valid ? simulation.summary.marginOnNetSale : 0);
+
   return (
     <main className="container wide simulator-page">
       <PageHero
         title="Simulador"
-        description="Simulá rápido un producto, su costo, IVA y precio de venta para ver la rentabilidad por canal."
+        description="Calculá precio, margen y rentabilidad por canal antes de publicar o modificar un producto."
         icon={<Calculator aria-hidden="true" />}
         onRefresh={loadData}
         onLogout={logout}
@@ -710,23 +726,23 @@ export default function SimulatorPage() {
       <section className="simulator-layout-grid">
         <div className="card simulator-input-card">
           <div className="simulator-section-title">
-            <span className="simulator-title-icon">⚡</span>
+            <span className="simulator-title-icon"><SlidersHorizontal aria-hidden="true" /></span>
             <div>
-              <h2>Simulación rápida</h2>
-              <p className="small">Cargá los datos mínimos para obtener resultados automáticos.</p>
+              <h2>Datos de simulación</h2>
+              <p className="small">Cargá la base comercial y ajustá precio o margen sin cambiar la lógica de cálculo.</p>
             </div>
           </div>
 
           {loadedSimulation && (
             <div className="simulator-loaded-note">
               <FolderOpen aria-hidden="true" />
-              <span>SimulaciÃ³n cargada: <strong>{loadedSimulation.name}</strong></span>
+              <span>Simulación cargada: <strong>{loadedSimulation.name}</strong></span>
               <button type="button" onClick={() => setLoadedSimulation(null)}>Desvincular</button>
             </div>
           )}
 
           <div className="field simulator-product-base-field">
-            <label>Usar producto guardado como base</label>
+            <label>Usar producto como base</label>
             <select defaultValue="" onChange={(event) => loadProductBase(event.target.value)}>
               <option value="">Elegir producto guardado...</option>
               {products
@@ -739,7 +755,7 @@ export default function SimulatorPage() {
                 ))}
             </select>
             <span className="small">
-              Completa categoría, costo sin IVA, condición de IVA y envío. Después podés ajustar cualquier campo a mano.
+              Carga automáticamente categoría, proveedor, costo, IVA y envío cuando esos datos estén disponibles.
             </span>
           </div>
 
@@ -802,7 +818,19 @@ export default function SimulatorPage() {
             </div>
 
             <div className="field">
-              <label>% Margen deseado</label>
+              <label>Condición IVA</label>
+              <select
+                value={form.vatCondition}
+                onChange={(event) => update("vatCondition", event.target.value as VatCondition)}
+              >
+                <option value="sin_factura">Sin IVA</option>
+                <option value="iva_21">Con IVA 21%</option>
+                <option value="iva_105">Con IVA 10,5%</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label>Margen deseado</label>
               <div className="input-suffix">
                 <input
                   type="text"
@@ -833,18 +861,6 @@ export default function SimulatorPage() {
               />
             </div>
 
-            <div className="field">
-              <label>Condición de IVA</label>
-              <select
-                value={form.vatCondition}
-                onChange={(event) => update("vatCondition", event.target.value as VatCondition)}
-              >
-                <option value="sin_factura">Sin IVA</option>
-                <option value="iva_21">Con IVA 21%</option>
-                <option value="iva_105">Con IVA 10,5%</option>
-              </select>
-            </div>
-
             <div className="field simulator-wide-field">
               <label>Envío c/IVA</label>
               <input
@@ -861,15 +877,19 @@ export default function SimulatorPage() {
           </div>
 
           <div className="simulator-linked-note">
-            Si cambiás el precio de venta o el % margen deseado, el otro valor se recalcula automáticamente.
+            <RefreshCw aria-hidden="true" />
+            <div>
+              <strong>Valores vinculados</strong>
+              <span>Modificar Precio recalcula Margen y modificar Margen recalcula Precio.</span>
+            </div>
           </div>
 
-          <div className="simulator-actions simulator-actions-right">
-            <button className="button" type="button" onClick={saveSimulation} disabled={savingSimulation}>
+          <div className="simulator-actions">
+            <button className="button primary" type="button" onClick={saveSimulation} disabled={savingSimulation}>
               <Save aria-hidden="true" />
               {savingSimulation ? "Guardando..." : "Guardar simulación"}
             </button>
-            <button className="button ghost" type="button" onClick={() => setSimulationLibraryOpen(true)}>
+            <button className="button secondary" type="button" onClick={() => setSimulationLibraryOpen(true)}>
               <FolderOpen aria-hidden="true" />
               Cargar simulación
             </button>
@@ -882,21 +902,26 @@ export default function SimulatorPage() {
 
         <div className="card simulator-summary-card">
           <div className="simulator-section-title">
-            <span className="simulator-title-icon">▮</span>
+            <span className="simulator-title-icon"><CircleDollarSign aria-hidden="true" /></span>
             <div>
-              <h2>Resumen rápido</h2>
-              <p className="small">Resumen de resultados con los parámetros actuales.</p>
+              <h2>Resultado</h2>
+              <p className="small">Impacto inmediato del precio y los costos cargados.</p>
             </div>
           </div>
 
           <div className="simulator-summary-list">
-            <div>
-              <span>Proveedor</span>
-              <strong>{form.provider || "Sin proveedor"}</strong>
-            </div>
-            <div>
+            <div className="simulator-result-metric">
               <span>Precio de venta</span>
               <strong>{moneyWithCents(simulation.grossSalePrice)}</strong>
+            </div>
+            <div className="simulator-result-metric">
+              <span>Ganancia</span>
+              <strong>{moneyWithCents(simulation.summary?.valid ? simulation.summary.netProfit : 0)}</strong>
+            </div>
+            <div className={`simulator-result-metric main ${summaryStatus.className}`}>
+              <span>Rentabilidad real</span>
+              <strong>{simulation.summary?.valid ? percent(simulation.summary.marginOnNetSale) : "-"}</strong>
+              <em className={`badge simulator-status-badge ${summaryStatus.className}`}>{summaryStatus.label}</em>
             </div>
             <div>
               <span>Precio sin IVA</span>
@@ -928,27 +953,20 @@ export default function SimulatorPage() {
               <span>Margen bruto</span>
               <strong>{moneyWithCents(simulation.summary?.valid ? simulation.summary.grossProfit : 0)}</strong>
             </div>
-            <div className="highlight">
-              <span>Ganancia</span>
-              <strong>{moneyWithCents(simulation.summary?.valid ? simulation.summary.netProfit : 0)}</strong>
-            </div>
-            <div className="highlight stronger">
-              <span>Rentabilidad real</span>
-              <strong>{simulation.summary?.valid ? percent(simulation.summary.marginOnNetSale) : "-"}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="card simulator-base-card">
-          <div className="simulator-section-title">
-            <span className="simulator-title-icon">⚙</span>
             <div>
-              <h2>Base de cálculo</h2>
-              <p className="small">Parámetros aplicados en esta simulación.</p>
+              <span>Proveedor</span>
+              <strong>{form.provider || "Sin proveedor"}</strong>
             </div>
           </div>
 
-          <div className="simulator-base-list">
+          <div className="simulator-base-inline">
+          <button className="simulator-base-toggle" type="button" onClick={() => setBaseDetailsOpen((current) => !current)} aria-expanded={baseDetailsOpen}>
+            <Settings2 aria-hidden="true" />
+            Ver base de cálculo
+            {baseDetailsOpen ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+          </button>
+
+          {baseDetailsOpen && <div className="simulator-base-list">
             <div><span>Proveedor</span><strong>{form.provider || "Sin proveedor"}</strong></div>
             <div><span>Categoría</span><strong>{form.category || "-"}</strong></div>
             <div><span>Comisión categoría</span><strong>{percent(simulation.categoryFee?.marketplace_fee_rate || 0)}</strong></div>
@@ -958,13 +976,14 @@ export default function SimulatorPage() {
             <div><span>IIGG</span><strong>{percent(taxes.iigg_rate || 0)}</strong></div>
             <div><span>Estructura</span><strong>{moneyWithCents(0)}</strong></div>
             <div><span>Observaciones</span><strong>Simulación automática</strong></div>
+          </div>}
           </div>
         </div>
       </section>
 
       <section className="card simulator-results-card">
         <div className="simulator-section-title">
-          <span className="simulator-title-icon">◎</span>
+          <span className="simulator-title-icon"><ChartColumn aria-hidden="true" /></span>
           <div>
             <h2>Rentabilidad por canal</h2>
             <p className="small">Compará la rentabilidad estimada según el canal de venta.</p>
@@ -980,10 +999,10 @@ export default function SimulatorPage() {
                 <tr>
                   <th>Canal</th>
                   <th>Precio de venta</th>
-                  <th>% Rentabilidad</th>
+                  <th>Rentabilidad</th>
                   <th>Ganancia</th>
-                  <th>Precio para rentabilidad 0</th>
-                  <th>Observación</th>
+                  <th title="Precio de venta necesario para obtener rentabilidad 0%">Precio equilibrio</th>
+                  <th>Estado</th>
                 </tr>
               </thead>
               <tbody>
@@ -994,8 +1013,8 @@ export default function SimulatorPage() {
                       <br />
                       <span className="small">{option.name}</span>
                     </td>
-                    <td>{moneyWithCents(simulation.grossSalePrice)}</td>
-                    <td>
+                    <td className="numeric">{moneyWithCents(simulation.grossSalePrice)}</td>
+                    <td className="numeric">
                       <span
                         className={`rentability-pill ${
                           result.valid && Number(result.marginOnNetSale || 0) < 0
@@ -1006,13 +1025,12 @@ export default function SimulatorPage() {
                         {result.valid ? percent(result.marginOnNetSale) : "-"}
                       </span>
                     </td>
-                    <td className={result.valid && Number(result.netProfit || 0) < 0 ? "negative-money" : "positive-money"}>
+                    <td className={`numeric ${result.valid && Number(result.netProfit || 0) < 0 ? "negative-money" : "positive-money"}`}>
                       {result.valid ? moneyWithCents(result.netProfit) : "-"}
                     </td>
-                    <td>{zeroResult.valid ? moneyWithCents(zeroResult.roundedPrice) : "-"}</td>
+                    <td className="numeric">{zeroResult.valid ? moneyWithCents(zeroResult.roundedPrice) : "-"}</td>
                     <td>
-                      <span className={`status-dot ${status.className}`} />
-                      {status.label}
+                      <span className={`badge simulator-status-badge ${status.className}`}>{status.label}</span>
                     </td>
                   </tr>
                 ))}
@@ -1164,89 +1182,6 @@ export default function SimulatorPage() {
           </section>
         </div>
       )}
-
-      <section className="card simulator-results-card saved-simulations-card">
-        <div className="simulator-section-title">
-          <span className="simulator-title-icon">▣</span>
-          <div>
-            <h2>Simulaciones guardadas</h2>
-            <p className="small">
-              Guardá escenarios para volver a cargarlos, editarlos o eliminarlos.
-            </p>
-          </div>
-        </div>
-
-        <div className="table-wrap">
-          <table className="simulator-table saved-simulations-table">
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Categoría</th>
-                <th>Costo sin IVA</th>
-                <th>Precio de venta</th>
-                <th>Margen</th>
-                <th>Fechas</th>
-                <th>Link</th>
-                <th>Envío c/IVA</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {savedSimulations.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <strong>{item.name}</strong>
-                  </td>
-                  <td>{item.category || "-"}</td>
-                  <td>{moneyWithCents(item.cost_without_vat || 0)}</td>
-                  <td>{moneyWithCents(item.sale_price || 0)}</td>
-                  <td>
-                    <span className="rentability-pill positive">
-                      {percent(item.desired_margin_rate || 0)}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="saved-simulation-dates">
-                      <span>Creada: {formatDateTime(item.created_at)}</span>
-                      <span>Modificada: {formatDateTime(item.updated_at)}</span>
-                    </div>
-                  </td>
-                  <td>
-                    {item.publication_url ? (
-                      <a
-                        className="saved-simulation-link"
-                        href={item.publication_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Abrir
-                      </a>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td>{moneyWithCents(item.shipping_gross || 0)}</td>
-                  <td>
-                    <div className="saved-simulation-actions">
-                      <button className="button ghost" type="button" onClick={() => loadSimulation(item)}>
-                        Cargar
-                      </button>
-                      <button className="button danger ghost" type="button" onClick={() => deleteSimulation(item)}>
-                        Borrar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {savedSimulations.length === 0 && (
-                <tr>
-                  <td colSpan={9}>Todavía no hay simulaciones guardadas.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
     </main>
   );

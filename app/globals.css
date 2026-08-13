@@ -4096,6 +4096,282 @@ td strong {
   background: #fff1f2;
 }
 
+/* v7.57 - Simulador: layout de trabajo y resultado sticky */
+.simulator-page .page-hero,
+.simulator-page .page-header {
+  margin-bottom: 18px;
+}
+
+.simulator-page .simulator-layout-grid {
+  grid-template-columns: minmax(0, 1.85fr) minmax(360px, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.simulator-page .simulator-input-card,
+.simulator-page .simulator-summary-card,
+.simulator-page .simulator-results-card {
+  border-color: #dfe6ef;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.simulator-page .simulator-input-card {
+  padding: 22px;
+}
+
+.simulator-page .simulator-summary-card {
+  position: sticky;
+  top: 88px;
+  padding: 22px;
+}
+
+.simulator-page .simulator-title-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+}
+
+.simulator-page .simulator-title-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.simulator-page .simulator-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.simulator-page .simulator-form-grid-three {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.simulator-page .simulator-wide-field {
+  grid-column: 1 / -1;
+}
+
+.simulator-page .simulator-product-base-field {
+  margin: 0 0 16px;
+  border-radius: 10px;
+}
+
+.simulator-page .simulator-linked-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.simulator-page .simulator-linked-note svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: #2563eb;
+}
+
+.simulator-page .simulator-linked-note strong,
+.simulator-page .simulator-linked-note span {
+  display: block;
+}
+
+.simulator-page .simulator-linked-note span {
+  margin-top: 2px;
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
+.simulator-page .simulator-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.simulator-page .simulator-actions .button {
+  min-height: 38px;
+}
+
+.simulator-page .simulator-summary-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px !important;
+}
+
+.simulator-page .simulator-summary-list > div,
+.simulator-page .simulator-summary-list > div:first-child,
+.simulator-page .simulator-summary-list > div.highlight,
+.simulator-page .simulator-summary-list > div.stronger,
+.simulator-page .simulator-summary-list > div.simulator-result-metric {
+  grid-template-columns: minmax(0, 1fr) max-content;
+  min-height: 38px;
+  padding: 9px 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid #edf1f6 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.simulator-page .simulator-summary-list > div.simulator-result-metric {
+  grid-column: auto;
+  display: flex !important;
+  min-height: 88px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
+  padding: 13px !important;
+  border: 1px solid #d8e1ee !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+}
+
+.simulator-page .simulator-summary-list > div.simulator-result-metric:first-child {
+  grid-column: 1 / -1;
+}
+
+.simulator-page .simulator-summary-list > div.simulator-result-metric strong {
+  width: auto;
+  font-size: 24px;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.simulator-page .simulator-summary-list > div.simulator-result-metric.main strong {
+  font-size: 34px;
+}
+
+.simulator-page .simulator-summary-list > div.simulator-result-metric.main strong {
+  color: #047857;
+}
+
+.simulator-page .simulator-summary-list > div.simulator-result-metric.main.warning strong {
+  color: #c2410c;
+}
+
+.simulator-page .simulator-summary-list > div.simulator-result-metric.main.negative strong {
+  color: #dc2626;
+}
+
+.simulator-page .simulator-summary-list .simulator-status-badge {
+  font-style: normal;
+}
+
+.simulator-page .simulator-base-inline {
+  margin-top: 16px;
+}
+
+.simulator-page .simulator-base-toggle {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #d8e1ee;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  padding: 9px 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.simulator-page .simulator-base-toggle svg {
+  width: 17px;
+  height: 17px;
+}
+
+.simulator-page .simulator-base-list {
+  margin-top: 10px;
+}
+
+.simulator-page .simulator-results-card {
+  padding: 22px;
+}
+
+.simulator-page .simulator-table {
+  font-variant-numeric: tabular-nums;
+}
+
+.simulator-page .simulator-table th {
+  background: #f8fafc;
+  color: #526580;
+  font-size: 12px;
+  text-transform: none;
+}
+
+.simulator-page .simulator-table th,
+.simulator-page .simulator-table td {
+  min-height: 50px;
+  border-left: 0;
+  border-right: 0;
+}
+
+.simulator-page .simulator-table .numeric {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.simulator-page .simulator-status-badge {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-weight: 800;
+}
+
+.simulator-page .simulator-status-badge.positive {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #bbf7d0;
+}
+
+.simulator-page .simulator-status-badge.warning {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
+.simulator-page .simulator-status-badge.negative {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+@media (max-width: 1100px) {
+  .simulator-page .simulator-layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .simulator-page .simulator-summary-card {
+    position: static;
+  }
+
+}
+
+@media (max-width: 720px) {
+  .simulator-page .simulator-form-grid,
+  .simulator-page .simulator-form-grid-three,
+  .simulator-page .simulator-summary-list {
+    grid-template-columns: 1fr;
+  }
+
+  .simulator-page .simulator-actions .button {
+    width: 100%;
+  }
+
+  .simulator-library-backdrop {
+    padding: 10px;
+  }
+
+  .simulator-library-modal {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .simulator-library-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
 .button.danger:hover,
 .button.danger.ghost:hover {
   border-color: #fb7185;
