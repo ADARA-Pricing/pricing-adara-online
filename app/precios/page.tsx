@@ -2,8 +2,23 @@
 
 import { Fragment, ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, Search, Tags } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  BadgePercent,
+  ChevronUp,
+  CircleDollarSign,
+  Pencil,
+  ReceiptText,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  Tags,
+  X,
+} from "lucide-react";
 import { PageHero } from "@/components/PageHero";
+import { SectionHeader } from "@/components/SectionHeader";
 import { createClient } from "@/lib/supabase";
 import {
   calculatePriceSummary,
@@ -1052,16 +1067,18 @@ export default function PricesPage() {
                         <td>
                           <div className="row-actions">
                             <button
-                              className="button ghost small-button"
+                              className="button ghost small-button prices-expand-action"
                               onClick={() => toggleProductExpanded(product)}
                             >
+                              {isExpanded ? <ChevronUp aria-hidden="true" /> : <SlidersHorizontal aria-hidden="true" />}
                               {isExpanded ? "Contraer" : "Ver canales"}
                             </button>
                             <button
-                              className="button ghost small-button"
+                              className="button ghost small-button prices-edit-action"
                               onClick={() => openProductModal(product)}
                             >
-                              Abrir <ChevronRight aria-hidden="true" />
+                              <SlidersHorizontal aria-hidden="true" />
+                              Editar precios
                             </button>
                           </div>
                         </td>
@@ -1070,12 +1087,11 @@ export default function PricesPage() {
                         <tr key={`${key}-channels`} className="expanded-row">
                           <td colSpan={7}>
                             <div className="channel-breakdown">
-                              <div className="channel-breakdown-header">
-                                <div>
-                                  <div className="channel-breakdown-title">Condiciones de venta</div>
-                                  <p className="small">Precios y rentabilidad por canal para este producto.</p>
-                                </div>
-                              </div>
+                              <SectionHeader
+                                icon={<SlidersHorizontal aria-hidden="true" />}
+                                title="Condiciones de venta"
+                                description="Precios y rentabilidad por canal para este producto."
+                              />
                               <table className="nested-table">
                                 <thead>
                                   <tr>
@@ -1113,9 +1129,11 @@ export default function PricesPage() {
                                           </strong>
                                         </td>
                                         <td>
-                                          {result.valid
-                                            ? percent(result.marginOnNetSale)
-                                            : "-"}
+                                          <span className={`prices-margin-pill ${result.valid ? marginClass(result.marginOnNetSale) : ""}`}>
+                                            {result.valid
+                                              ? percent(result.marginOnNetSale)
+                                              : "-"}
+                                          </span>
                                         </td>
                                         <td>
                                           {result.valid
@@ -1165,21 +1183,21 @@ export default function PricesPage() {
               <div>
                 <h2>{modal.product.name}</h2>
                 <p className="pricing-modal-meta">
-                  SKU {modal.product.sku} <span>·</span> Categoría {modal.product.category || "sin categoría"} <span>·</span> Costo {money(modal.product.cost_without_vat)} + IVA {modal.product.vat_rate}%
+                  SKU {modal.product.sku} <span>·</span> Categoría {modal.product.category || "sin categoría"} <span>·</span> Costo {money(modal.product.cost_without_vat)} <span>·</span> IVA {modal.product.vat_rate}%
                 </p>
                 <p className="pricing-modal-help">
-                  Podés elegir qué canal ver en el resumen. Ajustá margen, precio de venta, comisiones, envío manual y estructura para analizar rentabilidad.
+                  Ajustá margen, precio de venta, comisiones, envío manual y estructura para analizar rentabilidad.
                 </p>
               </div>
               <button className="modal-close-button" onClick={() => setModal(null)} aria-label="Cerrar">
-                ×
+                <X aria-hidden="true" />
               </button>
             </div>
 
             <div className="pricing-top-grid">
               <section className="pricing-card pricing-card-blue">
                 <div className="pricing-card-title">
-                  <span className="section-badge blue">1</span>
+                  <span className="section-icon blue"><SlidersHorizontal aria-hidden="true" /></span>
                   <h3>Condición seleccionada</h3>
                 </div>
 
@@ -1224,7 +1242,10 @@ export default function PricesPage() {
                   </div>
                 </div>
 
-                <div className="sync-hint">Vinculados: margen, ganancia objetivo y precio se recalculan entre sí.</div>
+                <div className="sync-hint">
+                  <RefreshCw aria-hidden="true" />
+                  <span><strong>Valores vinculados</strong> Margen, ganancia objetivo y precio se recalculan entre sí.</span>
+                </div>
 
                 <div className="sync-options polished-sync-options">
                   <label className="checkbox-row">
@@ -1251,7 +1272,7 @@ export default function PricesPage() {
 
               <section className="pricing-card pricing-card-green">
                 <div className="pricing-card-title">
-                  <span className="section-icon green">▦</span>
+                  <span className="section-icon green"><ReceiptText aria-hidden="true" /></span>
                   <h3>Impuestos para esta prueba</h3>
                 </div>
                 <p className="small">Estos valores modifican solo este cálculo. No cambian la solapa Impuestos.</p>
@@ -1291,7 +1312,7 @@ export default function PricesPage() {
 
               <section className="pricing-card pricing-card-purple">
                 <div className="pricing-card-title">
-                  <span className="section-icon purple">▣</span>
+                  <span className="section-icon purple"><BadgePercent aria-hidden="true" /></span>
                   <h3>Costos extra del canal elegido</h3>
                 </div>
                 <p className="small">Estos valores aplican solo al canal seleccionado en el resumen.</p>
@@ -1371,7 +1392,7 @@ export default function PricesPage() {
 
               <aside className="pricing-card summary-panel-v2">
                 <div className="pricing-card-title summary-title-row">
-                  <span className="section-icon neutral">▤</span>
+                  <span className="section-icon neutral"><CircleDollarSign aria-hidden="true" /></span>
                   <h3>Resumen</h3>
                 </div>
                 <div className="field">
@@ -1388,19 +1409,29 @@ export default function PricesPage() {
                 </div>
                 {selectedSummaryRow?.result?.valid ? (
                   <div className="summary-content-v2">
-                    <div className="field summary-price-field">
-                      <label>Precio de venta</label>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={formatInputNumber(
-                          modal.priceOverrides[selectedSummaryRow.option.code] ?? selectedSummaryRow.result.roundedPrice,
-                          0,
-                        )}
-                        onChange={(e) => updateSalePrice(selectedSummaryRow.option.code, e.target.value)}
-                      />
-                      <span className="sync-hint compact-hint">Vinculado con el margen deseado %</span>
+                    <div className="summary-kpi-grid">
+                      <div className="field summary-price-field summary-kpi-card full">
+                        <label>Precio de venta</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={formatInputNumber(
+                            modal.priceOverrides[selectedSummaryRow.option.code] ?? selectedSummaryRow.result.roundedPrice,
+                            0,
+                          )}
+                          onChange={(e) => updateSalePrice(selectedSummaryRow.option.code, e.target.value)}
+                        />
+                      </div>
+                      <div className={`summary-kpi-card result ${marginClass(selectedSummaryRow.result.marginOnNetSale)}`}>
+                        <span>Ganancia</span>
+                        <strong>{moneyWithCents(selectedSummaryRow.result.netProfit)}</strong>
+                      </div>
+                      <div className={`summary-kpi-card result ${marginClass(selectedSummaryRow.result.marginOnNetSale)}`}>
+                        <span>Margen real</span>
+                        <strong>{percent(selectedSummaryRow.result.marginOnNetSale)}</strong>
+                      </div>
                     </div>
+                    <span className="sync-hint compact-hint"><RefreshCw aria-hidden="true" /> Vinculado con el margen deseado %</span>
                     {isMercadoLibreChannel(selectedSummaryRow.option) && (
                       <>
                         <div className="summary-line"><span>Descuento promo</span><strong>{percent(selectedPromoDiscount)}</strong></div>
@@ -1423,10 +1454,6 @@ export default function PricesPage() {
                     <div className="summary-divider" />
                     <div className="summary-line"><span>Margen bruto</span><strong>{moneyWithCents(selectedSummaryRow.result.grossProfit)}</strong></div>
                     <div className="summary-line"><span>Imp. Ganancias</span><strong>-{moneyWithCents(selectedSummaryRow.result.incomeTaxAmount)}</strong></div>
-                    <div className="summary-result-box">
-                      <div><span>Ganancia</span><strong>{moneyWithCents(selectedSummaryRow.result.netProfit)}</strong></div>
-                      <div><span>Margen real</span><strong>{percent(selectedSummaryRow.result.marginOnNetSale)}</strong></div>
-                    </div>
                   </div>
                 ) : (
                   <span className="message error">
@@ -1451,12 +1478,12 @@ export default function PricesPage() {
                       <th>Margen deseado %</th>
                       <th>Ganancia neta objetivo</th>
                       <th>Precio de venta</th>
-                      <th>Desc. promo %</th>
+                      <th>Descuento promo</th>
                       <th>Precio promo</th>
-                      <th>IVA costo %</th>
-                      <th>Comisión venta %</th>
-                      <th>Envío manual $</th>
-                      <th>Estructura $</th>
+                      <th>IVA costo</th>
+                      <th>Comisión venta</th>
+                      <th>Envío manual</th>
+                      <th>Estructura</th>
                       <th>Ganancia</th>
                       <th>Margen real</th>
                     </tr>
@@ -1473,7 +1500,8 @@ export default function PricesPage() {
                             <div className="channel-name-cell">
                               <span className={`channel-badge channel-badge-${option.code.toLowerCase()}`}>{option.code}</span>
                               <div>
-                                <strong>{option.name}</strong>
+                                <strong>{option.code}</strong>
+                                <span>{option.name}</span>
                               </div>
                             </div>
                           </td>
@@ -1520,7 +1548,7 @@ export default function PricesPage() {
                                 onChange={(e) => updatePromoDiscount(option.code, e.target.value)}
                               />
                             ) : (
-                              <span className="not-applicable">No aplica</span>
+                              <span className="not-applicable">—</span>
                             )}
                           </td>
                           <td style={{ minWidth: 130 }}>
@@ -1537,7 +1565,7 @@ export default function PricesPage() {
                                 onChange={(e) => updateCostVatRate(option.code, e.target.value)}
                               />
                             ) : (
-                              <span className="not-applicable">No aplica</span>
+                              <span className="not-applicable">—</span>
                             )}
                           </td>
                           <td style={{ minWidth: 120 }}>
@@ -1549,7 +1577,7 @@ export default function PricesPage() {
                                 onChange={(e) => updateChannelExtra(option.code, "salesCommissionRates", e.target.value)}
                               />
                             ) : (
-                              <span className="not-applicable">No aplica</span>
+                              <span className="not-applicable">—</span>
                             )}
                           </td>
                           <td style={{ minWidth: 120 }}>
@@ -1570,8 +1598,14 @@ export default function PricesPage() {
                               onChange={(e) => updateChannelExtra(option.code, "structureAmounts", e.target.value)}
                             />
                           </td>
-                          <td>{result.valid ? moneyWithCents(result.netProfit) : "-"}</td>
-                          <td>{result.valid ? percent(result.marginOnNetSale) : result.error}</td>
+                          <td className="numeric-cell">{result.valid ? moneyWithCents(result.netProfit) : "-"}</td>
+                          <td className="numeric-cell">
+                            {result.valid ? (
+                              <span className={`prices-margin-pill ${marginClass(result.marginOnNetSale)}`}>
+                                {percent(result.marginOnNetSale)}
+                              </span>
+                            ) : result.error}
+                          </td>
                         </tr>
                       );
                     })}

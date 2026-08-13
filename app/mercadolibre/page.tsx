@@ -7,10 +7,18 @@ import {
   ArrowUp,
   ArrowUpDown,
   ChartNoAxesCombined,
+  Check,
+  Minus,
+  Pencil,
+  Plus,
   RefreshCw,
   Search,
+  Store,
+  Tags,
+  Trash2,
 } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
+import { SectionHeader } from "@/components/SectionHeader";
 import { createClient } from "@/lib/supabase";
 import {
   calculatePriceSummary,
@@ -78,6 +86,9 @@ type MeliCategoryImportPreview = {
 
 type ViewMode = "channel" | "category";
 type SortDirection = "asc" | "desc";
+type ConfigViewMode = "channels" | "categories";
+type ConfigChannelSortKey = "code" | "name" | "channelType" | "installments" | "financing" | "active";
+type ConfigCategorySortKey = "category" | "marketplaceFeeRate" | "sync" | "active";
 type ChannelSortKey =
   | "code"
   | "marketplaceRate"
@@ -145,6 +156,15 @@ function boolLabel(value?: boolean | null) {
   return value ? "Sí" : "No";
 }
 
+function channelTypeLabel(value?: string | null) {
+  if (value === "mercadolibre") return "MercadoLibre";
+  if (value === "directo") return "Directo";
+  if (value === "web") return "Web";
+  if (value === "posnet") return "Posnet";
+  if (value === "otro") return "Otro";
+  return value || "-";
+}
+
 function tablePercent(value?: number | null) {
   if (value === undefined || value === null || Number.isNaN(value)) return "-";
   return `${Number(value).toLocaleString("es-AR", {
@@ -154,13 +174,18 @@ function tablePercent(value?: number | null) {
 }
 
 function dateLabel(value?: string | null) {
-  if (!value) return "-";
-  return new Date(value).toLocaleString("es-AR", {
+  if (!value) return "Sin sincronizar";
+  const date = new Date(value);
+  const datePart = date.toLocaleDateString("es-AR", {
     day: "2-digit",
     month: "2-digit",
+    year: "numeric",
+  });
+  const timePart = date.toLocaleTimeString("es-AR", {
     hour: "2-digit",
     minute: "2-digit",
   });
+  return `${datePart} · ${timePart}`;
 }
 
 function listLabel(values?: string[] | null) {
@@ -189,6 +214,16 @@ export default function MercadoLibrePage() {
   const [channelSortKey, setChannelSortKey] = useState<ChannelSortKey>("totalCostAmount");
   const [categorySortKey, setCategorySortKey] = useState<CategorySortKey>("totalCostAmount");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [configViewMode, setConfigViewMode] = useState<ConfigViewMode>("channels");
+  const [channelConfigQuery, setChannelConfigQuery] = useState("");
+  const [channelTypeFilter, setChannelTypeFilter] = useState("");
+  const [channelStatusFilter, setChannelStatusFilter] = useState("");
+  const [categoryConfigQuery, setCategoryConfigQuery] = useState("");
+  const [categoryStatusFilter, setCategoryStatusFilter] = useState("");
+  const [onlyUnsyncedCategories, setOnlyUnsyncedCategories] = useState(false);
+  const [configChannelSortKey, setConfigChannelSortKey] = useState<ConfigChannelSortKey>("code");
+  const [configCategorySortKey, setConfigCategorySortKey] = useState<ConfigCategorySortKey>("category");
+  const [configSortDirection, setConfigSortDirection] = useState<SortDirection>("asc");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -854,11 +889,115 @@ export default function MercadoLibrePage() {
     return null;
   }
 
+  const channelTypes = useMemo(() => {
+    return [...new Set(installments.map((item) => item.channel_type || "").filter(Boolean))]
+      .sort((a, b) => channelTypeLabel(a).localeCompare(channelTypeLabel(b), "es"));
+  }, [installments]);
+
+  const filteredInstallments = useMemo(() => {
+    const search = channelConfigQuery.trim().toLowerCase();
+    return installments
+      .filter((item) => {
+        const isMl = item.channel_type === "mercadolibre" || item.code.startsWith("MP") || item.code === "MC";
+        const type = item.channel_type || (isMl ? "mercadolibre" : "directo");
+        if (channelTypeFilter && type !== channelTypeFilter) return false;
+        if (channelStatusFilter === "active" && !item.active) return false;
+        if (channelStatusFilter === "inactive" && item.active) return false;
+        if (!search) return true;
+        return `${item.code} ${item.name} ${type}`.toLowerCase().includes(search);
+      })
+      .sort((a, b) => {
+        const multiplier = configSortDirection === "asc" ? 1 : -1;
+        if (configChannelSortKey === "code") return a.code.localeCompare(b.code, "es") * multiplier;
+        if (configChannelSortKey === "name") return a.name.localeCompare(b.name, "es") * multiplier;
+        if (configChannelSortKey === "channelType") return String(a.channel_type || "").localeCompare(String(b.channel_type || ""), "es") * multiplier;
+        if (configChannelSortKey === "installments") return (Number(a.installment_count || 0) - Number(b.installment_count || 0)) * multiplier;
+        if (configChannelSortKey === "financing") return (Number(a.financing_fee_rate || 0) - Number(b.financing_fee_rate || 0)) * multiplier;
+        return (Number(Boolean(a.active)) - Number(Boolean(b.active))) * multiplier;
+      });
+  }, [channelConfigQuery, channelStatusFilter, channelTypeFilter, configChannelSortKey, configSortDirection, installments]);
+
+  const filteredConfigCategories = useMemo(() => {
+    const search = categoryConfigQuery.trim().toLowerCase();
+    return categories
+      .filter((item) => {
+        if (categoryStatusFilter === "active" && !item.active) return false;
+        if (categoryStatusFilter === "inactive" && item.active) return false;
+        if (onlyUnsyncedCategories && item.meli_last_sync_at) return false;
+        if (!search) return true;
+        return [
+          item.category,
+          listLabel(item.meli_category_names),
+          item.notes,
+        ].join(" ").toLowerCase().includes(search);
+      })
+      .sort((a, b) => {
+        const multiplier = configSortDirection === "asc" ? 1 : -1;
+        if (configCategorySortKey === "category") return a.category.localeCompare(b.category, "es") * multiplier;
+        if (configCategorySortKey === "marketplaceFeeRate") return (Number(a.marketplace_fee_rate || 0) - Number(b.marketplace_fee_rate || 0)) * multiplier;
+        if (configCategorySortKey === "sync") return (new Date(a.meli_last_sync_at || 0).getTime() - new Date(b.meli_last_sync_at || 0).getTime()) * multiplier;
+        return (Number(Boolean(a.active)) - Number(Boolean(b.active))) * multiplier;
+      });
+  }, [categories, categoryConfigQuery, categoryStatusFilter, configCategorySortKey, configSortDirection, onlyUnsyncedCategories]);
+
+  function changeConfigChannelSort(key: ConfigChannelSortKey) {
+    if (configChannelSortKey === key) {
+      setConfigSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setConfigChannelSortKey(key);
+    setConfigSortDirection(key === "code" || key === "name" || key === "channelType" ? "asc" : "desc");
+  }
+
+  function changeConfigCategorySort(key: ConfigCategorySortKey) {
+    if (configCategorySortKey === key) {
+      setConfigSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setConfigCategorySortKey(key);
+    setConfigSortDirection(key === "category" ? "asc" : "desc");
+  }
+
+  function ConfigSortIcon({ active }: { active: boolean }) {
+    if (!active) return <ArrowUpDown className="idle-sort-icon" aria-hidden="true" />;
+    return configSortDirection === "asc" ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />;
+  }
+
+  function ConfigChannelSortButton({ column, children }: { column: ConfigChannelSortKey; children: ReactNode }) {
+    return (
+      <button className={`cost-config-sort-trigger ${configChannelSortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigChannelSort(column)}>
+        {children}
+        <ConfigSortIcon active={configChannelSortKey === column} />
+      </button>
+    );
+  }
+
+  function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+    return (
+      <button className={`cost-config-sort-trigger ${configCategorySortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigCategorySort(column)}>
+        {children}
+        <ConfigSortIcon active={configCategorySortKey === column} />
+      </button>
+    );
+  }
+
+  function BooleanMark({ value, label }: { value: boolean; label: string }) {
+    return value ? (
+      <Check className="cost-config-check" aria-label={label} />
+    ) : (
+      <Minus className="cost-config-minus" aria-label={`No ${label.toLowerCase()}`} />
+    );
+  }
+
+  function StatusBadge({ active, activeLabel = "Activo", inactiveLabel = "Inactivo" }: { active: boolean; activeLabel?: string; inactiveLabel?: string }) {
+    return <span className={`badge cost-config-status ${active ? "active" : "inactive"}`}>{active ? activeLabel : inactiveLabel}</span>;
+  }
+
   return (
     <main className="container wide cost-channel-page">
       <PageHero
         title="Costo x Canal"
-        description="Compará comisiones, impuestos, envíos y costos asociados a cada canal de venta."
+        description="Configurá los costos, impuestos y comisiones utilizados por cada canal y categoría."
         icon={<ChartNoAxesCombined aria-hidden="true" />}
         actions={(
           <>
@@ -876,183 +1015,198 @@ export default function MercadoLibrePage() {
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}
 
-      <section className="cost-channel-kpis">
-        <article className="kpi-card">
-          <span className="kpi-label">Canales</span>
-          <strong className="kpi-value">{kpis.configuredChannels}</strong>
-          <small className="kpi-meta">Configurados</small>
-        </article>
-        <article className="kpi-card cost-channel-kpi-good">
-          <span className="kpi-label">Menor costo</span>
-          <strong className="kpi-value">{kpis.lowest ? percent(kpis.lowest.totalCostRate) : "-"}</strong>
-          <small className="kpi-meta">{kpis.lowest ? kpis.lowest.name : "Sin datos"}</small>
-        </article>
-        <article className="kpi-card cost-channel-kpi-warning">
-          <span className="kpi-label">Mayor costo</span>
-          <strong className="kpi-value">{kpis.highest ? percent(kpis.highest.totalCostRate) : "-"}</strong>
-          <small className="kpi-meta">{kpis.highest ? kpis.highest.name : "Sin datos"}</small>
-        </article>
-        <article className="kpi-card">
-          <span className="kpi-label">Diferencia</span>
-          <strong className="kpi-value">{kpis.lowest && kpis.highest ? `${kpis.spread.toLocaleString("es-AR", { maximumFractionDigits: 2 })} pp` : "-"}</strong>
-          <small className="kpi-meta">Entre extremos</small>
-        </article>
+      <section className="cost-config-tabs" aria-label="Configuración de costo por canal">
+        <button type="button" className={configViewMode === "channels" ? "active" : ""} onClick={() => setConfigViewMode("channels")}>Canales</button>
+        <button type="button" className={configViewMode === "categories" ? "active" : ""} onClick={() => setConfigViewMode("categories")}>Categorías</button>
       </section>
 
-      <section className="card toolbar-card cost-channel-toolbar-card">
-        <div className="cost-channel-toolbar">
-          <label className="search-control">
-            <Search aria-hidden="true" />
-            <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar canal o categoría..." />
-          </label>
-          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-            <option value="">Todas las categorías</option>
-            {productCategories.map((category) => <option key={category} value={category}>{category}</option>)}
-          </select>
-          <div className="cost-channel-tabs" role="tablist" aria-label="Vista de costo">
-            <button type="button" className={viewMode === "channel" ? "active" : ""} onClick={() => setViewMode("channel")}>Por canal</button>
-            <button type="button" className={viewMode === "category" ? "active" : ""} onClick={() => setViewMode("category")}>Por categoría</button>
-          </div>
-        </div>
-      </section>
+      {configViewMode === "channels" ? (
+        <section className="card cost-config-card">
+          <SectionHeader
+            icon={<Store aria-hidden="true" />}
+            title="Canales de venta"
+            description="Definí financiación, impuestos y costos aplicables a cada canal."
+            actions={(
+              <button type="button" className="button small-button" onClick={startNewChannel}>
+                <Plus aria-hidden="true" />
+                Nuevo canal
+              </button>
+            )}
+          />
 
-      <section className="card cost-channel-table-card">
-        <div className="cost-channel-table-header">
-          <div>
-            <h2>{viewMode === "channel" ? "Comparativa por canal" : "Comparativa por categoría"}</h2>
-            <p className="small">
-              {viewMode === "channel"
-                ? `${filteredChannelRows.length} canal(es) calculados sobre productos activos.`
-                : `${filteredCategoryRows.length} categoría(s) con productos activos.`}
-            </p>
+          <div className="cost-config-toolbar">
+            <label className="search-control">
+              <Search aria-hidden="true" />
+              <input className="search-field" value={channelConfigQuery} onChange={(event) => setChannelConfigQuery(event.target.value)} placeholder="Buscar código o canal..." />
+            </label>
+            <select value={channelTypeFilter} onChange={(event) => setChannelTypeFilter(event.target.value)}>
+              <option value="">Todos los tipos</option>
+              {channelTypes.map((type) => <option key={type} value={type}>{channelTypeLabel(type)}</option>)}
+            </select>
+            <select value={channelStatusFilter} onChange={(event) => setChannelStatusFilter(event.target.value)}>
+              <option value="">Todos los estados</option>
+              <option value="active">Activos</option>
+              <option value="inactive">Inactivos</option>
+            </select>
           </div>
-          {(query || categoryFilter) && (
-            <button className="button ghost small-button" type="button" onClick={() => { setQuery(""); setCategoryFilter(""); }}>
-              Limpiar filtros
-            </button>
+
+          <div className="cost-config-table-status">
+            <span>{filteredInstallments.length === installments.length ? `${installments.length} canales` : `${filteredInstallments.length} de ${installments.length} canales`}</span>
+            {(channelConfigQuery || channelTypeFilter || channelStatusFilter) && (
+              <button className="button ghost small-button" type="button" onClick={() => { setChannelConfigQuery(""); setChannelTypeFilter(""); setChannelStatusFilter(""); }}>
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="cost-channel-skeleton"><span /><span /><span /></div>
+          ) : (
+            <div className="table-wrap cost-config-table-wrap">
+              <table className="cost-config-table">
+                <thead>
+                  <tr>
+                    <th>
+                      <div className="cost-config-channel-sort-stack">
+                        <ConfigChannelSortButton column="code">Código</ConfigChannelSortButton>
+                        <ConfigChannelSortButton column="name">Nombre</ConfigChannelSortButton>
+                      </div>
+                    </th>
+                    <th><ConfigChannelSortButton column="channelType">Tipo</ConfigChannelSortButton></th>
+                    <th className="numeric-header"><ConfigChannelSortButton column="installments">Cuotas</ConfigChannelSortButton></th>
+                    <th className="numeric-header"><ConfigChannelSortButton column="financing">Financiación</ConfigChannelSortButton></th>
+                    <th className="boolean-header">ML</th>
+                    <th className="boolean-header">Envío</th>
+                    <th className="boolean-header">IIBB</th>
+                    <th className="boolean-header">IIGG</th>
+                    <th className="boolean-header">IVA</th>
+                    <th><ConfigChannelSortButton column="active">Estado</ConfigChannelSortButton></th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredInstallments.map((item) => {
+                    const isMl = item.channel_type === "mercadolibre" || item.code.startsWith("MP") || item.code === "MC";
+                    const type = item.channel_type || (isMl ? "mercadolibre" : "directo");
+                    return (
+                      <tr key={item.id || item.code}>
+                        <td>
+                          <div className="cost-config-main-cell">
+                            <strong>{item.code}</strong>
+                            <span>{item.name}</span>
+                          </div>
+                        </td>
+                        <td>{channelTypeLabel(type)}</td>
+                        <td className="numeric-cell">{item.installment_count || "-"}</td>
+                        <td className="numeric-cell">{tablePercent(item.financing_fee_rate)}</td>
+                        <td className="boolean-cell"><BooleanMark value={defaultFlag(item.applies_marketplace_fee, isMl)} label="ML" /></td>
+                        <td className="boolean-cell"><BooleanMark value={defaultFlag(item.applies_shipping, isMl)} label="Envío" /></td>
+                        <td className="boolean-cell"><BooleanMark value={defaultFlag(item.applies_iibb, isMl)} label="IIBB" /></td>
+                        <td className="boolean-cell"><BooleanMark value={defaultFlag(item.applies_iigg, isMl)} label="IIGG" /></td>
+                        <td className="boolean-cell"><BooleanMark value={defaultFlag(item.applies_vat, isMl)} label="IVA" /></td>
+                        <td><StatusBadge active={Boolean(item.active)} /></td>
+                        <td>
+                          <div className="cost-config-actions">
+                            <button className="button ghost small-button" onClick={() => editInstallment(item)}><Pencil aria-hidden="true" />Editar</button>
+                            <button className="button danger small-button" onClick={() => deleteInstallment(item)} title={`Eliminar ${item.code}`}><Trash2 aria-hidden="true" />Eliminar</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredInstallments.length === 0 && <tr><td colSpan={11}>No hay canales que coincidan con los filtros.</td></tr>}
+                </tbody>
+              </table>
+            </div>
           )}
-        </div>
+        </section>
+      ) : (
+        <section className="card cost-config-card">
+          <SectionHeader
+            icon={<Tags aria-hidden="true" />}
+            title="Categorías"
+            description="Configurá comisiones y asociaciones con categorías de MercadoLibre."
+            actions={(
+              <div className="cost-config-header-actions">
+                <button type="button" className="button ghost small-button" onClick={startCategoryImport} disabled={categoryImportLoading}>
+                  {categoryImportLoading ? "Leyendo ML..." : "Importar categorías ML"}
+                </button>
+                <button type="button" className="button small-button" onClick={startNewCategory}>
+                  <Plus aria-hidden="true" />
+                  Nueva categoría
+                </button>
+              </div>
+            )}
+          />
 
-        {loading ? (
-          <div className="cost-channel-skeleton"><span /><span /><span /></div>
-        ) : activeChannels.length === 0 ? (
-          <div className="cost-channel-empty">
-            <ChartNoAxesCombined aria-hidden="true" />
-            <h2>No hay costos por canal configurados</h2>
-            <p>Configurá los parámetros comerciales para poder comparar los canales.</p>
+          <div className="cost-config-toolbar categories">
+            <label className="search-control">
+              <Search aria-hidden="true" />
+              <input className="search-field" value={categoryConfigQuery} onChange={(event) => setCategoryConfigQuery(event.target.value)} placeholder="Buscar categoría o categoría ML..." />
+            </label>
+            <select value={categoryStatusFilter} onChange={(event) => setCategoryStatusFilter(event.target.value)}>
+              <option value="">Todos los estados</option>
+              <option value="active">Activas</option>
+              <option value="inactive">Inactivas</option>
+            </select>
+            <label className={`cost-config-toggle ${onlyUnsyncedCategories ? "active" : ""}`}>
+              <input type="checkbox" checked={onlyUnsyncedCategories} onChange={(event) => setOnlyUnsyncedCategories(event.target.checked)} />
+              Sin sincronizar
+            </label>
           </div>
-        ) : viewMode === "channel" ? (
-          <div className="table-wrap cost-channel-table-wrap">
-            <table className="cost-channel-table">
-              <thead>
-                <tr>
-                  <th><ChannelSortButton column="code">Canal</ChannelSortButton></th>
-                  <th className="numeric-header"><ChannelSortButton column="marketplaceRate">Comisión</ChannelSortButton></th>
-                  <th className="numeric-header"><ChannelSortButton column="financingRate">Financiación</ChannelSortButton></th>
-                  <th className="numeric-header"><ChannelSortButton column="taxRate">Impuestos</ChannelSortButton></th>
-                  <th className="numeric-header"><ChannelSortButton column="shippingAmount">Envío</ChannelSortButton></th>
-                  <th className="numeric-header">Otros</th>
-                  <th className="numeric-header"><ChannelSortButton column="basePrice">Base</ChannelSortButton></th>
-                  <th className="numeric-header cost-channel-total-head"><ChannelSortButton column="totalCostAmount">Costo total</ChannelSortButton></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredChannelRows.map((row) => (
-                  <tr key={row.code}>
-                    <td>
-                      <div className="cost-channel-name">
-                        <strong>{row.code}</strong>
-                        <span>{row.name}</span>
-                        <div className="cost-channel-row-badges">
-                          {relationBadge(row)}
-                          {row.missingShippingCount > 0 && <span className="badge badge-neutral">Envío incompleto</span>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="numeric-cell">{tablePercent(row.marketplaceRate)}</td>
-                    <td className="numeric-cell">{tablePercent(row.financingRate)}</td>
-                    <td className="numeric-cell">{tablePercent(row.taxRate)}</td>
-                    <td className="numeric-cell">
-                      {row.missingShippingCount >= row.productCount && row.productCount > 0 ? <span className="badge badge-warning">No configurado</span> : moneyWithCents(row.shippingAmount)}
-                    </td>
-                    <td className="numeric-cell">{moneyWithCents(row.fixedFeeAmount + row.structureAmount + row.salesCommissionAmount)}</td>
-                    <td className="numeric-cell cost-channel-base-cell">
-                      <strong>{moneyWithCents(row.basePrice)}</strong>
-                      <small>{row.productCount} productos</small>
-                    </td>
-                    <td className="numeric-cell cost-channel-total-cell">
-                      <strong>{moneyWithCents(row.totalCostAmount)}</strong>
-                      <small>{tablePercent(row.totalCostRate)}</small>
-                    </td>
-                  </tr>
-                ))}
-                {filteredChannelRows.length === 0 && <tr><td colSpan={8}>No hay canales que coincidan con los filtros.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="table-wrap cost-channel-table-wrap">
-            <table className="cost-channel-table">
-              <thead>
-                <tr>
-                  <th><CategorySortButton column="category">Categoría</CategorySortButton></th>
-                  <th className="numeric-header"><CategorySortButton column="marketplaceRate">Comisión</CategorySortButton></th>
-                  <th className="numeric-header"><CategorySortButton column="shippingAmount">Envío prom.</CategorySortButton></th>
-                  <th className="numeric-header"><CategorySortButton column="taxRate">Impuestos</CategorySortButton></th>
-                  <th className="numeric-header">Canales</th>
-                  <th className="numeric-header"><CategorySortButton column="totalCostAmount">Costo</CategorySortButton></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCategoryRows.map((row) => (
-                  <tr key={row.category}>
-                    <td>
-                      <div className="cost-channel-name">
-                        <strong>{row.category}</strong>
-                        <span>{row.productCount} productos activos</span>
-                      </div>
-                    </td>
-                    <td className="numeric-cell">{tablePercent(row.marketplaceRate)}</td>
-                    <td className="numeric-cell">
-                      {row.missingShippingCount >= row.productCount * row.channelCount && row.productCount > 0 ? <span className="badge badge-warning">No configurado</span> : moneyWithCents(row.shippingAmount)}
-                    </td>
-                    <td className="numeric-cell">{tablePercent(row.taxRate)}</td>
-                    <td className="numeric-cell">{row.channelCount}</td>
-                    <td className="numeric-cell cost-channel-total-cell">
-                      <strong>{moneyWithCents(row.totalCostAmount)}</strong>
-                      <small>{tablePercent(row.totalCostRate)}</small>
-                    </td>
-                  </tr>
-                ))}
-                {filteredCategoryRows.length === 0 && <tr><td colSpan={6}>No hay categorías que coincidan con los filtros.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
 
-      <section className="card channel-actions-card">
-        <div className="channel-actions-header">
-          <div>
-            <h2 style={{ marginTop: 0, marginBottom: 6 }}>Configuración de canales y categorías</h2>
-            <p className="small" style={{ marginBottom: 0 }}>MercadoLibre puede actualizar comisiones por categoría y costo de cuotas desde las publicaciones sincronizadas.</p>
+          <div className="cost-config-table-status">
+            <span>{filteredConfigCategories.length === categories.length ? `${categories.length} categorías` : `${filteredConfigCategories.length} de ${categories.length} categorías`}</span>
+            {(categoryConfigQuery || categoryStatusFilter || onlyUnsyncedCategories) && (
+              <button className="button ghost small-button" type="button" onClick={() => { setCategoryConfigQuery(""); setCategoryStatusFilter(""); setOnlyUnsyncedCategories(false); }}>
+                Limpiar filtros
+              </button>
+            )}
           </div>
-          <div className="channel-actions-buttons">
-            <button type="button" className="button" onClick={syncFromMercadoLibre} disabled={syncingMeli}>
-              {syncingMeli ? "Sincronizando..." : "Actualizar costos ML"}
-            </button>
-            <button type="button" className={`button ${showCategoryImport ? "secondary" : "ghost"}`} onClick={startCategoryImport} disabled={categoryImportLoading}>
-              {categoryImportLoading ? "Leyendo ML..." : showCategoryImport ? "Ocultar importador" : "Importar categorías ML"}
-            </button>
-            <button type="button" className={`button ${showChannelForm ? "secondary" : "ghost"}`} onClick={startNewChannel}>
-              {showChannelForm ? "Ocultar canal" : "Agregar canal"}
-            </button>
-            <button type="button" className={`button ${showCategoryForm ? "secondary" : "ghost"}`} onClick={startNewCategory}>
-              {showCategoryForm ? "Ocultar categoría" : "Agregar categoría"}
-            </button>
-          </div>
-        </div>
-      </section>
+
+          {loading ? (
+            <div className="cost-channel-skeleton"><span /><span /><span /></div>
+          ) : (
+            <div className="table-wrap cost-config-table-wrap">
+              <table className="cost-config-table category-table">
+                <thead>
+                  <tr>
+                    <th><ConfigCategorySortButton column="category">Categoría</ConfigCategorySortButton></th>
+                    <th className="numeric-header"><ConfigCategorySortButton column="marketplaceFeeRate">Comisión</ConfigCategorySortButton></th>
+                    <th>Categorías ML</th>
+                    <th><ConfigCategorySortButton column="sync">Sync ML</ConfigCategorySortButton></th>
+                    <th><ConfigCategorySortButton column="active">Estado</ConfigCategorySortButton></th>
+                    <th>Notas</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredConfigCategories.map((item) => {
+                    const mlNames = listLabel(item.meli_category_names);
+                    return (
+                      <tr key={item.id || item.category}>
+                        <td><strong className="cost-config-category-name">{item.category}</strong></td>
+                        <td className="numeric-cell">{tablePercent(item.marketplace_fee_rate)}</td>
+                        <td><span className="cost-config-clamp" title={mlNames}>{mlNames}</span></td>
+                        <td>{item.meli_last_sync_at ? <span>{dateLabel(item.meli_last_sync_at)}</span> : <span className="cost-config-muted">Sin sincronizar</span>}</td>
+                        <td><StatusBadge active={Boolean(item.active)} activeLabel="Activa" inactiveLabel="Inactiva" /></td>
+                        <td><span className="cost-config-clamp" title={item.notes || "-"}>{item.notes || "-"}</span></td>
+                        <td>
+                          <div className="cost-config-actions">
+                            <button className="button ghost small-button" onClick={() => editCategory(item)}><Pencil aria-hidden="true" />Editar</button>
+                            <button className="button danger small-button" onClick={() => deleteCategory(item)} title={`Eliminar ${item.category}`}><Trash2 aria-hidden="true" />Eliminar</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredConfigCategories.length === 0 && <tr><td colSpan={7}>No hay categorías que coincidan con los filtros.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {showCategoryImport && (
         <section className="card channel-card channel-editor-card meli-category-import-card" style={{ marginBottom: 20 }}>
@@ -1246,65 +1400,6 @@ export default function MercadoLibrePage() {
         </section>
       )}
 
-      <section className="channel-tables">
-        <div className="card channel-table-card">
-          <h2 style={{ marginTop: 0 }}>Tabla de canales</h2>
-          {loading ? <p>Cargando...</p> : (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Cuotas</th><th>Costo %</th><th>ML</th><th>Env.</th><th>IIBB</th><th>IIGG</th><th>IVA</th><th>Estado</th><th></th></tr></thead>
-                <tbody>
-                  {installments.map((item) => {
-                    const isMl = item.channel_type === "mercadolibre" || item.code.startsWith("MP") || item.code === "MC";
-                    return (
-                      <tr key={item.id || item.code}>
-                        <td>{item.code}</td>
-                        <td>{item.name}</td>
-                        <td>{item.channel_type || (isMl ? "mercadolibre" : "directo")}</td>
-                        <td>{item.installment_count || "-"}</td>
-                        <td>{percent(item.financing_fee_rate)}</td>
-                        <td>{boolLabel(defaultFlag(item.applies_marketplace_fee, isMl))}</td>
-                        <td>{boolLabel(defaultFlag(item.applies_shipping, isMl))}</td>
-                        <td>{boolLabel(defaultFlag(item.applies_iibb, isMl))}</td>
-                        <td>{boolLabel(defaultFlag(item.applies_iigg, isMl))}</td>
-                        <td>{boolLabel(defaultFlag(item.applies_vat, isMl))}</td>
-                        <td>{item.active ? <span className="badge">activo</span> : <span className="badge">inactivo</span>}</td>
-                        <td className="actions-cell"><button className="button ghost small-button" onClick={() => editInstallment(item)}>Editar</button><button className="button danger small-button" onClick={() => deleteInstallment(item)}>Eliminar</button></td>
-                      </tr>
-                    );
-                  })}
-                  {installments.length === 0 && <tr><td colSpan={12}>Sin canales cargados.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        <div className="card channel-table-card">
-          <h2 style={{ marginTop: 0 }}>Tabla de categorías</h2>
-          {loading ? <p>Cargando...</p> : (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Categoría</th><th>Comisión</th><th>Categorías ML</th><th>Sync ML</th><th>Estado</th><th>Notas</th><th></th></tr></thead>
-                <tbody>
-                  {categories.map((item) => (
-                    <tr key={item.id || item.category}>
-                      <td>{item.category}</td>
-                      <td>{percent(item.marketplace_fee_rate)}</td>
-                      <td>{listLabel(item.meli_category_names)}</td>
-                      <td>{dateLabel(item.meli_last_sync_at)}</td>
-                      <td>{item.active ? <span className="badge">activa</span> : <span className="badge">inactiva</span>}</td>
-                      <td>{item.notes || "-"}</td>
-                      <td className="actions-cell"><button className="button ghost small-button" onClick={() => editCategory(item)}>Editar</button><button className="button danger small-button" onClick={() => deleteCategory(item)}>Eliminar</button></td>
-                    </tr>
-                  ))}
-                  {categories.length === 0 && <tr><td colSpan={7}>Sin categorías cargadas.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </section>
     </main>
   );
 }
