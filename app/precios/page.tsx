@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, Search, Tags } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -27,6 +28,8 @@ import type {
 
 type MarginMode = "margin" | "net";
 type SyncMode = "none" | "margin" | "net";
+type SortDirection = "asc" | "desc";
+type PriceSortKey = "product" | "cost" | "price" | "margin" | "status";
 
 type ModalState = {
   product: Product;
@@ -64,6 +67,9 @@ export default function PricesPage() {
   );
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortKey, setSortKey] = useState<PriceSortKey>("product");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -183,17 +189,76 @@ export default function PricesPage() {
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "es"));
   }, [products]);
 
+  const productStatuses = useMemo(() => {
+    const values = products.map((product) => product.status || "").filter(Boolean);
+    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "es"));
+  }, [products]);
+
+  const priceKpis = useMemo(() => {
+    const pricedProducts = products.filter((product) => Boolean(calculateMcRawPriceForProduct(product)));
+    const margins = products.map((product) => getMargin(product.id, "MC")).filter((value) => Number.isFinite(value));
+    const averageMargin = margins.length ? margins.reduce((total, value) => total + value, 0) / margins.length : null;
+    const withoutCost = products.filter((product) => !Number(product.cost_without_vat || 0)).length;
+    return {
+      total: products.length,
+      priced: pricedProducts.length,
+      averageMargin,
+      withoutCost,
+    };
+  }, [products, categoryFees, taxes, shippingCosts, marginSettings]);
+
+  function shippingsForProduct(product: Product) {
+    return shippingCosts.filter(
+      (item) => item.product_id === product.id || item.sku === product.sku,
+    );
+  }
+
+  function productImage(shippings: MercadoLibreShippingCost[]) {
+    return shippings.find((shipping) => Boolean(shipping.meli_thumbnail))?.meli_thumbnail || null;
+  }
+
+  function productInitial(product: Product) {
+    const value = product.brand || product.name || product.sku || "P";
+    return value.slice(0, 2).toUpperCase();
+  }
+
   const filteredProducts = useMemo(() => {
-    const q = query.toLowerCase();
-    return products.filter((product) => {
+    const q = query.toLowerCase().trim();
+    const filtered = products.filter((product) => {
+      const productShippings = shippingCosts.filter(
+        (item) => item.product_id === product.id || item.sku === product.sku,
+      );
+      const publicationText = productShippings
+        .map((item) => `${item.meli_item_id || ""} ${item.meli_title || ""}`)
+        .join(" ");
       const text =
-        `${product.sku} ${product.name} ${product.brand || ""} ${product.model || ""} ${product.category || ""}`.toLowerCase();
+        `${product.sku} ${product.name} ${product.brand || ""} ${product.model || ""} ${product.category || ""} ${publicationText}`.toLowerCase();
       const matchesQuery = !q || text.includes(q);
       const matchesCategory =
         !categoryFilter || (product.category || "") === categoryFilter;
-      return matchesQuery && matchesCategory;
+      const matchesStatus = !statusFilter || product.status === statusFilter;
+      return matchesQuery && matchesCategory && matchesStatus;
     });
-  }, [products, query, categoryFilter]);
+
+    return [...filtered].sort((a, b) => {
+      const multiplier = sortDirection === "asc" ? 1 : -1;
+      if (sortKey === "product") {
+        return `${a.name} ${a.sku}`.localeCompare(`${b.name} ${b.sku}`, "es") * multiplier;
+      }
+      if (sortKey === "status") {
+        return String(a.status || "").localeCompare(String(b.status || ""), "es") * multiplier;
+      }
+      if (sortKey === "cost") {
+        return (Number(a.cost_without_vat || 0) - Number(b.cost_without_vat || 0)) * multiplier;
+      }
+      if (sortKey === "margin") {
+        return (getMargin(a.id, "MC") - getMargin(b.id, "MC")) * multiplier;
+      }
+      const priceA = Number(calculateMcRawPriceForProduct(a) || 0);
+      const priceB = Number(calculateMcRawPriceForProduct(b) || 0);
+      return (priceA - priceB) * multiplier;
+    });
+  }, [products, shippingCosts, query, categoryFilter, statusFilter, sortKey, sortDirection, marginSettings, categoryFees, taxes]);
 
   function getMargin(productId: string | undefined, channelCode: string) {
     const setting = marginSettings.find(
@@ -757,6 +822,11 @@ export default function PricesPage() {
   }
 
   function calculateMcPriceForProduct(product: Product) {
+    const price = calculateMcRawPriceForProduct(product);
+    return price ? moneyWithCents(price) : "-";
+  }
+
+  function calculateMcRawPriceForProduct(product: Product) {
     const categoryFee = categoryFees.find(
       (item) =>
         item.category?.toLowerCase() === (product.category || "").toLowerCase(),
@@ -776,7 +846,7 @@ export default function PricesPage() {
         roundingMode: "nearest",
       },
     ) as any;
-    return result.valid ? moneyWithCents(result.roundedPrice) : "-";
+    return result.valid ? Number(result.roundedPrice || 0) : null;
   }
 
   const currentRows = modalRows();
@@ -805,11 +875,47 @@ export default function PricesPage() {
     : null;
   const otherRows = currentRows.filter((row) => row.option.code !== "MC");
 
+  function statusLabel(status?: string | null) {
+    if (status === "active") return "Activo";
+    if (status === "paused") return "Pausado";
+    if (status === "discontinued") return "Discontinuado";
+    return status || "-";
+  }
+
+  function marginClass(value: number) {
+    if (value < 0) return "negative";
+    return "positive";
+  }
+
+  function changeSort(key: PriceSortKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection(key === "product" || key === "status" ? "asc" : "desc");
+  }
+
+  function SortIcon({ column }: { column: PriceSortKey }) {
+    if (sortKey !== column) return <ArrowUpDown className="idle-sort-icon" aria-hidden="true" />;
+    return sortDirection === "asc" ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />;
+  }
+
+  function SortButton({ column, children }: { column: PriceSortKey; children: ReactNode }) {
+    return (
+      <button className={`prices-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+        {children}
+        <SortIcon column={column} />
+      </button>
+    );
+  }
+
   return (
     <main className="container wide prices-page">
       <PageHero
         title="Precios"
-        description="Buscá un producto, abrí el resumen y definí el margen deseado o la ganancia neta por canal."
+        description="Revisá costos, precios y rentabilidad de cada producto antes de actualizar tus canales de venta."
+        icon={<Tags aria-hidden="true" />}
         onRefresh={loadData}
         onLogout={logout}
       />
@@ -817,15 +923,42 @@ export default function PricesPage() {
       {error && <div className="message error">{error}</div>}
       {message && <div className="message success">{message}</div>}
 
-      <section className="card filters-card" style={{ marginBottom: 20 }}>
-        <div className="grid two">
+      <section className="prices-kpi-grid">
+        <article className="kpi-card">
+          <span className="kpi-label">Productos</span>
+          <strong className="kpi-value">{priceKpis.total}</strong>
+          <small className="kpi-meta">Cargados</small>
+        </article>
+        <article className="kpi-card">
+          <span className="kpi-label">Con precio</span>
+          <strong className="kpi-value">{priceKpis.priced}</strong>
+          <small className="kpi-meta">Precio MC calculable</small>
+        </article>
+        <article className="kpi-card">
+          <span className="kpi-label">Margen promedio</span>
+          <strong className="kpi-value">{priceKpis.averageMargin !== null ? percent(priceKpis.averageMargin) : "-"}</strong>
+          <small className="kpi-meta">Base MC</small>
+        </article>
+        <article className="kpi-card">
+          <span className="kpi-label">Sin costo</span>
+          <strong className="kpi-value">{priceKpis.withoutCost}</strong>
+          <small className="kpi-meta">Requieren dato base</small>
+        </article>
+      </section>
+
+      <section className="card filters-card prices-toolbar-card" style={{ marginBottom: 20 }}>
+        <div className="prices-toolbar">
           <div className="field">
-            <label>Buscar producto</label>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por SKU, nombre, marca o modelo"
-            />
+            <label>Buscar</label>
+            <div className="search-control">
+              <Search aria-hidden="true" />
+              <input
+                className="search-field"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar SKU, producto o MLA..."
+              />
+            </div>
           </div>
           <div className="field">
             <label>Categoría</label>
@@ -841,10 +974,32 @@ export default function PricesPage() {
               ))}
             </select>
           </div>
+          <div className="field">
+            <label>Estado</label>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">Todos los estados</option>
+              {productStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {statusLabel(status)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </section>
 
       <section className="card products-table-card">
+        <div className="prices-table-status">
+          <div>
+            <strong>{filteredProducts.length} de {products.length} productos</strong>
+            {(query || categoryFilter || statusFilter) && <span> · filtros activos</span>}
+          </div>
+          {(query || categoryFilter || statusFilter) && (
+            <button className="button ghost small-button" type="button" onClick={() => { setQuery(""); setCategoryFilter(""); setStatusFilter(""); }}>
+              Limpiar filtros
+            </button>
+          )}
+        </div>
         {loading ? (
           <p>Cargando productos...</p>
         ) : (
@@ -852,13 +1007,12 @@ export default function PricesPage() {
             <table className="products-list-table">
               <thead>
                 <tr>
-                  <th>SKU</th>
-                  <th>Producto</th>
-                  <th>Categoría</th>
-                  <th>Costo s/IVA</th>
+                  <th><SortButton column="product">Producto</SortButton></th>
+                  <th className="numeric-header"><SortButton column="cost">Costo s/IVA</SortButton></th>
                   <th>IVA</th>
-                  <th>Margen base</th>
-                  <th>Precio MC</th>
+                  <th className="numeric-header"><SortButton column="margin">Margen base</SortButton></th>
+                  <th className="numeric-header"><SortButton column="price">Precio MC</SortButton></th>
+                  <th><SortButton column="status">Estado</SortButton></th>
                   <th></th>
                 </tr>
               </thead>
@@ -866,28 +1020,35 @@ export default function PricesPage() {
                 {filteredProducts.map((product) => {
                   const key = productKey(product);
                   const isExpanded = Boolean(expandedProducts[key]);
+                  const productShippings = shippingsForProduct(product);
+                  const thumbnail = productImage(productShippings);
+                  const margin = getMargin(product.id, "MC");
                   const productRows = isExpanded
                     ? calculateRowsForProduct(product)
                     : [];
                   return (
                     <Fragment key={key}>
                       <tr>
-                        <td>{product.sku}</td>
                         <td>
-                          <div className="product-name-cell">
-                            <strong>{product.name}</strong>
-                            <span className="small">
-                              {product.brand || ""} {product.model || ""}
-                            </span>
+                          <div className="prices-product-cell">
+                            <div className="product-thumb prices-product-thumb">
+                              {thumbnail ? <img src={thumbnail} alt="" /> : productInitial(product)}
+                            </div>
+                            <div className="product-name-cell">
+                              <strong>{product.name}</strong>
+                              <span className="small">
+                                {product.sku} · {product.category || "-"}
+                              </span>
+                            </div>
                           </div>
                         </td>
-                        <td>{product.category || "-"}</td>
-                        <td>{money(product.cost_without_vat)}</td>
+                        <td className="numeric-cell prices-cost-cell">{money(product.cost_without_vat)}</td>
                         <td>{product.vat_rate}%</td>
-                        <td>{percent(getMargin(product.id, "MC"))}</td>
-                        <td>
+                        <td className={`numeric-cell prices-margin-cell ${marginClass(margin)}`}>{percent(margin)}</td>
+                        <td className="numeric-cell prices-price-cell">
                           <strong>{calculateMcPriceForProduct(product)}</strong>
                         </td>
+                        <td><span className={`badge prices-status-badge ${product.status}`}>{statusLabel(product.status)}</span></td>
                         <td>
                           <div className="row-actions">
                             <button
@@ -900,14 +1061,14 @@ export default function PricesPage() {
                               className="button ghost small-button"
                               onClick={() => openProductModal(product)}
                             >
-                              Calcular / editar
+                              Abrir <ChevronRight aria-hidden="true" />
                             </button>
                           </div>
                         </td>
                       </tr>
                       {isExpanded && (
                         <tr key={`${key}-channels`} className="expanded-row">
-                          <td colSpan={8}>
+                          <td colSpan={7}>
                             <div className="channel-breakdown">
                               <div className="channel-breakdown-header">
                                 <div>
@@ -988,7 +1149,7 @@ export default function PricesPage() {
                 })}
                 {filteredProducts.length === 0 && (
                   <tr>
-                    <td colSpan={8}>No se encontraron productos.</td>
+                    <td colSpan={7}>No se encontraron productos.</td>
                   </tr>
                 )}
               </tbody>
@@ -1004,7 +1165,7 @@ export default function PricesPage() {
               <div>
                 <h2>{modal.product.name}</h2>
                 <p className="pricing-modal-meta">
-                  SKU {modal.product.sku} <span>•</span> Categoría {modal.product.category || "sin categoría"} <span>•</span> Costo {money(modal.product.cost_without_vat)} + IVA {modal.product.vat_rate}%
+                  SKU {modal.product.sku} <span>·</span> Categoría {modal.product.category || "sin categoría"} <span>·</span> Costo {money(modal.product.cost_without_vat)} + IVA {modal.product.vat_rate}%
                 </p>
                 <p className="pricing-modal-help">
                   Podés elegir qué canal ver en el resumen. Ajustá margen, precio de venta, comisiones, envío manual y estructura para analizar rentabilidad.
