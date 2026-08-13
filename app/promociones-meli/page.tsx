@@ -777,7 +777,7 @@ export default function PromocionesMeliPage() {
       const response = await fetch("/api/mercadolibre/sync-shipping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "promotions" }),
+        body: JSON.stringify({ scope: "all" }),
         signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
@@ -1026,7 +1026,7 @@ export default function PromocionesMeliPage() {
         salePrice,
         structureAmount: Number(setting?.structure_amount || 0),
         manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
-        salesCommissionRate: 0,
+        salesCommissionRate: Number(setting?.sales_commission_rate || 0),
         saleAppliesVat: setting?.sale_applies_vat ?? Boolean(normalizedOption.applies_vat),
         costVatRate: Number(setting?.cost_vat_rate || 0),
         roundTo: 100,
@@ -1403,7 +1403,7 @@ export default function PromocionesMeliPage() {
       });
     });
 
-    function groupBySku(items: PromoTrafficLightItem[]) {
+    function groupBySku(items: PromoTrafficLightItem[], mode: "best" | "worst" = "best") {
       const grouped = new Map<string, PromoTrafficLightGroup>();
       items.forEach((item) => {
         const current = grouped.get(item.sku) || {
@@ -1416,7 +1416,11 @@ export default function PromocionesMeliPage() {
         );
         if (existingIndex === -1) {
           current.items.push(item);
-        } else if (item.margin > current.items[existingIndex].margin) {
+        } else if (
+          mode === "worst"
+            ? item.margin < current.items[existingIndex].margin
+            : item.margin > current.items[existingIndex].margin
+        ) {
           current.items[existingIndex] = item;
         }
         grouped.set(item.sku, current);
@@ -1503,7 +1507,7 @@ export default function PromocionesMeliPage() {
     }
 
     return {
-      red: groupBySku(red),
+      red: groupBySku(red, "worst"),
       yellow: groupYellowBySku(yellow),
       scheduled: groupBySku(scheduled),
       scheduledShared: groupBySku(scheduledShared),
@@ -1627,8 +1631,9 @@ export default function PromocionesMeliPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktopAlertsEnabled, desktopAlertPermission, desktopAlertInterval, syncingMeli]);
 
-  function trafficGroupSummary(group: PromoTrafficLightGroup) {
-    const bestMargin = Math.max(...group.items.map((item) => item.margin));
+  function trafficGroupSummary(group: PromoTrafficLightGroup, mode: "best" | "worst" = "best") {
+    const margins = group.items.map((item) => item.margin);
+    const bestMargin = mode === "worst" ? Math.min(...margins) : Math.max(...margins);
     const bestBuyerPrice = Math.min(...group.items.map((item) => Number(item.promoPrice || 0)).filter((price) => price > 0));
     const installmentLabels = [...new Set(group.items.map((item) => item.installmentLabel))];
     const shownInstallments = installmentLabels.slice(0, 3).join(", ");
@@ -2196,7 +2201,7 @@ export default function PromocionesMeliPage() {
                 column.groups.map((group) => {
                   const groupKey = `${column.key}-${group.sku}`;
                   const expanded = Boolean(expandedTrafficSkus[groupKey]);
-                  const summary = trafficGroupSummary(group);
+                  const summary = trafficGroupSummary(group, column.key === "red" ? "worst" : "best");
 
                   return (
                     <article className={`promociones-traffic-sku ${expanded ? "expanded" : ""}`} key={groupKey}>
@@ -2217,7 +2222,7 @@ export default function PromocionesMeliPage() {
                         <div className="promociones-traffic-sku-summary">
                           <small>{summary.installmentText}</small>
                           <small>
-                            Mejor <span className={`metric-value ${trafficMarginTone(summary.bestMargin)}`}>{percent(summary.bestMargin)}</span>
+                            {column.key === "red" ? "Peor" : "Mejor"} <span className={`metric-value ${trafficMarginTone(summary.bestMargin)}`}>{percent(summary.bestMargin)}</span>
                           </small>
                           {summary.bestBuyerPrice && <small>Desde <span className="money-value">{moneyWithCents(summary.bestBuyerPrice)}</span></small>}
                         </div>
