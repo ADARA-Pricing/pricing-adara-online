@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
+import { SectionHeader } from "@/components/SectionHeader";
 import { createClient } from "@/lib/supabase";
 import {
   calculatePriceSummary,
@@ -725,13 +726,11 @@ export default function SimulatorPage() {
 
       <section className="simulator-layout-grid">
         <div className="card simulator-input-card">
-          <div className="simulator-section-title">
-            <span className="simulator-title-icon"><SlidersHorizontal aria-hidden="true" /></span>
-            <div>
-              <h2>Datos de simulación</h2>
-              <p className="small">Cargá la base comercial y ajustá precio o margen sin cambiar la lógica de cálculo.</p>
-            </div>
-          </div>
+          <SectionHeader
+            icon={<SlidersHorizontal aria-hidden="true" />}
+            title="Datos de simulación"
+            description="Cargá la base comercial y ajustá precio o margen sin cambiar la lógica de cálculo."
+          />
 
           {loadedSimulation && (
             <div className="simulator-loaded-note">
@@ -901,13 +900,11 @@ export default function SimulatorPage() {
         </div>
 
         <div className="card simulator-summary-card">
-          <div className="simulator-section-title">
-            <span className="simulator-title-icon"><CircleDollarSign aria-hidden="true" /></span>
-            <div>
-              <h2>Resultado</h2>
-              <p className="small">Impacto inmediato del precio y los costos cargados.</p>
-            </div>
-          </div>
+          <SectionHeader
+            icon={<CircleDollarSign aria-hidden="true" />}
+            title="Resultado"
+            description="Impacto inmediato del precio y los costos cargados."
+          />
 
           <div className="simulator-summary-list">
             <div className="simulator-result-metric">
@@ -982,13 +979,11 @@ export default function SimulatorPage() {
       </section>
 
       <section className="card simulator-results-card">
-        <div className="simulator-section-title">
-          <span className="simulator-title-icon"><ChartColumn aria-hidden="true" /></span>
-          <div>
-            <h2>Rentabilidad por canal</h2>
-            <p className="small">Compará la rentabilidad estimada según el canal de venta.</p>
-          </div>
-        </div>
+        <SectionHeader
+          icon={<ChartColumn aria-hidden="true" />}
+          title="Rentabilidad por canal"
+          description="Compará la rentabilidad estimada según el canal de venta."
+        />
 
         {loading ? (
           <p>Cargando canales...</p>
