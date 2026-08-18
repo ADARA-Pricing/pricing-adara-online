@@ -1004,8 +1004,8 @@ async function getPriceToWinForItem(item: MeliItem, account: any): Promise<MeliP
   }
 }
 
-async function getListingPriceForItem(item: MeliItem, account: any): Promise<MeliListingPrice | null> {
-  const price = Number(item.price || item.base_price || 0);
+async function getListingPriceForItem(item: MeliItem, account: any, priceOverride?: number | null): Promise<MeliListingPrice | null> {
+  const price = Number(priceOverride || item.price || item.base_price || 0);
   const listingTypeId = item.listing_type_id;
   if (!price || !listingTypeId) return null;
 
@@ -1175,6 +1175,7 @@ function promotionOpportunityRowFromItem(
   item: MeliPromotionItem,
   promotion: MeliSellerPromotion | null,
   itemId: string,
+  listingPrice: MeliListingPrice | null = null,
 ) {
   const promoPrice = promotionPrice(item);
   const row = {
@@ -1196,7 +1197,7 @@ function promotionOpportunityRowFromItem(
     meli_amount: promotionMeliAmount(item),
     start_date: promotionDate(item.start_date || promotion?.start_date),
     end_date: promotionDate(item.end_date || promotion?.finish_date),
-    raw: item,
+    raw: promotionOpportunityRaw(item, listingPrice),
     last_sync_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -1263,6 +1264,17 @@ function fixedFeeAmount(listingPrice: MeliListingPrice | null) {
       "cost_per_unit_sold",
     ]))
   );
+}
+
+function promotionOpportunityRaw(item: MeliPromotionItem, listingPrice: MeliListingPrice | null) {
+  const fixedFee = fixedFeeAmount(listingPrice);
+  if (!listingPrice && !fixedFee) return item;
+
+  return {
+    ...item,
+    listing_price: listingPrice,
+    listing_price_fixed_fee_amount: fixedFee || null,
+  };
 }
 
 function optionCodeForInstallments(count: number | null) {
@@ -1386,6 +1398,7 @@ export async function POST(request: NextRequest) {
     const detailedItemsByItem = new Map<string, MeliItem>();
     const priceToWinByItem = new Map<string, MeliPriceToWin | null>();
     const listingPriceByItem = new Map<string, MeliListingPrice | null>();
+    const listingPriceByItemAndPrice = new Map<string, MeliListingPrice | null>();
     const meliCategoriesById = new Map<string, MeliCategory | null>();
     const categoryFeeObservations = new Map<string, CategoryFeeObservation>();
     const financingFeeObservations = new Map<string, number[]>();
@@ -1430,6 +1443,21 @@ export async function POST(request: NextRequest) {
       detailedItemsByItem.set(item.id, detailedItem);
       const result = await getListingPriceForItem(detailedItem, account);
       listingPriceByItem.set(item.id, result);
+      return result;
+    }
+
+    async function listingPriceForMatchedItemAtPrice(item: MeliItem, price: number | null) {
+      if (!price || price <= 0) return null;
+      const key = `${item.id}|${price}`;
+      if (listingPriceByItemAndPrice.has(key)) return listingPriceByItemAndPrice.get(key) || null;
+
+      const cachedItem = detailedItemsByItem.get(item.id) || item;
+      const detailedItem = hasListingPriceInputs(cachedItem)
+        ? cachedItem
+        : await getDetailedItemForPricing(item, account);
+      detailedItemsByItem.set(item.id, detailedItem);
+      const result = await getListingPriceForItem(detailedItem, account, price);
+      listingPriceByItemAndPrice.set(key, result);
       return result;
     }
 
@@ -1488,19 +1516,20 @@ export async function POST(request: NextRequest) {
       promotionOpportunityRows.push(row);
     }
 
-    if (!shippingOnly) matchedItemsForFetch.forEach((item) => {
+    if (!shippingOnly) await mapWithConcurrency(matchedItemsForFetch, 6, async (item) => {
       const promotionSummary = promotionsByItem.get(item.id);
       const rawResponses = Array.isArray(promotionSummary?.raw) ? promotionSummary.raw : [];
-      rawResponses.forEach((entry) => {
+      for (const entry of rawResponses) {
         const payload = entry as { endpoint?: string; data?: unknown };
-        if (!payload.endpoint?.includes(`/seller-promotions/items/${item.id}`) || !Array.isArray(payload.data)) return;
-        payload.data.forEach((rawPromotion) => {
+        if (!payload.endpoint?.includes(`/seller-promotions/items/${item.id}`) || !Array.isArray(payload.data)) continue;
+        for (const rawPromotion of payload.data) {
           const promotionItem = rawPromotion as MeliPromotionItem & { type?: string | null; name?: string | null };
-          if (!promotionItem.id || !promotionItem.status) return;
+          if (!promotionItem.id || !promotionItem.status) continue;
           const promotion = sellerPromotionsById.get(String(promotionItem.id)) || null;
-          pushPromotionOpportunityRow(promotionOpportunityRowFromItem(promotionItem, promotion, item.id));
-        });
-      });
+          const listingPrice = await listingPriceForMatchedItemAtPrice(item, promotionPrice(promotionItem));
+          pushPromotionOpportunityRow(promotionOpportunityRowFromItem(promotionItem, promotion, item.id, listingPrice));
+        }
+      }
     });
 
     if (!shippingOnly && targetSkus.length) {

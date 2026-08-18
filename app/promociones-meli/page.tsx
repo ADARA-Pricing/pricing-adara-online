@@ -85,6 +85,7 @@ type PromoComparison = {
   endDate?: string | null;
   joined?: boolean;
   scheduled?: boolean;
+  fixedFeeAmount?: number | null;
 };
 
 type PromoTrafficLightItem = {
@@ -319,7 +320,31 @@ function samePrice(left?: number | null, right?: number | null) {
 }
 
 const ML_FIXED_FEE_PRICE_LIMIT = 30000;
-const ML_DEFAULT_FIXED_FEE_AMOUNT = 3005;
+
+function promotionFixedFeeAmount(opportunity: MercadoLibrePromotionOpportunity) {
+  const raw = (opportunity.raw || {}) as {
+    listing_price_fixed_fee_amount?: number | string | null;
+    fixed_fee_amount?: number | string | null;
+    listing_price?: {
+      sale_fee_details?: {
+        fixed_fee?: number | string | null;
+        fixed_fee_amount?: number | string | null;
+        unit_fee?: number | string | null;
+        sale_unit_fee?: number | string | null;
+      } | null;
+    } | null;
+  };
+  const details = raw.listing_price?.sale_fee_details || {};
+  return Number(
+    raw.listing_price_fixed_fee_amount ||
+      raw.fixed_fee_amount ||
+      details.fixed_fee ||
+      details.fixed_fee_amount ||
+      details.unit_fee ||
+      details.sale_unit_fee ||
+      0,
+  );
+}
 
 function publicationPromotionDates(
   publication: MercadoLibreShippingCost,
@@ -1003,10 +1028,6 @@ export default function PromocionesMeliPage() {
   const selectedOpportunities = selectedGroup
     ? selectedGroup.opportunities.filter((item) => selectedPublicationIds.has(item.meli_item_id))
     : [];
-  const mercadoLibreFixedFeeAmount = useMemo(() => {
-    return Math.max(0, ...publications.map((item) => Number(item.fixed_fee_amount || 0)));
-  }, [publications]);
-
   const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
     return [
       mercadoLibreClassicOption(),
@@ -1042,7 +1063,13 @@ export default function PromocionesMeliPage() {
     );
   }
 
-  function rentabilityForProductRow(product: Product, row: PublicationPromoRow, salePrice?: number | null, fixedFeeBasisPrice?: number | null) {
+  function rentabilityForProductRow(
+    product: Product,
+    row: PublicationPromoRow,
+    salePrice?: number | null,
+    fixedFeeBasisPrice?: number | null,
+    fixedFeeOverride?: number | null,
+  ) {
     if (!salePrice || salePrice <= 0) return null;
     const optionByInstallment = pricingOptions.find((item) => optionMatchesInstallment(item, row.installmentCount));
     const option = optionByInstallment || mercadoLibreClassicOption();
@@ -1062,13 +1089,21 @@ export default function PromocionesMeliPage() {
     }
     const buyerPrice = Number(fixedFeeBasisPrice || salePrice || 0);
     const fixedFeeAmount = Number(row.publication.fixed_fee_amount || 0);
-    const fixedFeeFallback = mercadoLibreFixedFeeAmount || ML_DEFAULT_FIXED_FEE_AMOUNT;
+    const fixedFeeFromPromotion = Number(fixedFeeOverride || 0);
+    if (
+      buyerPrice > 0 &&
+      buyerPrice <= ML_FIXED_FEE_PRICE_LIMIT &&
+      fixedFeeAmount <= 0 &&
+      fixedFeeFromPromotion <= 0
+    ) {
+      return null;
+    }
     const publicationForMargin =
       fixedFeeAmount <= 0 &&
-      fixedFeeFallback > 0 &&
+      fixedFeeFromPromotion > 0 &&
       buyerPrice > 0 &&
       buyerPrice <= ML_FIXED_FEE_PRICE_LIMIT
-        ? { ...row.publication, fixed_fee_amount: fixedFeeFallback }
+        ? { ...row.publication, fixed_fee_amount: fixedFeeFromPromotion }
         : row.publication;
     const setting = channelSetting(product.id, normalizedOption.code);
     const result = calculatePriceSummary(
@@ -1095,9 +1130,14 @@ export default function PromocionesMeliPage() {
     };
   }
 
-  function rentabilityForRow(row: PublicationPromoRow, salePrice?: number | null, fixedFeeBasisPrice?: number | null) {
+  function rentabilityForRow(
+    row: PublicationPromoRow,
+    salePrice?: number | null,
+    fixedFeeBasisPrice?: number | null,
+    fixedFeeOverride?: number | null,
+  ) {
     if (!selectedGroup) return null;
-    return rentabilityForProductRow(selectedGroup.product, row, salePrice, fixedFeeBasisPrice);
+    return rentabilityForProductRow(selectedGroup.product, row, salePrice, fixedFeeBasisPrice, fixedFeeOverride);
   }
 
   const publicationFamilies = useMemo<PublicationVariantGroup[]>(() => {
@@ -1293,13 +1333,20 @@ export default function PromocionesMeliPage() {
               endDate,
               joined: isJoinedOpportunity(opportunity),
               scheduled: isScheduledOpportunity({ ...opportunity, start_date: startDate, end_date: endDate }),
+              fixedFeeAmount: promotionFixedFeeAmount(opportunity),
             };
           }),
         ];
 
         const calculatedPromos = dedupePromoComparisons(rows)
           .map((promo) => {
-            const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice, promo.promoPrice);
+            const rentability = rentabilityForProductRow(
+              group.product,
+              row,
+              promo.effectiveSalePrice,
+              promo.promoPrice,
+              promo.fixedFeeAmount,
+            );
             if (!rentability || rentability.margin < -100) return null;
 
             return {
@@ -1345,7 +1392,13 @@ export default function PromocionesMeliPage() {
           .sort((a, b) => b.margin - a.margin)[0] || null;
 
         activePromos.forEach(({ promo, margin, netProfit }) => {
-          const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice, promo.promoPrice);
+          const rentability = rentabilityForProductRow(
+            group.product,
+            row,
+            promo.effectiveSalePrice,
+            promo.promoPrice,
+            promo.fixedFeeAmount,
+          );
           if (!rentability) return;
           const normalizedInstallmentLabel = row.installmentCount === 1 ? "1 pago" : row.installmentLabel;
 
@@ -1591,7 +1644,7 @@ export default function PromocionesMeliPage() {
       scheduled: groupBySku(scheduled),
       scheduledShared: groupBySku(scheduledShared),
     };
-  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold, mercadoLibreFixedFeeAmount]);
+  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold]);
 
   const desktopAlertCandidates = useMemo(() => {
     const flatten = (groups: PromoTrafficLightGroup[]) => groups.flatMap((group) => group.items);
@@ -2008,7 +2061,13 @@ export default function PromocionesMeliPage() {
                             item.original_price || selectedSummary.publication.meli_price,
                             item.seller_percentage,
                           );
-                          const rentability = rentabilityForRow(selectedSummary.row, promoEffectiveSalePrice, item.promo_price);
+                          const fixedFeeAmount = promotionFixedFeeAmount(item);
+                          const rentability = rentabilityForRow(
+                            selectedSummary.row,
+                            promoEffectiveSalePrice,
+                            item.promo_price,
+                            fixedFeeAmount,
+                          );
                           return {
                             key: item.offer_id || item.promotion_id || `${selectedSummary.publication.meli_item_id}-${item.promo_price}`,
                             promotionId: item.promotion_id || null,
@@ -2024,6 +2083,7 @@ export default function PromocionesMeliPage() {
                             netProfit: rentability?.netProfit ?? null,
                             startDate: item.start_date || null,
                             endDate: item.end_date || null,
+                            fixedFeeAmount,
                           };
                         }),
                     ]).sort((a, b) => {

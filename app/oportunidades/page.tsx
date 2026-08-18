@@ -194,7 +194,31 @@ function effectiveSalePrice(
 }
 
 const ML_FIXED_FEE_PRICE_LIMIT = 30000;
-const ML_DEFAULT_FIXED_FEE_AMOUNT = 3005;
+
+function promotionFixedFeeAmount(opportunity: MercadoLibrePromotionOpportunity) {
+  const raw = (opportunity.raw || {}) as {
+    listing_price_fixed_fee_amount?: number | string | null;
+    fixed_fee_amount?: number | string | null;
+    listing_price?: {
+      sale_fee_details?: {
+        fixed_fee?: number | string | null;
+        fixed_fee_amount?: number | string | null;
+        unit_fee?: number | string | null;
+        sale_unit_fee?: number | string | null;
+      } | null;
+    } | null;
+  };
+  const details = raw.listing_price?.sale_fee_details || {};
+  return Number(
+    raw.listing_price_fixed_fee_amount ||
+      raw.fixed_fee_amount ||
+      details.fixed_fee ||
+      details.fixed_fee_amount ||
+      details.unit_fee ||
+      details.sale_unit_fee ||
+      0,
+  );
+}
 
 export default function OpportunitiesPage() {
   const router = useRouter();
@@ -279,10 +303,6 @@ export default function OpportunitiesPage() {
   }, []);
 
   const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
-  const mercadoLibreFixedFeeAmount = useMemo(() => {
-    return Math.max(0, ...publications.map((item) => Number(item.fixed_fee_amount || 0)));
-  }, [publications]);
-
   const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
     return sortPricingOptions([
       mercadoLibreClassicOption(),
@@ -323,13 +343,13 @@ export default function OpportunitiesPage() {
     return byRate || mercadoLibreClassicOption();
   }
 
-  function publicationForMargin(publication: MercadoLibreShippingCost, buyerPrice?: number | null) {
+  function publicationForMargin(publication: MercadoLibreShippingCost, buyerPrice?: number | null, fixedFeeOverride?: number | null) {
     const fixedFeeAmount = Number(publication.fixed_fee_amount || 0);
-    const fixedFeeFallback = mercadoLibreFixedFeeAmount || ML_DEFAULT_FIXED_FEE_AMOUNT;
+    const fixedFeeFromPromotion = Number(fixedFeeOverride || 0);
     const priceForFixedFee = Number(buyerPrice || 0);
     if (
       fixedFeeAmount > 0 ||
-      fixedFeeFallback <= 0 ||
+      fixedFeeFromPromotion <= 0 ||
       priceForFixedFee <= 0 ||
       priceForFixedFee > ML_FIXED_FEE_PRICE_LIMIT
     ) {
@@ -338,14 +358,29 @@ export default function OpportunitiesPage() {
 
     return {
       ...publication,
-      fixed_fee_amount: fixedFeeFallback,
+      fixed_fee_amount: fixedFeeFromPromotion,
     };
   }
 
-  function marginForPublication(product: Product, publication: MercadoLibreShippingCost, salePrice?: number | null, buyerPrice?: number | null) {
+  function marginForPublication(
+    product: Product,
+    publication: MercadoLibreShippingCost,
+    salePrice?: number | null,
+    buyerPrice?: number | null,
+    fixedFeeOverride?: number | null,
+  ) {
     if (!salePrice || salePrice <= 0) return null;
+    const priceForFixedFee = Number(buyerPrice || salePrice || 0);
+    if (
+      priceForFixedFee > 0 &&
+      priceForFixedFee <= ML_FIXED_FEE_PRICE_LIMIT &&
+      Number(publication.fixed_fee_amount || 0) <= 0 &&
+      Number(fixedFeeOverride || 0) <= 0
+    ) {
+      return null;
+    }
     const option = normalizeOption(optionForPublication(publication));
-    const marginPublication = publicationForMargin(publication, buyerPrice || salePrice);
+    const marginPublication = publicationForMargin(publication, buyerPrice || salePrice, fixedFeeOverride);
     if (
       option.applies_shipping &&
       (marginPublication.free_shipping || marginPublication.meli_free_shipping) &&
@@ -504,7 +539,7 @@ export default function OpportunitiesPage() {
         opportunity.original_price || publication.meli_price,
         opportunity.seller_percentage,
       );
-      const margin = marginForPublication(product, publication, salePrice, buyerPrice);
+      const margin = marginForPublication(product, publication, salePrice, buyerPrice, promotionFixedFeeAmount(opportunity));
       if (margin === null || margin < 5) return;
       const future = isScheduledOpportunity(opportunity, currentIso);
       const type: OpportunityType = future ? "future" : "activate";
@@ -570,7 +605,7 @@ export default function OpportunitiesPage() {
       if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type];
       return Number(b.margin || 0) - Number(a.margin || 0);
     });
-  }, [productsById, publications, opportunities, pricingOptions, categoryFees, taxes, marginSettings, mercadoLibreFixedFeeAmount]);
+  }, [productsById, publications, opportunities, pricingOptions, categoryFees, taxes, marginSettings]);
 
   const filteredActions = useMemo(() => {
     const q = query.trim().toLowerCase();
