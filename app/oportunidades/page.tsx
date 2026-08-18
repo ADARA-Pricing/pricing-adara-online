@@ -109,11 +109,11 @@ function isFutureOpportunity(item: MercadoLibrePromotionOpportunity, currentIso 
 }
 
 function isScheduledOpportunity(item: MercadoLibrePromotionOpportunity, currentIso = nowIso()) {
-  const status = `${item.promotion_status || ""} ${item.item_promotion_status || ""}`.toLowerCase();
-  const offerId = String(item.offer_id || "").toUpperCase();
-  if (/program|scheduled/.test(status)) return true;
-  if (/pending/.test(status) && offerId.startsWith("OFFER")) return true;
   return isFutureOpportunity(item, currentIso);
+}
+
+function hasMeliContribution(item: MercadoLibrePromotionOpportunity, meliAmount?: number | null) {
+  return Number(meliAmount || 0) > 0 || Number(item.meli_amount || 0) > 0 || Number(item.meli_percentage || 0) > 0;
 }
 
 function sortPricingOptions(options: MercadoLibrePriceOption[]) {
@@ -370,7 +370,7 @@ export default function OpportunitiesPage() {
     fixedFeeOverride?: number | null,
   ) {
     if (!salePrice || salePrice <= 0) return null;
-    const priceForFixedFee = Number(buyerPrice || salePrice || 0);
+    const priceForFixedFee = Number(salePrice || buyerPrice || 0);
     if (
       priceForFixedFee > 0 &&
       priceForFixedFee <= ML_FIXED_FEE_PRICE_LIMIT &&
@@ -380,7 +380,7 @@ export default function OpportunitiesPage() {
       return null;
     }
     const option = normalizeOption(optionForPublication(publication));
-    const marginPublication = publicationForMargin(publication, buyerPrice || salePrice, fixedFeeOverride);
+    const marginPublication = publicationForMargin(publication, salePrice || buyerPrice, fixedFeeOverride);
     if (
       option.applies_shipping &&
       (marginPublication.free_shipping || marginPublication.meli_free_shipping) &&
@@ -543,6 +543,7 @@ export default function OpportunitiesPage() {
       if (margin === null || margin < 5) return;
       const future = isScheduledOpportunity(opportunity, currentIso);
       const type: OpportunityType = future ? "future" : "activate";
+      if (type === "activate" && !hasMeliContribution(opportunity, meliAmount)) return;
       rows.push({
         key: `${type}-${opportunity.offer_id || opportunity.promotion_id}-${opportunity.meli_item_id}`,
         type,

@@ -217,10 +217,6 @@ function isActivePromotionStatus(value?: string | null) {
 }
 
 function isScheduledOpportunity(item: MercadoLibrePromotionOpportunity) {
-  const status = `${item.promotion_status || ""} ${item.item_promotion_status || ""}`.toLowerCase();
-  const offerId = String(item.offer_id || "").toUpperCase();
-  if (/program|scheduled/.test(status)) return true;
-  if (/pending/.test(status) && offerId.startsWith("OFFER")) return true;
   const start = item.start_date ? new Date(item.start_date).getTime() : 0;
   return Boolean(start && Number.isFinite(start) && start > Date.now());
 }
@@ -1087,12 +1083,12 @@ export default function PromocionesMeliPage() {
     ) {
       return null;
     }
-    const buyerPrice = Number(fixedFeeBasisPrice || salePrice || 0);
+    const fixedFeeBasis = Number(salePrice || fixedFeeBasisPrice || 0);
     const fixedFeeAmount = Number(row.publication.fixed_fee_amount || 0);
     const fixedFeeFromPromotion = Number(fixedFeeOverride || 0);
     if (
-      buyerPrice > 0 &&
-      buyerPrice <= ML_FIXED_FEE_PRICE_LIMIT &&
+      fixedFeeBasis > 0 &&
+      fixedFeeBasis <= ML_FIXED_FEE_PRICE_LIMIT &&
       fixedFeeAmount <= 0 &&
       fixedFeeFromPromotion <= 0
     ) {
@@ -1101,8 +1097,8 @@ export default function PromocionesMeliPage() {
     const publicationForMargin =
       fixedFeeAmount <= 0 &&
       fixedFeeFromPromotion > 0 &&
-      buyerPrice > 0 &&
-      buyerPrice <= ML_FIXED_FEE_PRICE_LIMIT
+      fixedFeeBasis > 0 &&
+      fixedFeeBasis <= ML_FIXED_FEE_PRICE_LIMIT
         ? { ...row.publication, fixed_fee_amount: fixedFeeFromPromotion }
         : row.publication;
     const setting = channelSetting(product.id, normalizedOption.code);

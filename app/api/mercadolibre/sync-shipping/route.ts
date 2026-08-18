@@ -1153,6 +1153,12 @@ function promotionMeliAmount(item: MeliPromotionItem) {
   return baseAmount || boostAmount ? Number(baseAmount || 0) + boostAmount : null;
 }
 
+function promotionEffectiveSalePrice(item: MeliPromotionItem) {
+  const promoPrice = promotionPrice(item);
+  if (!promoPrice) return null;
+  return promoPrice + Number(promotionMeliAmount(item) || 0);
+}
+
 function promotionSellerAmount(item: MeliPromotionItem) {
   return candidateSellerAmount(item) || splitDiscountAmount(item, "seller");
 }
@@ -1526,7 +1532,7 @@ export async function POST(request: NextRequest) {
           const promotionItem = rawPromotion as MeliPromotionItem & { type?: string | null; name?: string | null };
           if (!promotionItem.id || !promotionItem.status) continue;
           const promotion = sellerPromotionsById.get(String(promotionItem.id)) || null;
-          const listingPrice = await listingPriceForMatchedItemAtPrice(item, promotionPrice(promotionItem));
+          const listingPrice = await listingPriceForMatchedItemAtPrice(item, promotionEffectiveSalePrice(promotionItem));
           pushPromotionOpportunityRow(promotionOpportunityRowFromItem(promotionItem, promotion, item.id, listingPrice));
         }
       }
