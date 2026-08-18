@@ -604,12 +604,24 @@ function promotionCountForPublication(
           promoPrice: Number(publication.meli_promo_price || 0),
           effectiveSalePrice: effectiveSalePrice(
             publication.meli_promo_price,
+            meliContributionAmount(
+              publication.meli_promo_price,
+              publication.meli_promo_meli_amount,
+              publication.meli_promo_meli_rate,
+              publication.meli_price,
+              publication.meli_promo_seller_rate,
+            ),
+            publication.meli_promo_meli_rate,
+            publication.meli_price,
+            publication.meli_promo_seller_rate,
+          ),
+          meliAmount: meliContributionAmount(
+            publication.meli_promo_price,
             publication.meli_promo_meli_amount,
             publication.meli_promo_meli_rate,
             publication.meli_price,
             publication.meli_promo_seller_rate,
           ),
-          meliAmount: Number(publication.meli_promo_meli_amount || 0),
           meliRate: Number(publication.meli_promo_meli_rate || 0),
           sellerAmount: Number(publication.meli_promo_seller_amount || 0),
           sellerRate: Number(publication.meli_promo_seller_rate || 0),
@@ -626,8 +638,14 @@ function promotionCountForPublication(
         status: isActiveOpportunity(item) ? "Vigente" as const : "Para activar" as const,
         name: item.promotion_name || item.promotion_id,
         promoPrice: Number(item.promo_price || 0) || null,
-        effectiveSalePrice: effectiveSalePrice(item.promo_price, item.meli_amount, item.meli_percentage),
-        meliAmount: Number(item.meli_amount || 0),
+        effectiveSalePrice: effectiveSalePrice(
+          item.promo_price,
+          meliContributionAmount(item.promo_price, item.meli_amount, item.meli_percentage, publication.meli_price, item.seller_percentage),
+          item.meli_percentage,
+          publication.meli_price,
+          item.seller_percentage,
+        ),
+        meliAmount: meliContributionAmount(item.promo_price, item.meli_amount, item.meli_percentage, publication.meli_price, item.seller_percentage),
         meliRate: Number(item.meli_percentage || 0),
         sellerAmount: Number(item.seller_amount || 0),
         sellerRate: Number(item.seller_percentage || 0),
@@ -911,8 +929,22 @@ export default function PromocionesMeliPage() {
       current.activePromotionCount += publication.meli_promo_price ? 1 : 0;
       current.bestMeliAmount = Math.max(
         current.bestMeliAmount,
-        Number(publication.meli_promo_meli_amount || 0),
-        ...publicationOpportunities.map((item) => Number(item.meli_amount || 0)),
+        meliContributionAmount(
+          publication.meli_promo_price,
+          publication.meli_promo_meli_amount,
+          publication.meli_promo_meli_rate,
+          publication.meli_price,
+          publication.meli_promo_seller_rate,
+        ),
+        ...publicationOpportunities.map((item) =>
+          meliContributionAmount(
+            item.promo_price,
+            item.meli_amount,
+            item.meli_percentage,
+            item.original_price || publication.meli_price,
+            item.seller_percentage,
+          ),
+        ),
       );
       current.bestMeliRate = Math.max(
         current.bestMeliRate,
@@ -1166,12 +1198,24 @@ export default function PromocionesMeliPage() {
                 originalPrice: Number(publication.meli_original_price || publication.meli_price || 0) || null,
                 effectiveSalePrice: effectiveSalePrice(
                   publication.meli_promo_price,
-                  publication.meli_promo_meli_amount,
+                  meliContributionAmount(
+                    publication.meli_promo_price,
+                    publication.meli_promo_meli_amount,
+                    publication.meli_promo_meli_rate,
+                    publication.meli_original_price || publication.meli_price,
+                    publication.meli_promo_seller_rate,
+                  ),
                   publication.meli_promo_meli_rate,
                   publication.meli_price,
                   publication.meli_promo_seller_rate,
                 ),
-                meliAmount: Number(publication.meli_promo_meli_amount || 0),
+                meliAmount: meliContributionAmount(
+                  publication.meli_promo_price,
+                  publication.meli_promo_meli_amount,
+                  publication.meli_promo_meli_rate,
+                  publication.meli_original_price || publication.meli_price,
+                  publication.meli_promo_seller_rate,
+                ),
                 meliRate: Number(publication.meli_promo_meli_rate || 0),
                 sellerAmount: Number(publication.meli_promo_seller_amount || 0),
                 sellerRate: Number(publication.meli_promo_seller_rate || 0),
@@ -1184,7 +1228,13 @@ export default function PromocionesMeliPage() {
           ...row.opportunities.map((opportunity) => {
             const promoEffectiveSalePrice = effectiveSalePrice(
               opportunity.promo_price,
-              opportunity.meli_amount,
+              meliContributionAmount(
+                opportunity.promo_price,
+                opportunity.meli_amount,
+                opportunity.meli_percentage,
+                opportunity.original_price || publication.meli_price,
+                opportunity.seller_percentage,
+              ),
               opportunity.meli_percentage,
               opportunity.original_price || publication.meli_price,
               opportunity.seller_percentage,
@@ -1204,7 +1254,13 @@ export default function PromocionesMeliPage() {
               promoPrice: Number(opportunity.promo_price || 0) || null,
               originalPrice: Number(opportunity.original_price || publication.meli_price || 0) || null,
               effectiveSalePrice: promoEffectiveSalePrice,
-              meliAmount: Number(opportunity.meli_amount || 0),
+              meliAmount: meliContributionAmount(
+                opportunity.promo_price,
+                opportunity.meli_amount,
+                opportunity.meli_percentage,
+                opportunity.original_price || publication.meli_price,
+                opportunity.seller_percentage,
+              ),
               meliRate: Number(opportunity.meli_percentage || 0),
               sellerAmount: Number(opportunity.seller_amount || 0),
               sellerRate: Number(opportunity.seller_percentage || 0),
@@ -1810,13 +1866,27 @@ export default function PromocionesMeliPage() {
             <div className="promociones-family-list">
               {publicationFamilies.map((family) => {
                 const expanded = selectedFamilyKey === family.key;
-                const bestFamilyAmount = Math.max(...family.rows.map((row) => Number(row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount || 0)));
+                const bestFamilyAmount = Math.max(...family.rows.map((row) =>
+                  meliContributionAmount(
+                    row.bestOpportunity?.promo_price || row.publication.meli_promo_price,
+                    row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount,
+                    row.bestOpportunity?.meli_percentage || row.publication.meli_promo_meli_rate,
+                    row.bestOpportunity?.original_price || row.publication.meli_price,
+                    row.bestOpportunity?.seller_percentage || row.publication.meli_promo_seller_rate,
+                  ),
+                ));
                 const minFamilyPrice = Math.min(...family.rows.map((row) => Number(row.publication.meli_price || 0)).filter((price) => price > 0));
                 const summaries: InstallmentSummary[] = family.rows.map((row) => {
                   const promoPrice = Number(row.bestOpportunity?.promo_price || row.publication.meli_promo_price || 0) || null;
-                  const bestMeliAmount = Number(row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount || 0);
                   const bestMeliRate = Number(row.bestOpportunity?.meli_percentage || row.publication.meli_promo_meli_rate || 0);
                   const bestSellerRate = Number(row.bestOpportunity?.seller_percentage || row.publication.meli_promo_seller_rate || 0);
+                  const bestMeliAmount = meliContributionAmount(
+                    promoPrice,
+                    row.bestOpportunity?.meli_amount || row.publication.meli_promo_meli_amount,
+                    bestMeliRate,
+                    row.bestOpportunity?.original_price || row.publication.meli_price,
+                    bestSellerRate,
+                  );
                   const summaryEffectiveSalePrice = effectiveSalePrice(
                     promoPrice,
                     bestMeliAmount,
@@ -1856,9 +1926,16 @@ export default function PromocionesMeliPage() {
               isActiveOpportunity(item),
             );
             if (hasStartedOpportunity) return [];
-            const activeEffectiveSalePrice = effectiveSalePrice(
+            const activeMeliAmount = meliContributionAmount(
               selectedSummary.publication.meli_promo_price,
               selectedSummary.publication.meli_promo_meli_amount,
+              selectedSummary.publication.meli_promo_meli_rate,
+              selectedSummary.publication.meli_price,
+              selectedSummary.publication.meli_promo_seller_rate,
+            );
+            const activeEffectiveSalePrice = effectiveSalePrice(
+              selectedSummary.publication.meli_promo_price,
+              activeMeliAmount,
               selectedSummary.publication.meli_promo_meli_rate,
               selectedSummary.publication.meli_price,
               selectedSummary.publication.meli_promo_seller_rate,
@@ -1879,7 +1956,7 @@ export default function PromocionesMeliPage() {
                               name: selectedSummary.publication.meli_promo_name || selectedSummary.publication.meli_promo_status || "Promo vigente",
                               promoPrice: Number(selectedSummary.publication.meli_promo_price || 0),
                               effectiveSalePrice: activeEffectiveSalePrice,
-                              meliAmount: Number(selectedSummary.publication.meli_promo_meli_amount || 0),
+                              meliAmount: activeMeliAmount,
                               meliRate: Number(selectedSummary.publication.meli_promo_meli_rate || 0),
                               sellerAmount: Number(selectedSummary.publication.meli_promo_seller_amount || 0),
                               sellerRate: Number(selectedSummary.publication.meli_promo_seller_rate || 0),
@@ -1893,9 +1970,16 @@ export default function PromocionesMeliPage() {
                       ...selectedSummary.row.opportunities
                         .filter((item) => !onlyMeliContribution || hasMeliContribution(item))
                         .map((item) => {
-                          const promoEffectiveSalePrice = effectiveSalePrice(
+                          const meliAmount = meliContributionAmount(
                             item.promo_price,
                             item.meli_amount,
+                            item.meli_percentage,
+                            item.original_price || selectedSummary.publication.meli_price,
+                            item.seller_percentage,
+                          );
+                          const promoEffectiveSalePrice = effectiveSalePrice(
+                            item.promo_price,
+                            meliAmount,
                             item.meli_percentage,
                             item.original_price || selectedSummary.publication.meli_price,
                             item.seller_percentage,
@@ -1908,7 +1992,7 @@ export default function PromocionesMeliPage() {
                             name: item.promotion_name || item.promotion_id,
                             promoPrice: Number(item.promo_price || 0) || null,
                             effectiveSalePrice: promoEffectiveSalePrice,
-                            meliAmount: Number(item.meli_amount || 0),
+                            meliAmount,
                             meliRate: Number(item.meli_percentage || 0),
                             sellerAmount: Number(item.seller_amount || 0),
                             sellerRate: Number(item.seller_percentage || 0),

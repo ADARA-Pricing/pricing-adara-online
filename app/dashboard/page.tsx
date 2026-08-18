@@ -293,9 +293,16 @@ export default function DashboardPage() {
         const product = activeProductsById.get(publication.product_id);
         if (!product) return null;
         const buyerPrice = Number(publication.meli_promo_price || 0) || null;
-        const salePrice = effectiveSalePrice(
+        const meliAmount = meliContributionAmount(
           buyerPrice,
           publication.meli_promo_meli_amount,
+          publication.meli_promo_meli_rate,
+          publication.meli_original_price || publication.meli_price,
+          publication.meli_promo_seller_rate,
+        );
+        const salePrice = effectiveSalePrice(
+          buyerPrice,
+          meliAmount,
           publication.meli_promo_meli_rate,
           publication.meli_original_price || publication.meli_price,
           publication.meli_promo_seller_rate,
@@ -312,7 +319,7 @@ export default function DashboardPage() {
           margin,
           buyerPrice,
           salePrice,
-          meliAmount: Number(publication.meli_promo_meli_amount || 0),
+          meliAmount,
           meliRate: Number(publication.meli_promo_meli_rate || 0),
         };
       })
@@ -326,9 +333,16 @@ export default function DashboardPage() {
         const product = activeProductsById.get(publication.product_id);
         if (!product) return null;
         const buyerPrice = Number(opportunity.promo_price || 0) || null;
-        const salePrice = effectiveSalePrice(
+        const meliAmount = meliContributionAmount(
           buyerPrice,
           opportunity.meli_amount,
+          opportunity.meli_percentage,
+          opportunity.original_price || publication.meli_price,
+          opportunity.seller_percentage,
+        );
+        const salePrice = effectiveSalePrice(
+          buyerPrice,
+          meliAmount,
           opportunity.meli_percentage,
           opportunity.original_price || publication.meli_price,
           opportunity.seller_percentage,
@@ -346,7 +360,7 @@ export default function DashboardPage() {
           margin,
           buyerPrice,
           salePrice,
-          meliAmount: Number(opportunity.meli_amount || 0),
+          meliAmount,
           meliRate: Number(opportunity.meli_percentage || 0),
           startDate: opportunity.start_date || null,
         };

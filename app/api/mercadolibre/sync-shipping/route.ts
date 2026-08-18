@@ -141,6 +141,7 @@ type MeliPromotionItem = {
   boosted_offer?: boolean | null;
   discount_meli_boosted_percentage?: number | null;
   discount_meli_boost_amount?: number | null;
+  discount_meli_boosted_amount?: number | null;
   total_price_for_boosted_offer?: number | null;
   min_discounted_price?: number | null;
   max_discounted_price?: number | null;
@@ -1146,13 +1147,14 @@ function splitDiscountAmount(
 }
 
 function promotionMeliAmount(item: MeliPromotionItem) {
-  const baseAmount = splitDiscountAmount(item, "meli");
-  const boostAmount = Number(item.discount_meli_boost_amount || 0);
+  const directAmount = candidateMeliAmount(item);
+  const baseAmount = directAmount || splitDiscountAmount(item, "meli");
+  const boostAmount = Number(item.discount_meli_boost_amount || item.discount_meli_boosted_amount || 0);
   return baseAmount || boostAmount ? Number(baseAmount || 0) + boostAmount : null;
 }
 
 function promotionSellerAmount(item: MeliPromotionItem) {
-  return splitDiscountAmount(item, "seller");
+  return candidateSellerAmount(item) || splitDiscountAmount(item, "seller");
 }
 
 function promotionOpportunityKey(row: {

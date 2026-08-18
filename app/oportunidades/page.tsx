@@ -367,9 +367,16 @@ export default function OpportunitiesPage() {
 
       if (Number(publication.meli_promo_price || 0) > 0) {
         const buyerPrice = Number(publication.meli_promo_price || 0);
-        const salePrice = effectiveSalePrice(
+        const meliAmount = meliContributionAmount(
           buyerPrice,
           publication.meli_promo_meli_amount,
+          publication.meli_promo_meli_rate,
+          publication.meli_original_price || publication.meli_price,
+          publication.meli_promo_seller_rate,
+        );
+        const salePrice = effectiveSalePrice(
+          buyerPrice,
+          meliAmount,
           publication.meli_promo_meli_rate,
           publication.meli_original_price || publication.meli_price,
           publication.meli_promo_seller_rate,
@@ -390,7 +397,7 @@ export default function OpportunitiesPage() {
             buyerPrice,
             salePrice,
             currentPrice: Number(publication.meli_price || 0) || null,
-            meliAmount: Number(publication.meli_promo_meli_amount || 0),
+            meliAmount,
             meliRate: Number(publication.meli_promo_meli_rate || 0),
             href: "/promociones-meli",
           });
@@ -404,9 +411,16 @@ export default function OpportunitiesPage() {
       const product = productsById.get(publication.product_id);
       if (!product) return;
       const buyerPrice = Number(opportunity.promo_price || 0) || null;
-      const salePrice = effectiveSalePrice(
+      const meliAmount = meliContributionAmount(
         buyerPrice,
         opportunity.meli_amount,
+        opportunity.meli_percentage,
+        opportunity.original_price || publication.meli_price,
+        opportunity.seller_percentage,
+      );
+      const salePrice = effectiveSalePrice(
+        buyerPrice,
+        meliAmount,
         opportunity.meli_percentage,
         opportunity.original_price || publication.meli_price,
         opportunity.seller_percentage,
@@ -415,7 +429,6 @@ export default function OpportunitiesPage() {
       if (margin === null || margin < 5) return;
       const future = isFutureOpportunity(opportunity, currentIso);
       const type: OpportunityType = future ? "future" : "activate";
-      const meliAmount = Number(opportunity.meli_amount || 0);
       rows.push({
         key: `${type}-${opportunity.offer_id || opportunity.promotion_id}-${opportunity.meli_item_id}`,
         type,
