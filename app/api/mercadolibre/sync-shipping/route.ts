@@ -90,6 +90,19 @@ type CategoryFeeObservation = {
   meliCategories: Map<string, string>;
 };
 
+type CurrentShippingCostRow = {
+  id: string;
+  product_id: string;
+  sku?: string | null;
+  meli_item_id: string;
+  meli_listing_type_id?: string | null;
+  shipping_cost_amount?: number | string | null;
+  fixed_fee_amount?: number | string | null;
+  free_shipping?: boolean | null;
+  shipping_method?: string | null;
+  meli_cost_source?: string | null;
+};
+
 type PromotionSummary = {
   originalPrice: number | null;
   promoPrice: number | null;
@@ -1505,23 +1518,99 @@ export async function POST(request: NextRequest) {
 
     if (promotionsOnly) {
       const now = new Date().toISOString();
-      const currentRowsByItem = new Map<string, { id: string; product_id: string; meli_item_id: string }[]>();
+      const currentRowsByItem = new Map<string, CurrentShippingCostRow[]>();
+      const currentRowsByProduct = new Map<string, CurrentShippingCostRow[]>();
       const updateRows: any[] = [];
       const insertRows: any[] = [];
 
       for (const ids of chunk([...matchedItemIds], 100)) {
         const { data: currentRows, error: currentRowsError } = await supabase
           .from("mercadolibre_shipping_costs")
-          .select("id, product_id, meli_item_id")
+          .select("id, product_id, sku, meli_item_id, meli_listing_type_id, shipping_cost_amount, fixed_fee_amount, free_shipping, shipping_method, meli_cost_source")
           .in("meli_item_id", ids);
 
         if (currentRowsError) throw new Error(currentRowsError.message);
 
-        (currentRows || []).forEach((row: { id: string; product_id: string; meli_item_id: string }) => {
+        ((currentRows || []) as CurrentShippingCostRow[]).forEach((row) => {
           const rows = currentRowsByItem.get(row.meli_item_id) || [];
           rows.push(row);
           currentRowsByItem.set(row.meli_item_id, rows);
         });
+      }
+
+      const matchedProductIds = [...new Set(
+        matchedItemsForFetch.flatMap((item) =>
+          getItemSkus(item)
+            .map((sku) => productsBySku.get(sku)?.id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      )];
+
+      for (const ids of chunk(matchedProductIds, 100)) {
+        const { data: productRows, error: productRowsError } = await supabase
+          .from("mercadolibre_shipping_costs")
+          .select("id, product_id, sku, meli_item_id, meli_listing_type_id, shipping_cost_amount, fixed_fee_amount, free_shipping, shipping_method, meli_cost_source")
+          .in("product_id", ids)
+          .gt("shipping_cost_amount", 0);
+
+        if (productRowsError) throw new Error(productRowsError.message);
+
+        ((productRows || []) as CurrentShippingCostRow[]).forEach((row) => {
+          const rows = currentRowsByProduct.get(row.product_id) || [];
+          rows.push(row);
+          currentRowsByProduct.set(row.product_id, rows);
+        });
+      }
+
+      async function safeShippingSnapshotForPromotionInsert(item: MeliItem, product: Product) {
+        const currentRows = currentRowsByItem.get(item.id) || [];
+        const currentForProduct = currentRowsByProduct.get(product.id || "") || [];
+        const sameItem = currentRows.find((row) => row.product_id === product.id && Number(row.shipping_cost_amount || 0) > 0);
+        const sameListingType = currentForProduct.find((row) =>
+          row.meli_listing_type_id &&
+          item.listing_type_id &&
+          row.meli_listing_type_id === item.listing_type_id &&
+          Number(row.shipping_cost_amount || 0) > 0,
+        );
+        const highestKnown = [...currentForProduct]
+          .filter((row) => Number(row.shipping_cost_amount || 0) > 0)
+          .sort((a, b) => Number(b.shipping_cost_amount || 0) - Number(a.shipping_cost_amount || 0))[0] || null;
+        const fallbackRow = sameItem || sameListingType || highestKnown;
+
+        const shippingResult = await shippingCostForMatchedItem(item);
+        const fetchedCost = Number(shippingResult?.cost || 0);
+        const buyerPaidShipping = shippingResult?.source === "buyer_paid_shipping" || item.shipping?.free_shipping === false;
+
+        if (fetchedCost > 0 || buyerPaidShipping) {
+          return {
+            fixedFeeAmount: Number(fallbackRow?.fixed_fee_amount || 0),
+            shippingCostAmount: fetchedCost,
+            freeShipping: Boolean(item.shipping?.free_shipping ?? !buyerPaidShipping),
+            shippingMethod: item.shipping?.logistic_type || item.shipping?.mode || fallbackRow?.shipping_method || "mercado_envios",
+            source: shippingResult?.source || (buyerPaidShipping ? "buyer_paid_shipping" : null),
+            notesSuffix: shippingResult?.source || "promos shipping endpoint",
+          };
+        }
+
+        if (fallbackRow) {
+          return {
+            fixedFeeAmount: Number(fallbackRow.fixed_fee_amount || 0),
+            shippingCostAmount: Number(fallbackRow.shipping_cost_amount || 0),
+            freeShipping: Boolean(fallbackRow.free_shipping ?? item.shipping?.free_shipping ?? true),
+            shippingMethod: fallbackRow.shipping_method || item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
+            source: fallbackRow.meli_cost_source || "fallback_shipping_cost",
+            notesSuffix: `fallback costo envio ${fallbackRow.meli_item_id || "producto"}`,
+          };
+        }
+
+        return {
+          fixedFeeAmount: 0,
+          shippingCostAmount: 0,
+          freeShipping: Boolean(item.shipping?.free_shipping ?? true),
+          shippingMethod: item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
+          source: shippingResult?.source || null,
+          notesSuffix: "promos sin costo envio",
+        };
       }
 
       for (const item of matchedItemsForFetch) {
@@ -1553,15 +1642,17 @@ export async function POST(request: NextRequest) {
           };
 
           if (!current) {
+            const shippingSnapshot = await safeShippingSnapshotForPromotionInsert(item, product);
             insertRows.push({
               product_id: product.id,
               sku: product.sku,
-              fixed_fee_amount: 0,
-              shipping_cost_amount: 0,
-              free_shipping: Boolean(item.shipping?.free_shipping ?? true),
-              shipping_method: item.shipping?.logistic_type || item.shipping?.mode || "mercado_envios",
+              fixed_fee_amount: shippingSnapshot.fixedFeeAmount,
+              shipping_cost_amount: shippingSnapshot.shippingCostAmount,
+              free_shipping: shippingSnapshot.freeShipping,
+              shipping_method: shippingSnapshot.shippingMethod,
               notes: `Sincronizado desde MercadoLibre ${item.id} · promos`,
               active: true,
+              meli_cost_source: shippingSnapshot.source,
               meli_item_id: item.id,
               meli_thumbnail: itemThumbnail(item),
               meli_title: item.title || null,
