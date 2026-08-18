@@ -319,6 +319,7 @@ function samePrice(left?: number | null, right?: number | null) {
 }
 
 const ML_FIXED_FEE_PRICE_LIMIT = 30000;
+const ML_DEFAULT_FIXED_FEE_AMOUNT = 3005;
 
 function publicationPromotionDates(
   publication: MercadoLibreShippingCost,
@@ -1061,12 +1062,13 @@ export default function PromocionesMeliPage() {
     }
     const buyerPrice = Number(fixedFeeBasisPrice || salePrice || 0);
     const fixedFeeAmount = Number(row.publication.fixed_fee_amount || 0);
+    const fixedFeeFallback = mercadoLibreFixedFeeAmount || ML_DEFAULT_FIXED_FEE_AMOUNT;
     const publicationForMargin =
       fixedFeeAmount <= 0 &&
-      mercadoLibreFixedFeeAmount > 0 &&
+      fixedFeeFallback > 0 &&
       buyerPrice > 0 &&
       buyerPrice <= ML_FIXED_FEE_PRICE_LIMIT
-        ? { ...row.publication, fixed_fee_amount: mercadoLibreFixedFeeAmount }
+        ? { ...row.publication, fixed_fee_amount: fixedFeeFallback }
         : row.publication;
     const setting = channelSetting(product.id, normalizedOption.code);
     const result = calculatePriceSummary(

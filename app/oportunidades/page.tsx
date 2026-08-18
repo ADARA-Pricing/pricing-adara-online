@@ -194,6 +194,7 @@ function effectiveSalePrice(
 }
 
 const ML_FIXED_FEE_PRICE_LIMIT = 30000;
+const ML_DEFAULT_FIXED_FEE_AMOUNT = 3005;
 
 export default function OpportunitiesPage() {
   const router = useRouter();
@@ -324,10 +325,11 @@ export default function OpportunitiesPage() {
 
   function publicationForMargin(publication: MercadoLibreShippingCost, buyerPrice?: number | null) {
     const fixedFeeAmount = Number(publication.fixed_fee_amount || 0);
+    const fixedFeeFallback = mercadoLibreFixedFeeAmount || ML_DEFAULT_FIXED_FEE_AMOUNT;
     const priceForFixedFee = Number(buyerPrice || 0);
     if (
       fixedFeeAmount > 0 ||
-      mercadoLibreFixedFeeAmount <= 0 ||
+      fixedFeeFallback <= 0 ||
       priceForFixedFee <= 0 ||
       priceForFixedFee > ML_FIXED_FEE_PRICE_LIMIT
     ) {
@@ -336,7 +338,7 @@ export default function OpportunitiesPage() {
 
     return {
       ...publication,
-      fixed_fee_amount: mercadoLibreFixedFeeAmount,
+      fixed_fee_amount: fixedFeeFallback,
     };
   }
 
@@ -482,6 +484,7 @@ export default function OpportunitiesPage() {
     });
 
     opportunities.forEach((opportunity) => {
+      if (isActiveOpportunity(opportunity)) return;
       const publication = publicationsByItemId.get(opportunity.meli_item_id);
       if (!publication) return;
       const product = productsById.get(publication.product_id);
