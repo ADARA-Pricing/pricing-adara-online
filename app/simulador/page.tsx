@@ -104,6 +104,14 @@ type SimulationSortKey =
   | "cost_asc"
   | "price_desc"
   | "price_asc";
+type BaseProductSortKey =
+  | "sku_asc"
+  | "name_asc"
+  | "category_asc"
+  | "cost_desc"
+  | "cost_asc"
+  | "price_desc"
+  | "price_asc";
 
 function orderChannels<T extends { code: string }>(items: T[]) {
   return [...items].sort((a, b) => {
@@ -209,8 +217,16 @@ export default function SimulatorPage() {
   const [loading, setLoading] = useState(true);
   const [savingSimulation, setSavingSimulation] = useState(false);
   const [simulationLibraryOpen, setSimulationLibraryOpen] = useState(false);
+  const [baseProductPickerOpen, setBaseProductPickerOpen] = useState(false);
   const [baseDetailsOpen, setBaseDetailsOpen] = useState(false);
   const [loadedSimulation, setLoadedSimulation] = useState<SavedSimulation | null>(null);
+  const [baseProductQuery, setBaseProductQuery] = useState("");
+  const [baseProductCategoryFilter, setBaseProductCategoryFilter] = useState("");
+  const [baseProductCostMin, setBaseProductCostMin] = useState("");
+  const [baseProductCostMax, setBaseProductCostMax] = useState("");
+  const [baseProductPriceMin, setBaseProductPriceMin] = useState("");
+  const [baseProductPriceMax, setBaseProductPriceMax] = useState("");
+  const [baseProductSort, setBaseProductSort] = useState<BaseProductSortKey>("sku_asc");
   const [libraryQuery, setLibraryQuery] = useState("");
   const [libraryProviderFilter, setLibraryProviderFilter] = useState("");
   const [libraryCategoryFilter, setLibraryCategoryFilter] = useState("");
@@ -361,6 +377,21 @@ export default function SimulatorPage() {
     return values.reduce((sum, value) => sum + value, 0) / values.length;
   }
 
+  function currentPriceForProduct(product: Product) {
+    const values = shippingCosts
+      .filter(isCurrentShippingCost)
+      .filter((shipping) => {
+        const matchesId = product.id && shipping.product_id === product.id;
+        const matchesSku = product.sku && shipping.sku === product.sku;
+        return matchesId || matchesSku;
+      })
+      .map((shipping) => Number(shipping.meli_price || shipping.meli_promo_price || 0))
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    if (!values.length) return null;
+    return Math.min(...values);
+  }
+
   function loadProductBase(productId: string) {
     if (!productId) return;
     const product = products.find((item) => item.id === productId);
@@ -380,6 +411,7 @@ export default function SimulatorPage() {
       shippingGross: String(Math.round(shippingGross)),
     }));
     setLoadedSimulation(null);
+    setBaseProductPickerOpen(false);
     setLastEdited("price");
     setMessage(`Base cargada desde ${product.sku} - ${product.name}.`);
     setError(null);
@@ -507,6 +539,82 @@ export default function SimulatorPage() {
     if (form.category) names.add(form.category);
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [categories, form.category]);
+
+  const baseProductCategoryOptions = useMemo(() => {
+    const names = new Set(products.map((item) => item.category?.trim()).filter(Boolean) as string[]);
+    return [...names].sort((a, b) => compareText(a, b));
+  }, [products]);
+
+  const filteredBaseProducts = useMemo(() => {
+    const query = normalizeSearch(baseProductQuery);
+    const costMin = toNumber(baseProductCostMin);
+    const costMax = toNumber(baseProductCostMax);
+    const priceMin = toNumber(baseProductPriceMin);
+    const priceMax = toNumber(baseProductPriceMax);
+
+    return products
+      .map((product) => ({
+        product,
+        cost: Number(product.cost_without_vat || 0),
+        price: currentPriceForProduct(product),
+        shipping: shippingForProduct(product),
+      }))
+      .filter(({ product, cost, price }) => {
+        if (baseProductCategoryFilter && (product.category || "") !== baseProductCategoryFilter) return false;
+        if (costMin !== null && cost < costMin) return false;
+        if (costMax !== null && cost > costMax) return false;
+        if (priceMin !== null && (!price || price < priceMin)) return false;
+        if (priceMax !== null && (!price || price > priceMax)) return false;
+        if (!query) return true;
+
+        const haystack = [
+          product.sku,
+          product.name,
+          product.brand,
+          product.model,
+          product.category,
+          product.supplier,
+        ].map(normalizeSearch).join(" ");
+        return haystack.includes(query);
+      })
+      .sort((a, b) => {
+        if (baseProductSort === "name_asc") return compareText(a.product.name, b.product.name);
+        if (baseProductSort === "category_asc") return compareText(a.product.category, b.product.category) || compareText(a.product.sku, b.product.sku);
+        if (baseProductSort === "cost_desc") return b.cost - a.cost;
+        if (baseProductSort === "cost_asc") return a.cost - b.cost;
+        if (baseProductSort === "price_desc") return Number(b.price || 0) - Number(a.price || 0);
+        if (baseProductSort === "price_asc") return Number(a.price || 0) - Number(b.price || 0);
+        return compareText(a.product.sku, b.product.sku);
+      });
+  }, [
+    products,
+    shippingCosts,
+    baseProductQuery,
+    baseProductCategoryFilter,
+    baseProductCostMin,
+    baseProductCostMax,
+    baseProductPriceMin,
+    baseProductPriceMax,
+    baseProductSort,
+  ]);
+
+  const baseProductActiveFilterCount = [
+    baseProductQuery.trim(),
+    baseProductCategoryFilter,
+    baseProductCostMin,
+    baseProductCostMax,
+    baseProductPriceMin,
+    baseProductPriceMax,
+  ].filter(Boolean).length;
+
+  function clearBaseProductFilters() {
+    setBaseProductQuery("");
+    setBaseProductCategoryFilter("");
+    setBaseProductCostMin("");
+    setBaseProductCostMax("");
+    setBaseProductPriceMin("");
+    setBaseProductPriceMax("");
+  }
 
   const savedProviderOptions = useMemo(() => {
     const providers = new Set(savedSimulations.map((item) => item.provider?.trim() || "Sin proveedor"));
@@ -777,19 +885,18 @@ export default function SimulatorPage() {
 
           <div className="field simulator-product-base-field">
             <label>Usar producto como base</label>
-            <select defaultValue="" onChange={(event) => loadProductBase(event.target.value)}>
-              <option value="">Elegir producto guardado...</option>
-              {products
-                .slice()
-                .sort((a, b) => `${a.category || ""} ${a.name}`.localeCompare(`${b.category || ""} ${b.name}`, "es"))
-                .map((product) => (
-                  <option key={product.id || product.sku} value={product.id}>
-                    {product.sku} - {product.name} · {product.category || "Sin categoría"} · Costo {moneyWithCents(product.cost_without_vat || 0)}
-                  </option>
-                ))}
-            </select>
+            <div className="simulator-base-picker-summary">
+              <div>
+                <strong>{form.productName || "Elegir producto guardado"}</strong>
+                <span>{form.category || "Sin categoria"} · Costo {moneyWithCents(toNumber(form.costWithoutVat) || 0)}</span>
+              </div>
+              <button className="button secondary" type="button" onClick={() => setBaseProductPickerOpen(true)}>
+                <Search aria-hidden="true" />
+                Buscar producto
+              </button>
+            </div>
             <span className="small">
-              Carga automáticamente categoría, proveedor, costo, IVA y envío cuando esos datos estén disponibles.
+              Carga automaticamente categoria, proveedor, costo, IVA y envio cuando esos datos esten disponibles.
             </span>
           </div>
 
@@ -1120,6 +1227,111 @@ export default function SimulatorPage() {
           </div>
         )}
       </section>
+
+      {baseProductPickerOpen && (
+        <div className="modal-backdrop simulator-library-backdrop" onClick={() => setBaseProductPickerOpen(false)}>
+          <section className="modal-card simulator-library-modal simulator-base-product-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="simulator-library-header">
+              <div>
+                <h2>Elegir producto base</h2>
+                <p>Filtra por categoria, SKU, nombre, costo o precio de venta sincronizado.</p>
+              </div>
+              <button className="modal-close-button" type="button" onClick={() => setBaseProductPickerOpen(false)} aria-label="Cerrar">
+                <X aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="simulator-library-toolbar simulator-base-product-toolbar">
+              <label className="search-control simulator-library-search">
+                <Search aria-hidden="true" />
+                <input
+                  className="search-field"
+                  value={baseProductQuery}
+                  onChange={(event) => setBaseProductQuery(event.target.value)}
+                  placeholder="Buscar SKU, producto, marca o proveedor..."
+                />
+              </label>
+              <select value={baseProductCategoryFilter} onChange={(event) => setBaseProductCategoryFilter(event.target.value)}>
+                <option value="">Todas las categorias</option>
+                {baseProductCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+              <input value={baseProductCostMin} onChange={(event) => setBaseProductCostMin(event.target.value)} placeholder="Costo min" inputMode="decimal" />
+              <input value={baseProductCostMax} onChange={(event) => setBaseProductCostMax(event.target.value)} placeholder="Costo max" inputMode="decimal" />
+              <input value={baseProductPriceMin} onChange={(event) => setBaseProductPriceMin(event.target.value)} placeholder="Precio min" inputMode="decimal" />
+              <input value={baseProductPriceMax} onChange={(event) => setBaseProductPriceMax(event.target.value)} placeholder="Precio max" inputMode="decimal" />
+              <select value={baseProductSort} onChange={(event) => setBaseProductSort(event.target.value as BaseProductSortKey)}>
+                <option value="sku_asc">SKU A-Z</option>
+                <option value="name_asc">Nombre A-Z</option>
+                <option value="category_asc">Categoria</option>
+                <option value="cost_desc">Mayor costo</option>
+                <option value="cost_asc">Menor costo</option>
+                <option value="price_desc">Mayor precio</option>
+                <option value="price_asc">Menor precio</option>
+              </select>
+            </div>
+
+            <div className="simulator-library-count">
+              <span>
+                {baseProductActiveFilterCount
+                  ? `${filteredBaseProducts.length} de ${products.length} productos · ${baseProductActiveFilterCount} filtros activos`
+                  : `${products.length} productos`}
+              </span>
+              {baseProductActiveFilterCount > 0 && (
+                <button className="button ghost small-button" type="button" onClick={clearBaseProductFilters}>Limpiar filtros</button>
+              )}
+            </div>
+
+            <div className="simulator-library-body">
+              {filteredBaseProducts.length === 0 ? (
+                <div className="simulator-library-empty">
+                  <SearchX aria-hidden="true" />
+                  <strong>No encontramos productos</strong>
+                  <span>Proba cambiando los filtros o la busqueda.</span>
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="simulator-table simulator-library-table simulator-base-product-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>Categoria</th>
+                        <th>Proveedor</th>
+                        <th>Costo</th>
+                        <th>Precio ML</th>
+                        <th>Envio</th>
+                        <th>Accion</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredBaseProducts.map(({ product, cost, price, shipping }) => (
+                        <tr key={product.id || product.sku} className="simulator-library-row" onClick={() => loadProductBase(product.id || "")}>
+                          <td>
+                            <strong>{product.sku || "-"}</strong>
+                            <span>{product.name}</span>
+                          </td>
+                          <td>{product.category || "Sin categoria"}</td>
+                          <td>{product.supplier || "Sin proveedor"}</td>
+                          <td className="numeric">{moneyWithCents(cost)}</td>
+                          <td className="numeric">{price ? moneyWithCents(price) : "-"}</td>
+                          <td className="numeric">{shipping ? moneyWithCents(shipping) : "-"}</td>
+                          <td>
+                            <button className="item-action" type="button" onClick={(event) => {
+                              event.stopPropagation();
+                              loadProductBase(product.id || "");
+                            }}>
+                              Usar <ChevronRight aria-hidden="true" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       {simulationLibraryOpen && (
         <div className="modal-backdrop simulator-library-backdrop" onClick={() => setSimulationLibraryOpen(false)}>

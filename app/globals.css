@@ -4304,6 +4304,50 @@ td strong {
   max-width: 100%;
 }
 
+.simulator-base-picker-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.simulator-base-picker-summary > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.simulator-base-picker-summary strong,
+.simulator-base-picker-summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simulator-base-picker-summary span {
+  color: #526580;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.simulator-base-product-toolbar {
+  grid-template-columns: minmax(240px, 1fr) 170px repeat(4, 120px) 150px;
+}
+
+.simulator-base-product-toolbar input {
+  min-height: 38px;
+  border: 1px solid #cfe0f6;
+  border-radius: 9px;
+  background: #fff;
+  padding: 0 10px;
+  color: #0f172a;
+  font-weight: 650;
+}
+
+.simulator-base-product-table {
+  min-width: 980px;
+}
+
 .button.danger,
 .button.danger.ghost {
   border-color: #fecdd3;
