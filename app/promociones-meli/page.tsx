@@ -318,6 +318,8 @@ function samePrice(left?: number | null, right?: number | null) {
   return Math.abs(Number(left) - Number(right)) < 1;
 }
 
+const ML_FIXED_FEE_PRICE_LIMIT = 30000;
+
 function publicationPromotionDates(
   publication: MercadoLibreShippingCost,
   promoName?: string | null,
@@ -1000,6 +1002,9 @@ export default function PromocionesMeliPage() {
   const selectedOpportunities = selectedGroup
     ? selectedGroup.opportunities.filter((item) => selectedPublicationIds.has(item.meli_item_id))
     : [];
+  const mercadoLibreFixedFeeAmount = useMemo(() => {
+    return Math.max(0, ...publications.map((item) => Number(item.fixed_fee_amount || 0)));
+  }, [publications]);
 
   const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
     return [
@@ -1036,7 +1041,7 @@ export default function PromocionesMeliPage() {
     );
   }
 
-  function rentabilityForProductRow(product: Product, row: PublicationPromoRow, salePrice?: number | null) {
+  function rentabilityForProductRow(product: Product, row: PublicationPromoRow, salePrice?: number | null, fixedFeeBasisPrice?: number | null) {
     if (!salePrice || salePrice <= 0) return null;
     const optionByInstallment = pricingOptions.find((item) => optionMatchesInstallment(item, row.installmentCount));
     const option = optionByInstallment || mercadoLibreClassicOption();
@@ -1054,13 +1059,22 @@ export default function PromocionesMeliPage() {
     ) {
       return null;
     }
+    const buyerPrice = Number(fixedFeeBasisPrice || salePrice || 0);
+    const fixedFeeAmount = Number(row.publication.fixed_fee_amount || 0);
+    const publicationForMargin =
+      fixedFeeAmount <= 0 &&
+      mercadoLibreFixedFeeAmount > 0 &&
+      buyerPrice > 0 &&
+      buyerPrice <= ML_FIXED_FEE_PRICE_LIMIT
+        ? { ...row.publication, fixed_fee_amount: mercadoLibreFixedFeeAmount }
+        : row.publication;
     const setting = channelSetting(product.id, normalizedOption.code);
     const result = calculatePriceSummary(
       product,
       normalizedOption,
       normalizedOption.applies_marketplace_fee ? categoryFeeForProduct(product) : null,
       taxes,
-      normalizedOption.applies_shipping ? row.publication : null,
+      normalizedOption.applies_shipping ? publicationForMargin : null,
       {
         salePrice,
         structureAmount: Number(setting?.structure_amount || 0),
@@ -1079,9 +1093,9 @@ export default function PromocionesMeliPage() {
     };
   }
 
-  function rentabilityForRow(row: PublicationPromoRow, salePrice?: number | null) {
+  function rentabilityForRow(row: PublicationPromoRow, salePrice?: number | null, fixedFeeBasisPrice?: number | null) {
     if (!selectedGroup) return null;
-    return rentabilityForProductRow(selectedGroup.product, row, salePrice);
+    return rentabilityForProductRow(selectedGroup.product, row, salePrice, fixedFeeBasisPrice);
   }
 
   const publicationFamilies = useMemo<PublicationVariantGroup[]>(() => {
@@ -1283,7 +1297,7 @@ export default function PromocionesMeliPage() {
 
         const calculatedPromos = dedupePromoComparisons(rows)
           .map((promo) => {
-            const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice);
+            const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice, promo.promoPrice);
             if (!rentability || rentability.margin < -100) return null;
 
             return {
@@ -1329,7 +1343,7 @@ export default function PromocionesMeliPage() {
           .sort((a, b) => b.margin - a.margin)[0] || null;
 
         activePromos.forEach(({ promo, margin, netProfit }) => {
-          const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice);
+          const rentability = rentabilityForProductRow(group.product, row, promo.effectiveSalePrice, promo.promoPrice);
           if (!rentability) return;
           const normalizedInstallmentLabel = row.installmentCount === 1 ? "1 pago" : row.installmentLabel;
 
@@ -1575,7 +1589,7 @@ export default function PromocionesMeliPage() {
       scheduled: groupBySku(scheduled),
       scheduledShared: groupBySku(scheduledShared),
     };
-  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold]);
+  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold, mercadoLibreFixedFeeAmount]);
 
   const desktopAlertCandidates = useMemo(() => {
     const flatten = (groups: PromoTrafficLightGroup[]) => groups.flatMap((group) => group.items);
@@ -1901,7 +1915,7 @@ export default function PromocionesMeliPage() {
                     row.publication.meli_price,
                     bestSellerRate,
                   );
-                  const rentability = rentabilityForRow(row, summaryEffectiveSalePrice);
+                  const rentability = rentabilityForRow(row, summaryEffectiveSalePrice, promoPrice);
                   return {
                     label: row.installmentLabel,
                     publication: row.publication,
@@ -1955,6 +1969,7 @@ export default function PromocionesMeliPage() {
                             const rentability = rentabilityForRow(
                               selectedSummary.row,
                               activeEffectiveSalePrice,
+                              selectedSummary.publication.meli_promo_price,
                             );
                             return [{
                               key: `${selectedSummary.publication.meli_item_id}-active`,
@@ -1991,7 +2006,7 @@ export default function PromocionesMeliPage() {
                             item.original_price || selectedSummary.publication.meli_price,
                             item.seller_percentage,
                           );
-                          const rentability = rentabilityForRow(selectedSummary.row, promoEffectiveSalePrice);
+                          const rentability = rentabilityForRow(selectedSummary.row, promoEffectiveSalePrice, item.promo_price);
                           return {
                             key: item.offer_id || item.promotion_id || `${selectedSummary.publication.meli_item_id}-${item.promo_price}`,
                             promotionId: item.promotion_id || null,

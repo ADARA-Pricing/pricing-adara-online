@@ -193,6 +193,8 @@ function effectiveSalePrice(
   return price + meliContributionAmount(price, meliAmount, meliRate, originalPrice, sellerRate);
 }
 
+const ML_FIXED_FEE_PRICE_LIMIT = 30000;
+
 export default function OpportunitiesPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -276,6 +278,9 @@ export default function OpportunitiesPage() {
   }, []);
 
   const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
+  const mercadoLibreFixedFeeAmount = useMemo(() => {
+    return Math.max(0, ...publications.map((item) => Number(item.fixed_fee_amount || 0)));
+  }, [publications]);
 
   const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
     return sortPricingOptions([
@@ -317,13 +322,32 @@ export default function OpportunitiesPage() {
     return byRate || mercadoLibreClassicOption();
   }
 
-  function marginForPublication(product: Product, publication: MercadoLibreShippingCost, salePrice?: number | null) {
+  function publicationForMargin(publication: MercadoLibreShippingCost, buyerPrice?: number | null) {
+    const fixedFeeAmount = Number(publication.fixed_fee_amount || 0);
+    const priceForFixedFee = Number(buyerPrice || 0);
+    if (
+      fixedFeeAmount > 0 ||
+      mercadoLibreFixedFeeAmount <= 0 ||
+      priceForFixedFee <= 0 ||
+      priceForFixedFee > ML_FIXED_FEE_PRICE_LIMIT
+    ) {
+      return publication;
+    }
+
+    return {
+      ...publication,
+      fixed_fee_amount: mercadoLibreFixedFeeAmount,
+    };
+  }
+
+  function marginForPublication(product: Product, publication: MercadoLibreShippingCost, salePrice?: number | null, buyerPrice?: number | null) {
     if (!salePrice || salePrice <= 0) return null;
     const option = normalizeOption(optionForPublication(publication));
+    const marginPublication = publicationForMargin(publication, buyerPrice || salePrice);
     if (
       option.applies_shipping &&
-      (publication.free_shipping || publication.meli_free_shipping) &&
-      !Number(publication.shipping_cost_amount || 0)
+      (marginPublication.free_shipping || marginPublication.meli_free_shipping) &&
+      !Number(marginPublication.shipping_cost_amount || 0)
     ) {
       return null;
     }
@@ -333,7 +357,7 @@ export default function OpportunitiesPage() {
       option,
       option.applies_marketplace_fee ? categoryFeeForProduct(product) : null,
       taxes,
-      option.applies_shipping ? publication : null,
+      option.applies_shipping ? marginPublication : null,
       {
         salePrice,
         structureAmount: Number(setting?.structure_amount || 0),
@@ -433,7 +457,7 @@ export default function OpportunitiesPage() {
           publication.meli_original_price || publication.meli_price,
           publication.meli_promo_seller_rate,
         );
-        const margin = marginForPublication(product, publication, salePrice);
+        const margin = marginForPublication(product, publication, salePrice, buyerPrice);
         if (margin !== null && margin < 5) {
           rows.push({
             key: `review-${publication.id || itemId}`,
@@ -477,7 +501,7 @@ export default function OpportunitiesPage() {
         opportunity.original_price || publication.meli_price,
         opportunity.seller_percentage,
       );
-      const margin = marginForPublication(product, publication, salePrice);
+      const margin = marginForPublication(product, publication, salePrice, buyerPrice);
       if (margin === null || margin < 5) return;
       const future = isScheduledOpportunity(opportunity, currentIso);
       const type: OpportunityType = future ? "future" : "activate";
@@ -543,7 +567,7 @@ export default function OpportunitiesPage() {
       if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type];
       return Number(b.margin || 0) - Number(a.margin || 0);
     });
-  }, [productsById, publications, opportunities, pricingOptions, categoryFees, taxes, marginSettings]);
+  }, [productsById, publications, opportunities, pricingOptions, categoryFees, taxes, marginSettings, mercadoLibreFixedFeeAmount]);
 
   const filteredActions = useMemo(() => {
     const q = query.trim().toLowerCase();
