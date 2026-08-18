@@ -161,13 +161,6 @@ function stockAmountScore(stock: number) {
   return 0;
 }
 
-function meliContributionPenalty(rate: number, amount: number) {
-  if (rate >= 4 || amount >= 25000) return -18;
-  if (rate >= 2 || amount >= 10000) return -10;
-  if (rate > 0 || amount > 0) return -4;
-  return 0;
-}
-
 function optionLabelForPublication(publication: MercadoLibreShippingCost) {
   const installments = publicationInstallments(publication);
   if (!installments || installments <= 1) return "1 pago";
@@ -541,36 +534,42 @@ export default function Asesoria360Page() {
         const bestOfferPrice = offerPrices.length ? Math.min(...offerPrices) : null;
         const reasons: string[] = [];
         let score = 0;
+        const hasLowMeliContribution = bestMeliContributionRate < 2 && bestMeliContributionAmount < 10000;
+        const needsExtraPromo =
+          stock > 0 &&
+          (
+            !hasActivePromo ||
+            publicationsWithMeliContribution === 0 ||
+            meliContributionCoverageRatio < 1 ||
+            hasLowMeliContribution
+          );
 
+        if (stock > 0) {
+          score += stockAmountScore(stock);
+          reasons.push(`stock disponible ${stock}`);
+        }
+        if (!hasActivePromo) {
+          score += 24;
+          reasons.push("sin promo activa");
+        }
+        if (publicationsWithMeliContribution === 0) {
+          score += 34;
+          reasons.push("sin aporte ML compartido");
+        } else if (meliContributionCoverageRatio < 0.5) {
+          score += 26;
+          reasons.push(`aporte ML parcial ${meliContributionCoverage}`);
+        } else if (meliContributionCoverageRatio < 1) {
+          score += 18;
+          reasons.push(`aporte ML parcial ${meliContributionCoverage}`);
+        } else if (hasLowMeliContribution) {
+          score += 12;
+          reasons.push(`aporte ML bajo ${bestMeliContributionRate.toFixed(1)}%`);
+        }
         score += inventoryValueScore(inventoryValue);
-        score += stockAmountScore(stock);
-
         if (inventoryValue >= 1000000) {
           reasons.push(`stock valorizado ${moneyWithCents(inventoryValue)}`);
         } else if (inventoryValue >= 200000) {
           reasons.push(`valor parado ${moneyWithCents(inventoryValue)}`);
-        }
-        if (stock > 0) {
-          reasons.push(`stock disponible ${stock}`);
-        }
-        if (!hasActivePromo) {
-          score += 18;
-          reasons.push("sin promo activa");
-        }
-        if (publicationsWithMeliContribution === 0) {
-          score += 22;
-          reasons.push("sin aporte ML compartido");
-        } else if (meliContributionCoverageRatio < 0.5) {
-          score += 14;
-          reasons.push(`aporte ML parcial ${meliContributionCoverage}`);
-        } else if (bestMeliContributionRate < 2 && bestMeliContributionAmount < 10000) {
-          score += 10;
-          reasons.push(`aporte ML bajo ${bestMeliContributionRate.toFixed(1)}%`);
-        } else if (meliContributionCoverageRatio < 0.8) {
-          score -= 4;
-          reasons.push(`aporte ML parcial ${meliContributionCoverage}`);
-        } else {
-          score += meliContributionPenalty(bestMeliContributionRate, bestMeliContributionAmount);
         }
         if (units30 === 0 && stock > 0) {
           score += 24;
@@ -625,9 +624,10 @@ export default function Asesoria360Page() {
           bestMeliContributionRate,
           bestMeliContributionAmount,
           meliContributionCoverage,
+          needsExtraPromo,
         };
       })
-      .filter((candidate) => candidate.score > 0)
+      .filter((candidate) => candidate.stock > 0 && candidate.needsExtraPromo && candidate.score > 0)
       .sort((a, b) => b.score - a.score || b.inventoryValue - a.inventoryValue || b.stock - a.stock)
       .slice(0, 12);
   }, [productGroups, sales, opportunities, targetMargin]);
@@ -730,7 +730,7 @@ export default function Asesoria360Page() {
         <div className="asesoria360-panel-head">
           <div>
             <h2>Ranking automatico</h2>
-            <p>Candidatos segun valor de stock parado, ventas 30d, disponibilidad y aporte compartido de ML.</p>
+            <p>Productos con stock disponible ordenados por necesidad de pedir promo extra y aporte ML.</p>
           </div>
           <span className="badge">{advisoryCandidates.length}</span>
         </div>
