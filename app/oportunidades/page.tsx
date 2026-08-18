@@ -65,10 +65,30 @@ function daysSince(value?: string | null) {
 }
 
 function publicationInstallments(publication: MercadoLibreShippingCost) {
-  const text = `${publication.meli_installments_text || ""} ${publication.notes || ""}`.toLowerCase();
-  const match = text.match(/(\d+)\s*cuota/);
+  const saleTerms = Array.isArray(publication.meli_sale_terms) ? publication.meli_sale_terms : [];
+  const searchable = [
+    publication.meli_installments_text,
+    publication.notes,
+    publication.meli_listing_type_id,
+    ...(Array.isArray(publication.meli_tags) ? publication.meli_tags : []),
+    ...saleTerms.flatMap((term) => {
+      const value = term as { id?: string; name?: string; value_name?: string; value_id?: string };
+      return [value.id, value.name, value.value_name, value.value_id];
+    }),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (searchable.includes("3x_campaign")) return 3;
+  if (searchable.includes("9x_campaign")) return 9;
+  if (searchable.includes("12x_campaign")) return 12;
+  if (searchable.includes("gold_special")) return 1;
+  if (searchable.includes("gold_pro")) return 6;
+
+  const match = searchable.match(/(\d{1,2})\s*(x|cuotas?)/i);
   if (match) return Number(match[1]);
-  if (text.includes("sin cuotas") || text.includes("1 pago")) return 1;
+  if (searchable.includes("sin cuotas") || searchable.includes("1 pago") || searchable.includes("clasica") || searchable.includes("clásica")) return 1;
   return null;
 }
 
@@ -86,6 +106,14 @@ function isFutureOpportunity(item: MercadoLibrePromotionOpportunity, currentIso 
   if (!item.start_date) return false;
   if (isActiveOpportunity(item)) return false;
   return item.start_date > currentIso;
+}
+
+function isScheduledOpportunity(item: MercadoLibrePromotionOpportunity, currentIso = nowIso()) {
+  const status = `${item.promotion_status || ""} ${item.item_promotion_status || ""}`.toLowerCase();
+  const offerId = String(item.offer_id || "").toUpperCase();
+  if (/program|scheduled/.test(status)) return true;
+  if (/pending/.test(status) && offerId.startsWith("OFFER")) return true;
+  return isFutureOpportunity(item, currentIso);
 }
 
 function sortPricingOptions(options: MercadoLibrePriceOption[]) {
@@ -192,7 +220,6 @@ export default function OpportunitiesPage() {
     const [
       productsResponse,
       publicationsResponse,
-      opportunitiesResponse,
       installmentsResponse,
       categoryFeesResponse,
       taxesResponse,
@@ -200,20 +227,38 @@ export default function OpportunitiesPage() {
     ] = await Promise.all([
       supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).eq("meli_status", "active"),
-      supabase.from("mercadolibre_promotion_opportunities").select("*").order("meli_amount", { ascending: false }).limit(2000),
       supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
       supabase.from("tax_settings").select("*").eq("key", "default").single(),
       supabase.from("product_channel_margins").select("*"),
     ]);
+
+    const allOpportunities: MercadoLibrePromotionOpportunity[] = [];
+    let opportunitiesError: string | null = null;
+    for (let from = 0; ; from += 1000) {
+      const to = from + 999;
+      const response = await supabase
+        .from("mercadolibre_promotion_opportunities")
+        .select("*")
+        .order("meli_amount", { ascending: false })
+        .range(from, to);
+      if (response.error) {
+        opportunitiesError = response.error.message;
+        break;
+      }
+      const rows = (response.data || []) as MercadoLibrePromotionOpportunity[];
+      allOpportunities.push(...rows);
+      if (rows.length < 1000) break;
+    }
+
     setLoading(false);
 
     if (productsResponse.error) setError(productsResponse.error.message);
     else setProducts((productsResponse.data || []) as Product[]);
     if (publicationsResponse.error) setError(publicationsResponse.error.message);
     else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
-    if (opportunitiesResponse.error) setError(opportunitiesResponse.error.message);
-    else setOpportunities((opportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]);
+    if (opportunitiesError) setError(opportunitiesError);
+    else setOpportunities(allOpportunities);
     if (installmentsResponse.error) setError(installmentsResponse.error.message);
     else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
     if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
@@ -275,6 +320,13 @@ export default function OpportunitiesPage() {
   function marginForPublication(product: Product, publication: MercadoLibreShippingCost, salePrice?: number | null) {
     if (!salePrice || salePrice <= 0) return null;
     const option = normalizeOption(optionForPublication(publication));
+    if (
+      option.applies_shipping &&
+      (publication.free_shipping || publication.meli_free_shipping) &&
+      !Number(publication.shipping_cost_amount || 0)
+    ) {
+      return null;
+    }
     const setting = channelSetting(product.id, option.code);
     const result = calculatePriceSummary(
       product,
@@ -427,7 +479,7 @@ export default function OpportunitiesPage() {
       );
       const margin = marginForPublication(product, publication, salePrice);
       if (margin === null || margin < 5) return;
-      const future = isFutureOpportunity(opportunity, currentIso);
+      const future = isScheduledOpportunity(opportunity, currentIso);
       const type: OpportunityType = future ? "future" : "activate";
       rows.push({
         key: `${type}-${opportunity.offer_id || opportunity.promotion_id}-${opportunity.meli_item_id}`,
