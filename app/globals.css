@@ -11327,3 +11327,373 @@ textarea:focus,
     grid-template-columns: 1fr;
   }
 }
+
+/* Responsive audit pass - desktop/notebook stability */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.app-shell,
+.app-content,
+.container,
+.card,
+.section-header,
+.section-header-main,
+.prices-hero-left,
+.brand,
+.page-hero-actions,
+.toolbar-card,
+.products-toolbar-card,
+.prices-toolbar-card,
+.promociones-meli-page,
+.promociones-workbar,
+.promociones-detail,
+.promociones-traffic-light,
+.pricing-modal-v2,
+.pricing-card,
+.summary-panel-v2 {
+  min-width: 0;
+}
+
+.section-header,
+.app-page-hero,
+.pricing-modal-header,
+.promociones-card-header,
+.promociones-detail-header,
+.promociones-traffic-head,
+.dashboard-sync-card {
+  flex-wrap: wrap;
+}
+
+.app-page-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 18px;
+}
+
+.prices-hero-left {
+  flex: 1 1 360px;
+}
+
+.app-page-hero .brand {
+  overflow-wrap: anywhere;
+}
+
+.app-page-hero .brand h1,
+.app-page-hero .brand p {
+  max-width: 100%;
+}
+
+.page-hero-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.page-hero-actions .button,
+.section-header-actions .button,
+.products-toolbar-actions .button,
+.promociones-workbar-actions .button,
+.promociones-traffic-actions .button,
+.pricing-modal-footer .button {
+  white-space: nowrap;
+}
+
+.table-wrap,
+.products-table-card,
+.products-list-table-wrap,
+.promociones-promo-table-wrap,
+.product-publications-table,
+.channel-table-wrap,
+.cost-channel-table-wrap,
+.cost-config-table-wrap,
+.pricing-conditions-card {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.product-primary,
+.product-primary h3,
+.product-primary p,
+.product-publication-title,
+.product-publication-group-trigger > div,
+.product-publication-group-trigger strong,
+.promociones-current-product > div,
+.promociones-current-product h2,
+.promociones-current-product p,
+.promociones-family-main,
+.promociones-family-main strong,
+.promociones-traffic-sku-title,
+.promociones-traffic-sku-title strong,
+.promociones-traffic-sku-title small,
+.market-item-cell,
+.rotation-product-text {
+  min-width: 0;
+}
+
+.product-primary h3,
+.promociones-current-product h2,
+.promociones-family-main strong,
+.promociones-traffic-sku-title small,
+.market-item-cell strong,
+.rotation-product-text strong {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.promociones-current-product p,
+.promociones-family-meta,
+.promociones-traffic-sku-title strong,
+.product-primary p,
+.market-item-cell p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prices-toolbar,
+.products-toolbar-grid,
+.cost-channel-toolbar,
+.cost-config-toolbar,
+.cost-config-toolbar.categories,
+.promociones-toolbar,
+.simulator-library-toolbar,
+.opportunity-toolbar {
+  align-items: end;
+}
+
+.prices-toolbar .field,
+.products-toolbar-grid .field,
+.cost-channel-toolbar .field,
+.cost-config-toolbar .field,
+.promociones-toolbar .field,
+.opportunity-toolbar .field {
+  min-width: 0;
+}
+
+@media (max-width: 1499px) {
+  .products-toolbar-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .products-toolbar-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .promociones-traffic-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .promociones-traffic-sku-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .promociones-traffic-sku-summary {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, max-content));
+    justify-content: start;
+  }
+
+  .dashboard-primary-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-operational-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1439px) and (min-width: 821px) {
+  .app-shell,
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 94px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .sidebar-logo-row {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .adara-logo {
+    min-height: 42px;
+  }
+
+  .adara-logo img,
+  .sidebar-label,
+  .sidebar-caret,
+  .sidebar-user > div,
+  .sidebar-user-caret {
+    display: none;
+  }
+
+  .adara-logo-mark {
+    display: inline-flex;
+  }
+
+  .sidebar-link,
+  .sidebar-sublink {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .sidebar-submenu {
+    margin-left: 0;
+    padding-left: 0;
+  }
+
+  .sidebar-user {
+    display: flex;
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .app-content {
+    padding: 22px 22px 34px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .app-content {
+    padding: 20px 18px 32px;
+  }
+
+  .app-page-hero {
+    align-items: flex-start;
+  }
+
+  .page-hero-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .prices-toolbar,
+  .products-toolbar-grid,
+  .cost-channel-toolbar,
+  .cost-config-toolbar,
+  .cost-config-toolbar.categories,
+  .promociones-toolbar,
+  .simulator-library-toolbar,
+  .opportunity-toolbar,
+  .opportunities-page .opportunity-toolbar,
+  .promociones-workbar,
+  .promociones-layout,
+  .market-search-grid,
+  .market-layout,
+  .taxes-layout,
+  .simulator-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .promociones-workbar-actions,
+  .promociones-detail-actions,
+  .promociones-traffic-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .promociones-kpis.compact,
+  .promociones-detail-stats {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .promociones-family-button {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 0.8fr);
+  }
+
+  .promociones-family-best,
+  .promociones-expand-label {
+    align-items: flex-start;
+    justify-self: start;
+  }
+
+  .pricing-modal-v2 {
+    width: min(1280px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+  }
+}
+
+@media (max-width: 900px) {
+  .promociones-traffic-grid,
+  .dashboard-primary-kpi-grid,
+  .dashboard-operational-grid,
+  .products-kpi-grid,
+  .promociones-kpis,
+  .promociones-detail-stats,
+  .summary-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .promociones-family-button,
+  .promociones-picker-row,
+  .promociones-product-row,
+  .promociones-summary-values,
+  .promociones-traffic-sku-head,
+  .promociones-traffic-sku-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .promociones-product-meta,
+  .promociones-family-best,
+  .promociones-traffic-sku-summary {
+    text-align: left;
+    justify-items: start;
+  }
+
+  .products-toolbar-actions {
+    flex-wrap: wrap;
+  }
+
+  .pricing-modal-header {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-content {
+    padding: 16px 12px 28px;
+  }
+
+  .app-page-hero,
+  .section-header,
+  .promociones-detail-header,
+  .promociones-traffic-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .prices-hero-left {
+    flex-basis: auto;
+  }
+
+  .page-hero-actions,
+  .promociones-traffic-actions,
+  .pricing-modal-footer .actions {
+    justify-content: flex-start;
+  }
+
+  .page-hero-actions .button,
+  .promociones-traffic-actions .button {
+    width: 100%;
+    justify-content: center;
+  }
+}

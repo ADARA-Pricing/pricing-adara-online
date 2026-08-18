@@ -1244,19 +1244,24 @@ export default function RotacionSkuPage() {
           background: #edf3fb;
           color: #425979;
         }
-        @media (max-width: 900px) {
+        @media (max-width: 1180px) {
           .rotation-summary {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
           .rotation-toolbar {
             grid-template-columns: 1fr;
           }
-          .rotation-advanced-grid {
-            grid-template-columns: 1fr;
+          .rotation-toolbar > * {
+            min-width: 0;
           }
           .rotation-table-status {
             align-items: flex-start;
             flex-direction: column;
+          }
+        }
+        @media (max-width: 900px) {
+          .rotation-advanced-grid {
+            grid-template-columns: 1fr;
           }
         }
       `}</style>
