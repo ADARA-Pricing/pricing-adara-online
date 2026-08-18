@@ -1047,6 +1047,13 @@ export default function PromocionesMeliPage() {
         ? Number(option.financing_fee_rate || 0)
         : publicationFinancingRate ?? Number(option.financing_fee_rate || 0),
     });
+    if (
+      normalizedOption.applies_shipping &&
+      (row.publication.free_shipping || row.publication.meli_free_shipping) &&
+      !Number(row.publication.shipping_cost_amount || 0)
+    ) {
+      return null;
+    }
     const setting = channelSetting(product.id, normalizedOption.code);
     const result = calculatePriceSummary(
       product,

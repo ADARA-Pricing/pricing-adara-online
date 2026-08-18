@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, ReactNode, useEffect, useMemo, useState } from "react";
+import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowDown,
@@ -90,6 +90,9 @@ export default function PricesPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [refreshingProductSku, setRefreshingProductSku] = useState<string | null>(null);
+  const [productSyncMessage, setProductSyncMessage] = useState<string | null>(null);
+  const productSyncRequestId = useRef(0);
   const [expandedProducts, setExpandedProducts] = useState<
     Record<string, boolean>
   >({});
@@ -104,8 +107,8 @@ export default function PricesPage() {
     router.push("/login");
   }
 
-  async function loadData() {
-    setLoading(true);
+  async function loadData(options?: { quiet?: boolean }) {
+    if (!options?.quiet) setLoading(true);
     setError(null);
     const [
       productsResponse,
@@ -136,7 +139,7 @@ export default function PricesPage() {
         .eq("active", true),
       supabase.from("product_channel_margins").select("*"),
     ]);
-    setLoading(false);
+    if (!options?.quiet) setLoading(false);
 
     if (productsResponse.error) setError(productsResponse.error.message);
     else setProducts((productsResponse.data || []) as Product[]);
@@ -441,6 +444,62 @@ export default function PricesPage() {
       summaryChannelCode: "MC",
       taxOverrides: { ...taxes },
     });
+    refreshProductFromMercadoLibre(product);
+  }
+
+  async function refreshProductFromMercadoLibre(product: Product) {
+    const sku = product.sku?.trim();
+    if (!sku || refreshingProductSku === sku) return;
+    const requestId = productSyncRequestId.current + 1;
+    productSyncRequestId.current = requestId;
+
+    setRefreshingProductSku(sku);
+    setProductSyncMessage("Actualizando datos de MercadoLibre para este SKU...");
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 90000);
+
+    try {
+      const response = await fetch("/api/mercadolibre/sync-shipping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skus: [sku] }),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        if (productSyncRequestId.current === requestId) {
+          setProductSyncMessage(data?.error || "No se pudo actualizar MercadoLibre para este SKU.");
+        }
+        return;
+      }
+
+      await loadData({ quiet: true });
+      if (productSyncRequestId.current !== requestId) return;
+
+      const matched = Number(data?.matched || 0);
+      const updated = Number(data?.updated || 0);
+      const withoutCost = Number(data?.no_shipping_cost || 0);
+      setProductSyncMessage(
+        matched > 0
+          ? `MercadoLibre actualizado: ${updated} publicacion(es) refrescada(s)${withoutCost ? `, ${withoutCost} sin costo devuelto` : ""}.`
+          : "MercadoLibre no encontro publicaciones para este SKU.",
+      );
+    } catch (syncError) {
+      if (productSyncRequestId.current === requestId) {
+        setProductSyncMessage(
+          syncError instanceof DOMException && syncError.name === "AbortError"
+            ? "La actualizacion de MercadoLibre tardo demasiado. Se mantienen los datos guardados."
+            : syncError instanceof Error ? syncError.message : "No se pudo actualizar MercadoLibre.",
+        );
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      if (productSyncRequestId.current === requestId) {
+        setRefreshingProductSku(null);
+      }
+    }
   }
 
   function effectiveMargin(channelCode: string) {
@@ -1188,6 +1247,10 @@ export default function PricesPage() {
                 <p className="pricing-modal-help">
                   Ajustá margen, precio de venta, comisiones, envío manual y estructura para analizar rentabilidad.
                 </p>
+                <div className={`meli-product-sync ${refreshingProductSku === modal.product.sku ? "loading" : ""}`}>
+                  <RefreshCw aria-hidden="true" />
+                  <span>{productSyncMessage || "Al abrir este producto se actualizan precio, envio, comisiones y promociones desde MercadoLibre."}</span>
+                </div>
               </div>
               <button className="modal-close-button" onClick={() => setModal(null)} aria-label="Cerrar">
                 <X aria-hidden="true" />

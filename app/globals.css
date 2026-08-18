@@ -11096,6 +11096,39 @@ textarea:focus,
   margin-bottom: 1px;
 }
 
+.meli-product-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.meli-product-sync svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.meli-product-sync.loading svg {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .summary-panel-v2 {
   position: sticky;
   top: 14px;
