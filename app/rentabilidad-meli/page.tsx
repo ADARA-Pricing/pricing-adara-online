@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChartNoAxesCombined, RefreshCw, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChartNoAxesCombined, Filter, RefreshCw, Search } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import { moneyWithCents, percent } from "@/lib/pricing";
@@ -11,6 +11,12 @@ import type { MercadoLibreOrderItem, MercadoLibreShippingCost, Product } from "@
 type Period = 7 | 30 | 60;
 type SortKey = "sku" | "productName" | "units" | "revenue" | "netProfit" | "margin" | "stock" | "lastSale" | "activePublications";
 type SortDirection = "asc" | "desc";
+type ProfitabilityStatusFilter = "" | "with_sales" | "no_sales" | "low_stock" | "normal" | "negative_margin" | "without_profit";
+type FilterableColumn = "productName" | "activePublications" | "units" | "revenue" | "netProfit" | "margin" | "stock" | "stockDays";
+type NumberFilterOperator = "gt" | "lt" | "between";
+type ColumnFilter =
+  | { kind: "text"; value: string }
+  | { kind: "number"; operator: NumberFilterOperator; min: string; max: string };
 
 type ProfitabilityRow = {
   sku: string;
@@ -25,6 +31,7 @@ type ProfitabilityRow = {
   netSale: number;
   margin: number | null;
   avgPrice: number | null;
+  stockDays: number | null;
   lastSale?: string | null;
   errors: number;
 };
@@ -46,6 +53,13 @@ function shortDate(value?: string | null) {
 
 function formatUnits(value: number) {
   return new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(value);
+}
+
+function stockDaysLabel(days: number | null) {
+  if (days === null) return "Sin ventas";
+  if (!Number.isFinite(days)) return "-";
+  if (days < 7) return `${days.toFixed(1)} dias`;
+  return `${Math.round(days)} dias`;
 }
 
 function productImage(publications: MercadoLibreShippingCost[]) {
@@ -92,6 +106,11 @@ export default function RentabilidadMeliPage() {
   const [period, setPeriod] = useState<Period>(30);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ProfitabilityStatusFilter>("");
+  const [onlyWithSales, setOnlyWithSales] = useState(false);
+  const [onlyLowStock, setOnlyLowStock] = useState(false);
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, ColumnFilter>>>({});
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("netProfit");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [loading, setLoading] = useState(true);
@@ -209,6 +228,8 @@ export default function RentabilidadMeliPage() {
         (total, sale) => total + numberValue(sale.normalized_net_sale_price) * numberValue(sale.quantity),
         0,
       );
+      const dailyUnits = units > 0 ? units / period : 0;
+      const stockDays = dailyUnits > 0 ? (skuPublications.length ? stockFromMl : numberValue(product.stock)) / dailyUnits : null;
       const errors = skuSales.filter((sale) => sale.normalized_profit_error).length;
       const lastSale = skuSales[0]?.order_date || null;
 
@@ -225,6 +246,7 @@ export default function RentabilidadMeliPage() {
         netSale,
         margin: netSale > 0 ? (netProfit / netSale) * 100 : null,
         avgPrice: units > 0 ? revenue / units : null,
+        stockDays,
         lastSale,
         errors,
       };
@@ -235,15 +257,55 @@ export default function RentabilidadMeliPage() {
     return [...new Set(rows.map((row) => row.category).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "es"));
   }, [rows]);
 
-  const soldRows = useMemo(() => rows.filter((row) => row.units > 0), [rows]);
+  function columnFilterIsActive(filter?: ColumnFilter) {
+    if (!filter) return false;
+    if (filter.kind === "text") return Boolean(filter.value.trim());
+    if (filter.operator === "between") return Boolean(filter.min.trim() || filter.max.trim());
+    return Boolean(filter.min.trim());
+  }
+
+  function numericFilterMatches(value: number | null | undefined, filter: Extract<ColumnFilter, { kind: "number" }>) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return false;
+    const min = Number(filter.min);
+    const max = Number(filter.max);
+    if (filter.operator === "gt") return Number.isFinite(min) ? number > min : true;
+    if (filter.operator === "lt") return Number.isFinite(min) ? number < min : true;
+    if (Number.isFinite(min) && number < min) return false;
+    if (Number.isFinite(max) && number > max) return false;
+    return Number.isFinite(min) || Number.isFinite(max);
+  }
+
+  function rowMatchesColumnFilters(row: ProfitabilityRow) {
+    return (Object.entries(columnFilters) as Array<[FilterableColumn, ColumnFilter]>).every(([column, filter]) => {
+      if (!columnFilterIsActive(filter)) return true;
+      if (filter.kind === "text") {
+        return `${row.productName} ${row.sku} ${row.category || ""}`.toLowerCase().includes(filter.value.trim().toLowerCase());
+      }
+      return numericFilterMatches(row[column] as number | null, filter);
+    });
+  }
+
+  const activeColumnFilterCount = Object.values(columnFilters).filter(columnFilterIsActive).length;
 
   const filteredRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const multiplier = sortDirection === "asc" ? 1 : -1;
     return rows
-      .filter((row) => row.units > 0)
-      .filter((row) => !needle || `${row.sku} ${row.productName} ${row.category || ""}`.toLowerCase().includes(needle))
-      .filter((row) => !categoryFilter || row.category === categoryFilter)
+      .filter((row) => {
+        if (needle && !`${row.sku} ${row.productName} ${row.category || ""}`.toLowerCase().includes(needle)) return false;
+        if (categoryFilter && row.category !== categoryFilter) return false;
+        if (statusFilter === "with_sales" && row.units <= 0) return false;
+        if (statusFilter === "no_sales" && row.units > 0) return false;
+        if (statusFilter === "low_stock" && !(row.stockDays !== null && row.stockDays < 25)) return false;
+        if (statusFilter === "normal" && !(row.stockDays !== null && row.stockDays >= 25)) return false;
+        if (statusFilter === "negative_margin" && !(row.margin !== null && row.margin < 0)) return false;
+        if (statusFilter === "without_profit" && row.errors <= 0) return false;
+        if (onlyWithSales && row.units <= 0) return false;
+        if (onlyLowStock && !(row.stockDays !== null && row.stockDays < 25)) return false;
+        if (!rowMatchesColumnFilters(row)) return false;
+        return true;
+      })
       .sort((a, b) => {
         if (sortKey === "sku" || sortKey === "productName") {
           return String(a[sortKey]).localeCompare(String(b[sortKey]), "es") * multiplier;
@@ -253,7 +315,7 @@ export default function RentabilidadMeliPage() {
         }
         return (numberValue(a[sortKey]) - numberValue(b[sortKey])) * multiplier;
       });
-  }, [rows, query, categoryFilter, sortKey, sortDirection]);
+  }, [categoryFilter, columnFilters, onlyLowStock, onlyWithSales, query, rows, sortDirection, sortKey, statusFilter]);
 
   const totals = useMemo(() => {
     const units = filteredRows.reduce((total, row) => total + row.units, 0);
@@ -295,14 +357,145 @@ export default function RentabilidadMeliPage() {
   function clearFilters() {
     setQuery("");
     setCategoryFilter("");
+    setStatusFilter("");
+    setOnlyWithSales(false);
+    setOnlyLowStock(false);
+    setColumnFilters({});
   }
 
-  const hasFilters = Boolean(query.trim() || categoryFilter);
-  const activeFilterEntries = [
-    query.trim() ? { key: "query", label: `Búsqueda "${query.trim()}"`, clear: () => setQuery("") } : null,
-    categoryFilter ? { key: "category", label: `Categoría ${categoryFilter}`, clear: () => setCategoryFilter("") } : null,
-    { key: "period", label: `Últimos ${period} días`, clear: null },
-  ].filter(Boolean) as Array<{ key: string; label: string; clear: (() => void) | null }>;
+  function resetSort() {
+    setSortKey("netProfit");
+    setSortDirection("desc");
+  }
+
+  function updateColumnFilter(column: FilterableColumn, filter: ColumnFilter) {
+    setColumnFilters((current) => ({ ...current, [column]: filter }));
+  }
+
+  function clearColumnFilter(column: FilterableColumn) {
+    setColumnFilters((current) => {
+      const next = { ...current };
+      delete next[column];
+      return next;
+    });
+  }
+
+  function clearAdvancedFilters() {
+    setColumnFilters({});
+  }
+
+  const columnFilterLabels: Record<FilterableColumn, string> = {
+    productName: "Producto",
+    activePublications: "MLA",
+    units: "Unidades",
+    revenue: "Facturacion",
+    netProfit: "Neto",
+    margin: "Margen",
+    stock: "Stock",
+    stockDays: "Dias stock",
+  };
+  const statusFilterLabels: Record<Exclude<ProfitabilityStatusFilter, "">, string> = {
+    with_sales: "Con ventas",
+    no_sales: "Sin ventas",
+    low_stock: "Stock bajo",
+    normal: "Stock normal",
+    negative_margin: "Margen negativo",
+    without_profit: "Sin calculo",
+  };
+  const quickFilterCount = [query.trim(), categoryFilter, statusFilter, onlyWithSales ? "sales" : "", onlyLowStock ? "stock" : ""].filter(Boolean).length;
+  const activeFilterCount = quickFilterCount + activeColumnFilterCount;
+  const defaultSortActive = sortKey === "netProfit" && sortDirection === "desc";
+  const activeQuickFilterEntries = [
+    query.trim() ? { key: "query", label: `Busqueda "${query.trim()}"`, clear: () => setQuery("") } : null,
+    categoryFilter ? { key: "category", label: `Categoria ${categoryFilter}`, clear: () => setCategoryFilter("") } : null,
+    statusFilter ? { key: "status", label: statusFilterLabels[statusFilter], clear: () => setStatusFilter("") } : null,
+    onlyWithSales ? { key: "with-sales", label: "Con ventas", clear: () => setOnlyWithSales(false) } : null,
+    onlyLowStock ? { key: "low-stock", label: "Stock bajo", clear: () => setOnlyLowStock(false) } : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; clear: () => void }>;
+
+  function formatColumnFilterValue(column: FilterableColumn, filter: ColumnFilter) {
+    if (filter.kind === "text") return `${columnFilterLabels[column]} contiene "${filter.value.trim()}"`;
+    const unit = column === "revenue" || column === "netProfit" ? "$" : "";
+    const min = filter.min.trim();
+    const max = filter.max.trim();
+    if (filter.operator === "gt") return `${columnFilterLabels[column]} > ${unit}${min}`;
+    if (filter.operator === "lt") return `${columnFilterLabels[column]} < ${unit}${min}`;
+    return `${columnFilterLabels[column]} ${min ? `>= ${unit}${min}` : ""}${min && max ? " y " : ""}${max ? `<= ${unit}${max}` : ""}`;
+  }
+
+  function activeColumnFilterEntries() {
+    return (Object.entries(columnFilters) as Array<[FilterableColumn, ColumnFilter]>)
+      .filter(([, filter]) => columnFilterIsActive(filter));
+  }
+
+  function renderAdvancedFilterField(column: FilterableColumn) {
+    const current = columnFilters[column];
+    const isText = column === "productName";
+    return (
+      <div className={`rotation-advanced-field ${columnFilterIsActive(current) ? "active" : ""}`} key={column}>
+        <div className="rotation-advanced-field-head">
+          <span>{columnFilterLabels[column]}</span>
+          {columnFilterIsActive(current) && (
+            <button type="button" onClick={() => clearColumnFilter(column)} aria-label={`Quitar filtro ${columnFilterLabels[column]}`}>x</button>
+          )}
+        </div>
+        {isText ? (
+          <label>
+            <span>Contiene</span>
+            <input
+              autoFocus
+              value={current?.kind === "text" ? current.value : ""}
+              onChange={(event) => updateColumnFilter(column, { kind: "text", value: event.target.value })}
+              placeholder="Buscar en producto"
+            />
+          </label>
+        ) : (
+          <>
+            <label>
+              <span>Condicion</span>
+              <select
+                value={current?.kind === "number" ? current.operator : "gt"}
+                onChange={(event) => updateColumnFilter(column, {
+                  kind: "number",
+                  operator: event.target.value as NumberFilterOperator,
+                  min: current?.kind === "number" ? current.min : "",
+                  max: current?.kind === "number" ? current.max : "",
+                })}
+              >
+                <option value="gt">Mayor que</option>
+                <option value="lt">Menor que</option>
+                <option value="between">Entre</option>
+              </select>
+            </label>
+            <label>
+              <span>{current?.kind === "number" && current.operator === "between" ? "Desde" : "Valor"}</span>
+              <input
+                autoFocus
+                type="number"
+                value={current?.kind === "number" ? current.min : ""}
+                onChange={(event) => updateColumnFilter(column, {
+                  kind: "number",
+                  operator: current?.kind === "number" ? current.operator : "gt",
+                  min: event.target.value,
+                  max: current?.kind === "number" ? current.max : "",
+                })}
+              />
+            </label>
+            {current?.kind === "number" && current.operator === "between" && (
+              <label>
+                <span>Hasta</span>
+                <input
+                  type="number"
+                  value={current.max}
+                  onChange={(event) => updateColumnFilter(column, { ...current, max: event.target.value })}
+                />
+              </label>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <main className="page rotation-page">
@@ -348,37 +541,87 @@ export default function RentabilidadMeliPage() {
         <div className="rotation-toolbar">
           <label className="search-control">
             <Search aria-hidden="true" />
-            <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o categoría" />
+            <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o MLA" />
           </label>
           <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-            <option value="">Todas las categorías</option>
+            <option value="">Todas las categorias</option>
             {categories.map((category) => (
               <option value={category} key={category}>{category}</option>
             ))}
           </select>
-          <select value={period} onChange={(event) => setPeriod(Number(event.target.value) as Period)}>
-            <option value={7}>Últimos 7 días</option>
-            <option value={30}>Últimos 30 días</option>
-            <option value={60}>Últimos 60 días</option>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ProfitabilityStatusFilter)}>
+            <option value="">Todos los estados</option>
+            <option value="with_sales">Con ventas</option>
+            <option value="no_sales">Sin ventas</option>
+            <option value="low_stock">Stock bajo</option>
+            <option value="normal">Stock normal</option>
+            <option value="negative_margin">Margen negativo</option>
+            <option value="without_profit">Sin calculo</option>
+          </select>
+          <label className={`rotation-filter-chip ${onlyWithSales ? "active" : ""}`}>
+            <input type="checkbox" checked={onlyWithSales} onChange={(event) => setOnlyWithSales(event.target.checked)} />
+            {onlyWithSales && <Check aria-hidden="true" />}
+            Con ventas
+          </label>
+          <label className={`rotation-filter-chip ${onlyLowStock ? "active" : ""}`}>
+            <input type="checkbox" checked={onlyLowStock} onChange={(event) => setOnlyLowStock(event.target.checked)} />
+            {onlyLowStock && <Check aria-hidden="true" />}
+            Stock bajo
+          </label>
+          <button
+            className={`rotation-advanced-toggle ${advancedFiltersOpen || activeColumnFilterCount ? "active" : ""}`}
+            type="button"
+            onClick={() => setAdvancedFiltersOpen((current) => !current)}
+          >
+            <Filter aria-hidden="true" />
+            Filtros avanzados{activeColumnFilterCount ? ` · ${activeColumnFilterCount}` : ""}
+          </button>
+        </div>
+        <div className="rotation-period-row">
+          <select value={period} onChange={(event) => setPeriod(Number(event.target.value) as Period)} aria-label="Periodo de ventas">
+            <option value={7}>Ultimos 7 dias</option>
+            <option value={30}>Ultimos 30 dias</option>
+            <option value={60}>Ultimos 60 dias</option>
           </select>
         </div>
+        {advancedFiltersOpen && (
+          <div className="rotation-advanced-panel">
+            <div className="rotation-advanced-grid">
+              {renderAdvancedFilterField("productName")}
+              {renderAdvancedFilterField("activePublications")}
+              {renderAdvancedFilterField("units")}
+              {renderAdvancedFilterField("revenue")}
+              {renderAdvancedFilterField("netProfit")}
+              {renderAdvancedFilterField("margin")}
+              {renderAdvancedFilterField("stock")}
+              {renderAdvancedFilterField("stockDays")}
+            </div>
+            <div className="rotation-advanced-actions">
+              <button className="button ghost small-button" type="button" onClick={() => setAdvancedFiltersOpen(false)}>Cerrar</button>
+              <button className="button ghost small-button" type="button" onClick={clearAdvancedFilters} disabled={!activeColumnFilterCount}>Limpiar filtros avanzados</button>
+            </div>
+          </div>
+        )}
 
         <div className="rotation-table-status">
           <div className="rotation-active-context">
-            <span>{filteredRows.length} de {soldRows.length} productos</span>
-            {activeFilterEntries.map((filter) => (
-              filter.clear ? (
-                <button className="rotation-active-filter" type="button" key={filter.key} onClick={filter.clear}>
-                  {filter.label} <span aria-hidden="true">x</span>
-                </button>
-              ) : (
-                <span className="rotation-active-filter passive" key={filter.key}>{filter.label}</span>
-              )
+            <span>{filteredRows.length} de {rows.length} productos</span>
+            <span>Periodo {period} dias</span>
+            {activeQuickFilterEntries.map((filter) => (
+              <button className="rotation-active-filter" type="button" key={filter.key} onClick={filter.clear}>
+                {filter.label} <span aria-hidden="true">x</span>
+              </button>
+            ))}
+            {activeColumnFilterEntries().map(([column, filter]) => (
+              <button className="rotation-active-filter" type="button" key={column} onClick={() => clearColumnFilter(column)}>
+                {formatColumnFilterValue(column, filter)} <span aria-hidden="true">x</span>
+              </button>
             ))}
             <span>Ordenado por {sortLabels[sortKey]} {sortDirection === "asc" ? "↑" : "↓"}</span>
           </div>
           <div className="rotation-table-actions">
-            {hasFilters && <button className="button ghost small-button" type="button" onClick={clearFilters}>Limpiar filtros</button>}
+            {activeFilterCount ? <button className="button ghost small-button" type="button" onClick={clearFilters}>Limpiar filtros</button> : null}
+            {!defaultSortActive ? <button className="button ghost small-button" type="button" onClick={resetSort}>Restablecer orden</button> : null}
           </div>
         </div>
 
@@ -511,10 +754,10 @@ export default function RentabilidadMeliPage() {
         }
         .rotation-toolbar {
           display: grid;
-          grid-template-columns: minmax(320px, 1fr) 220px 180px;
+          grid-template-columns: minmax(280px, 1fr) 190px 180px auto auto auto;
           gap: 12px;
           align-items: center;
-          margin-bottom: 12px;
+          margin-bottom: 10px;
         }
         .rotation-toolbar select {
           border: 1px solid #cfe0f6;
@@ -522,9 +765,148 @@ export default function RentabilidadMeliPage() {
           min-height: 40px;
           padding: 0 12px;
           background: #fff;
+        }
+        .rotation-period-row {
+          display: flex;
+          justify-content: flex-end;
+          margin: 0 0 10px;
+        }
+        .rotation-period-row select {
+          min-width: 180px;
+          min-height: 36px;
+          border: 1px solid #cfe0f6;
+          border-radius: 8px;
+          background: #fff;
+          padding: 0 12px;
           color: #0f172a;
           font-size: 13px;
-          font-weight: 600;
+          font-weight: 700;
+        }
+        .rotation-filter-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          min-height: 34px;
+          border: 1px solid #dbe4f0;
+          border-radius: 999px;
+          background: #fff;
+          padding: 0 11px;
+          font-weight: 700;
+          color: #334155;
+          white-space: nowrap;
+        }
+        .rotation-filter-chip svg {
+          width: 13px;
+          height: 13px;
+          color: #1d4ed8;
+        }
+        .rotation-filter-chip.active {
+          border-color: #bfdbfe;
+          background: #eff6ff;
+          color: #1d4ed8;
+        }
+        .rotation-advanced-toggle {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          min-height: 36px;
+          border: 1px solid #dbe4f0;
+          border-radius: 9px;
+          background: #fff;
+          color: #2563eb;
+          padding: 0 11px;
+          font-size: 12px;
+          font-weight: 800;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .rotation-advanced-toggle:hover,
+        .rotation-advanced-toggle.active {
+          border-color: #bfdbfe;
+          background: #eff6ff;
+        }
+        .rotation-advanced-toggle svg {
+          width: 14px;
+          height: 14px;
+          stroke-width: 1.9;
+        }
+        .rotation-advanced-panel {
+          display: grid;
+          gap: 12px;
+          margin: 0 0 12px;
+          padding: 12px;
+          border: 1px solid #dbe6f4;
+          border-radius: 10px;
+          background: #f8fafc;
+        }
+        .rotation-advanced-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .rotation-advanced-field {
+          display: grid;
+          gap: 7px;
+          min-width: 0;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          background: #fff;
+          padding: 10px;
+        }
+        .rotation-advanced-field.active {
+          border-color: #bfdbfe;
+          background: #f8fbff;
+        }
+        .rotation-advanced-field-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          color: #0f172a;
+          font-size: 12px;
+          font-weight: 800;
+        }
+        .rotation-advanced-field-head button {
+          all: unset;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          color: #64748b;
+          cursor: pointer;
+        }
+        .rotation-advanced-field-head button:hover {
+          background: #e2e8f0;
+          color: #0f172a;
+        }
+        .rotation-advanced-field label {
+          display: grid;
+          gap: 4px;
+        }
+        .rotation-advanced-field label span {
+          color: #64748b;
+          font-size: 11px;
+          font-weight: 700;
+        }
+        .rotation-advanced-field input,
+        .rotation-advanced-field select {
+          width: 100%;
+          min-height: 34px;
+          border: 1px solid #cfe0f6;
+          border-radius: 8px;
+          padding: 0 9px;
+          background: #fff;
+          color: #0f172a;
+          font-size: 12px;
+          font-variant-numeric: tabular-nums;
+        }
+        .rotation-advanced-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
         }
         .rotation-table-status {
           display: flex;
@@ -573,9 +955,6 @@ export default function RentabilidadMeliPage() {
         .rotation-table-wrap {
           width: 100%;
           overflow-x: auto;
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          background: #fff;
         }
         .rotation-table {
           width: 100%;
@@ -698,44 +1077,55 @@ export default function RentabilidadMeliPage() {
         .net-profit-cell {
           color: #1d4ed8;
         }
-        .rotation-sort-trigger {
+        :global(.rotation-page .rotation-sort-trigger) {
+          all: unset;
+          appearance: none !important;
+          -webkit-appearance: none !important;
           display: inline-flex;
           align-items: center;
-          justify-content: flex-start;
+          justify-content: inherit;
           gap: 4px;
-          width: 100%;
-          border: 0;
-          background: transparent;
+          width: auto;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
           color: inherit;
           font: inherit;
-          font-size: 11px;
-          font-weight: 800;
+          font-size: inherit;
+          font-weight: inherit;
+          min-height: 0 !important;
+          height: auto !important;
           line-height: 1.2;
-          padding: 0;
+          padding: 2px 0 !important;
           text-align: inherit;
-          text-transform: uppercase;
           cursor: pointer;
+          white-space: nowrap;
+        }
+        :global(.rotation-page .rotation-sort-trigger:hover) {
+          color: #2563eb;
+        }
+        :global(.rotation-page .rotation-sort-trigger.active) {
+          color: #1d4ed8;
         }
         .numeric-header .rotation-sort-trigger,
         .date-header .rotation-sort-trigger {
           justify-content: flex-end;
         }
-        .rotation-sort-trigger svg {
+        :global(.rotation-page .rotation-sort-trigger svg) {
           width: 12px;
           height: 12px;
           flex: 0 0 12px;
-          color: #2563eb;
-          stroke-width: 2;
+          stroke-width: 1.7;
         }
-        .rotation-sort-trigger .idle-sort-icon {
-          color: #94a3b8;
+        :global(.rotation-page .rotation-sort-trigger .idle-sort-icon) {
+          width: 0;
           opacity: 0;
+          transition: opacity 0.12s ease, width 0.12s ease;
         }
-        .rotation-sort-trigger:hover .idle-sort-icon {
-          opacity: 1;
-        }
-        .rotation-sort-trigger.active {
-          color: #2563eb;
+        :global(.rotation-page .rotation-sort-trigger:hover .idle-sort-icon) {
+          width: 12px;
+          opacity: 0.55;
         }
         .empty-state {
           display: flex;
@@ -752,6 +1142,22 @@ export default function RentabilidadMeliPage() {
           }
           .rotation-toolbar {
             grid-template-columns: 1fr;
+          }
+          .rotation-toolbar > * {
+            min-width: 0;
+          }
+          .rotation-table-status {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+          .rotation-advanced-grid {
+            grid-template-columns: 1fr;
+          }
+          .rotation-period-row {
+            justify-content: stretch;
+          }
+          .rotation-period-row select {
+            width: 100%;
           }
         }
         @media (max-width: 620px) {
