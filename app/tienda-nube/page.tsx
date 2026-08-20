@@ -330,7 +330,7 @@ export default function TiendaNubePage() {
           margin: null,
           netProfit: null,
           status: "unlinked" as const,
-          statusLabel: "Sin SKU local",
+          statusLabel: sku ? "Sin producto local" : "Sin SKU TN",
         };
       });
 
@@ -514,7 +514,7 @@ export default function TiendaNubePage() {
         <article className="card rentabilidad-kpi-card missing">
           <span>Faltan en TN</span>
           <strong>{metrics.missing}</strong>
-          <small>{metrics.unlinked} sin SKU local</small>
+          <small>{metrics.unlinked} sin producto local</small>
         </article>
       </section>
 
@@ -532,7 +532,7 @@ export default function TiendaNubePage() {
             <option value="">Todos los estados</option>
             <option value="needs_price">Revisar precio</option>
             <option value="missing">Falta en TN</option>
-            <option value="unlinked">Sin SKU local</option>
+            <option value="unlinked">Sin producto local</option>
             <option value="ok">OK</option>
           </select>
           <label className={`rotation-filter-chip ${onlyWithStock ? "active" : ""}`}>
@@ -609,7 +609,7 @@ export default function TiendaNubePage() {
                           Crear
                         </button>
                       )}
-                      {row.status === "unlinked" && <AlertTriangle size={18} className="tn-warning-icon" aria-label="Sin SKU local" />}
+                      {row.status === "unlinked" && <AlertTriangle size={18} className="tn-warning-icon" aria-label={row.statusLabel} />}
                     </div>
                   </td>
                 </tr>
