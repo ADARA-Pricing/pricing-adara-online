@@ -58,6 +58,7 @@ export async function exchangeTiendanubeCodeForToken(code: string) {
     body: new URLSearchParams({
       client_id: appId,
       client_secret: clientSecret,
+      grant_type: "authorization_code",
       code,
     }),
   });
@@ -83,7 +84,7 @@ export async function tiendanubeFetch(path: string, account: TiendanubeAccount, 
       signal: init?.signal || controller.signal,
       headers: {
         ...(init?.headers || {}),
-        Authorization: `Bearer ${account.access_token}`,
+        Authentication: `bearer ${account.access_token}`,
         Accept: "application/json",
         "Content-Type": "application/json",
         "User-Agent": userAgent,
