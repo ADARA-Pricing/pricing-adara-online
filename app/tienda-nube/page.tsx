@@ -27,6 +27,8 @@ type StatusFilter = "" | "ok" | "needs_price" | "missing" | "unlinked";
 
 type TnStatus = {
   connected: boolean;
+  configured?: boolean;
+  missingConfig?: string[];
   account?: {
     store_id: number;
     store_name?: string | null;
@@ -420,6 +422,11 @@ export default function TiendaNubePage() {
                 <RefreshCw size={16} aria-hidden="true" />
                 {syncing ? "Sincronizando..." : "Sincronizar TN"}
               </button>
+            ) : status?.configured === false ? (
+              <button type="button" className="button" disabled title="Faltan credenciales de Tienda Nube">
+                <Upload size={16} aria-hidden="true" />
+                Credenciales pendientes
+              </button>
             ) : (
               <a className="button" href="/api/tiendanube/connect">
                 <Upload size={16} aria-hidden="true" />
@@ -432,6 +439,12 @@ export default function TiendaNubePage() {
 
       {error && <div className="alert error">{error}</div>}
       {message && <div className="alert success">{message}</div>}
+      {status && status.configured === false && (
+        <div className="alert warning tn-setup-alert">
+          Para conectar Tienda Nube faltan variables de entorno: <strong>{(status.missingConfig || []).join(", ")}</strong>.
+          Configuralas en el deploy y volvé a abrir esta pantalla.
+        </div>
+      )}
 
       <section className="rentabilidad-kpi-grid tn-kpis">
         <article className="card rentabilidad-kpi-card promo">

@@ -12309,6 +12309,10 @@ body {
   margin-bottom: 16px;
 }
 
+.tienda-nube-page .tn-setup-alert {
+  margin-bottom: 16px;
+}
+
 .tienda-nube-page .rentabilidad-filter-grid {
   grid-template-columns: minmax(340px, 1fr) 240px 210px;
   align-items: center;

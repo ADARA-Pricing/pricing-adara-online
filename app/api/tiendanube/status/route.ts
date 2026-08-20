@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/serverAuth";
-import { getConnectedTiendanubeAccount } from "@/lib/tiendanube";
+import { getConnectedTiendanubeAccount, tiendanubeConfigStatus } from "@/lib/tiendanube";
 
 export async function GET() {
   try {
     await requireApiUser();
+    const config = tiendanubeConfigStatus();
     const account = await getConnectedTiendanubeAccount();
     return NextResponse.json({
       connected: Boolean(account),
+      configured: config.configured,
+      missingConfig: config.missing,
       account: account
         ? {
             store_id: account.store_id,

@@ -21,12 +21,25 @@ export function tiendanubeAppConfig() {
   const appId = process.env.TIENDANUBE_APP_ID || process.env.TIENDANUBE_CLIENT_ID;
   const clientSecret = process.env.TIENDANUBE_CLIENT_SECRET;
   const userAgent = process.env.TIENDANUBE_USER_AGENT || "ADARA Pricing (sistemas@adaragroup.com.ar)";
+  const { missing } = tiendanubeConfigStatus();
 
-  if (!appId || !clientSecret) {
-    throw new Error("Faltan TIENDANUBE_APP_ID y TIENDANUBE_CLIENT_SECRET.");
-  }
+  if (missing.length) throw new Error(`Faltan ${missing.join(" y ")}.`);
 
-  return { appId, clientSecret, userAgent };
+  return { appId: appId as string, clientSecret: clientSecret as string, userAgent };
+}
+
+export function tiendanubeConfigStatus() {
+  const appId = process.env.TIENDANUBE_APP_ID || process.env.TIENDANUBE_CLIENT_ID;
+  const clientSecret = process.env.TIENDANUBE_CLIENT_SECRET;
+  const missing = [
+    !appId ? "TIENDANUBE_APP_ID" : "",
+    !clientSecret ? "TIENDANUBE_CLIENT_SECRET" : "",
+  ].filter(Boolean);
+
+  return {
+    configured: missing.length === 0,
+    missing,
+  };
 }
 
 export function tiendanubeAuthUrl() {
