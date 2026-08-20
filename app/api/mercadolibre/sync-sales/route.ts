@@ -73,20 +73,63 @@ function categoryFeeForProduct(product: Pick<Product, "category">, fees: Mercado
   return fees.find((item) => item.active && item.category?.toLowerCase() === (product.category || "").toLowerCase()) || null;
 }
 
+type SalesPublication = Pick<
+  MercadoLibreShippingCost,
+  | "product_id"
+  | "sku"
+  | "meli_item_id"
+  | "meli_title"
+  | "fixed_fee_amount"
+  | "shipping_cost_amount"
+  | "free_shipping"
+  | "meli_price"
+  | "meli_promo_price"
+  | "meli_promo_status"
+  | "meli_financing_fee_rate"
+  | "meli_installments_text"
+>;
+
+function publicationSalePrice(publication: SalesPublication) {
+  const promoActive = publication.meli_promo_price && /started|active/i.test(publication.meli_promo_status || "");
+  return Number((promoActive ? publication.meli_promo_price : publication.meli_price) || 0);
+}
+
+function isOnePayPublication(publication: SalesPublication) {
+  const text = `${publication.meli_installments_text || ""}`.toLowerCase();
+  return Number(publication.meli_financing_fee_rate || 0) === 0 || text.includes("1 pago") || text.includes("clásica") || text.includes("clasica");
+}
+
+function onePayReferencePrice(sku: string, unitPrice: number, publication: SalesPublication | null, publicationsBySku: Map<string, SalesPublication[]>) {
+  const skuPublications = publicationsBySku.get(sku) || [];
+  const onePayPrices = skuPublications
+    .filter(isOnePayPublication)
+    .map(publicationSalePrice)
+    .filter((price) => price > 0);
+  if (onePayPrices.length) return Math.min(...onePayPrices);
+
+  const financingRate = Number(publication?.meli_financing_fee_rate || 0);
+  if (unitPrice > 0 && financingRate > 0) return unitPrice / (1 + financingRate / 100);
+  return unitPrice;
+}
+
 function normalizedProfitability({
   product,
   publication,
+  publicationsBySku,
   categoryFee,
   taxes,
   marginSetting,
+  sku,
   unitPrice,
   quantity,
 }: {
   product: Product | null;
-  publication: Pick<MercadoLibreShippingCost, "fixed_fee_amount" | "shipping_cost_amount" | "free_shipping"> | null;
+  publication: SalesPublication | null;
+  publicationsBySku: Map<string, SalesPublication[]>;
   categoryFee: MercadoLibreCategoryFee | null;
   taxes: TaxSettings;
   marginSetting: ProductChannelMargin | null;
+  sku: string;
   unitPrice: number;
   quantity: number;
 }) {
@@ -99,9 +142,15 @@ function normalizedProfitability({
     };
   }
 
-  const result = calculatePriceSummary(
+  const actualOption = {
+    ...mercadoLibreClassicOption(),
+    code: "ML-ACTUAL",
+    name: "MercadoLibre venta real",
+    financing_fee_rate: Number(publication?.meli_financing_fee_rate || 0),
+  };
+  const actualResult = calculatePriceSummary(
     product,
-    mercadoLibreClassicOption(),
+    actualOption,
     categoryFee,
     taxes,
     publication as MercadoLibreShippingCost | null,
@@ -130,21 +179,24 @@ function normalizedProfitability({
     incomeTaxAmount?: number | null;
     error?: string | null;
   };
+  const referencePrice = onePayReferencePrice(sku, unitPrice, publication, publicationsBySku);
+  const referenceNetSalePrice = referencePrice / (1 + Number((marginSetting?.sale_applies_vat ?? true) ? product.vat_rate || 21 : 0) / 100);
+  const actualNetProfit = Number(actualResult.netProfit || 0);
 
   return {
     normalized_option_code: "MC",
-    normalized_unit_price: unitPrice,
-    normalized_net_sale_price: result.valid ? Number(result.netSalePrice || 0) : null,
-    normalized_net_profit: result.valid ? Number(result.netProfit || 0) : null,
-    normalized_total_net_profit: result.valid ? Number(result.netProfit || 0) * quantity : null,
-    normalized_margin_on_net_sale: result.valid ? Number(result.marginOnNetSale || 0) : null,
-    normalized_margin_on_cost: result.valid ? Number(result.marginOnCost || 0) : null,
-    normalized_cost_for_profit: result.valid ? Number(result.costForProfit || 0) : null,
-    normalized_marketplace_fee_amount: result.valid ? Number(result.marketplaceFeeAmount || 0) : null,
-    normalized_shipping_cost_amount: result.valid ? Number(result.shippingCostAmount || 0) : null,
-    normalized_fixed_fee_amount: result.valid ? Number(result.fixedFeeAmount || 0) : null,
-    normalized_income_tax_amount: result.valid ? Number(result.incomeTaxAmount || 0) : null,
-    normalized_profit_error: result.valid ? null : result.error || "No se pudo calcular rentabilidad normalizada.",
+    normalized_unit_price: referencePrice,
+    normalized_net_sale_price: actualResult.valid ? referenceNetSalePrice : null,
+    normalized_net_profit: actualResult.valid ? actualNetProfit : null,
+    normalized_total_net_profit: actualResult.valid ? actualNetProfit * quantity : null,
+    normalized_margin_on_net_sale: actualResult.valid && referenceNetSalePrice > 0 ? (actualNetProfit / referenceNetSalePrice) * 100 : null,
+    normalized_margin_on_cost: actualResult.valid ? Number(actualResult.marginOnCost || 0) : null,
+    normalized_cost_for_profit: actualResult.valid ? Number(actualResult.costForProfit || 0) : null,
+    normalized_marketplace_fee_amount: actualResult.valid ? Number(actualResult.marketplaceFeeAmount || 0) : null,
+    normalized_shipping_cost_amount: actualResult.valid ? Number(actualResult.shippingCostAmount || 0) : null,
+    normalized_fixed_fee_amount: actualResult.valid ? Number(actualResult.fixedFeeAmount || 0) : null,
+    normalized_income_tax_amount: actualResult.valid ? Number(actualResult.incomeTaxAmount || 0) : null,
+    normalized_profit_error: actualResult.valid ? null : actualResult.error || "No se pudo calcular rentabilidad normalizada.",
     profitability_calculated_at: new Date().toISOString(),
   };
 }
@@ -209,7 +261,7 @@ export async function POST(request: Request) {
       supabase.from("products").select("*").eq("status", "active"),
       supabase
         .from("mercadolibre_shipping_costs")
-        .select("product_id, sku, meli_item_id, meli_title, fixed_fee_amount, shipping_cost_amount, free_shipping")
+        .select("product_id, sku, meli_item_id, meli_title, fixed_fee_amount, shipping_cost_amount, free_shipping, meli_price, meli_promo_price, meli_promo_status, meli_financing_fee_rate, meli_installments_text")
         .eq("active", true),
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
       supabase.from("tax_settings").select("*").eq("key", "default").maybeSingle(),
@@ -223,16 +275,19 @@ export async function POST(request: Request) {
     if (marginsError) throw new Error(marginsError.message);
 
     const products = (productsData || []) as Product[];
-    const publications = (publicationsData || []) as Pick<
-      MercadoLibreShippingCost,
-      "product_id" | "sku" | "meli_item_id" | "meli_title" | "fixed_fee_amount" | "shipping_cost_amount" | "free_shipping"
-    >[];
+    const publications = (publicationsData || []) as SalesPublication[];
     const categoryFees = (categoryFeesData || []) as MercadoLibreCategoryFee[];
     const taxes = (taxesData || defaultTaxSettings()) as TaxSettings;
     const margins = (marginsData || []) as ProductChannelMargin[];
     const productBySku = mapBySku(products);
     const productById = new Map(products.filter((product) => product.id).map((product) => [String(product.id), product]));
     const publicationByItemId = new Map(publications.filter((item) => item.meli_item_id).map((item) => [String(item.meli_item_id), item]));
+    const publicationsBySku = new Map<string, SalesPublication[]>();
+    publications.forEach((publication) => {
+      const sku = normalizeSku(publication.sku || productById.get(String(publication.product_id))?.sku || "");
+      if (!sku) return;
+      publicationsBySku.set(sku, [...(publicationsBySku.get(sku) || []), publication]);
+    });
     const marginByProductAndChannel = new Map(margins.map((item) => [marginKey(item.product_id, item.channel_code), item]));
 
     const rowsByKey = new Map<string, Record<string, unknown>>();
@@ -277,9 +332,11 @@ export async function POST(request: Request) {
             const profitability = normalizedProfitability({
               product,
               publication: publication || null,
+              publicationsBySku,
               categoryFee: product ? categoryFeeForProduct(product, categoryFees) : null,
               taxes,
               marginSetting: product ? marginByProductAndChannel.get(marginKey(product.id, "MC")) || null : null,
+              sku,
               unitPrice,
               quantity,
             });
