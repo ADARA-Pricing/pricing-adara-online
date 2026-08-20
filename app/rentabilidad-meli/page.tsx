@@ -62,6 +62,18 @@ function marginClass(value: number | null) {
   return "positive-money";
 }
 
+const sortLabels: Record<SortKey, string> = {
+  sku: "SKU",
+  productName: "Producto",
+  units: "Unidades",
+  revenue: "Facturación",
+  netProfit: "Neto normalizado",
+  margin: "Margen",
+  stock: "Stock",
+  lastSale: "Última venta",
+  activePublications: "MLA",
+};
+
 function RentabilityThumbnail({ src, label }: { src: string | null; label: string }) {
   const [failed, setFailed] = useState(false);
   return (
@@ -286,6 +298,11 @@ export default function RentabilidadMeliPage() {
   }
 
   const hasFilters = Boolean(query.trim() || categoryFilter);
+  const activeFilterEntries = [
+    query.trim() ? { key: "query", label: `Búsqueda "${query.trim()}"`, clear: () => setQuery("") } : null,
+    categoryFilter ? { key: "category", label: `Categoría ${categoryFilter}`, clear: () => setCategoryFilter("") } : null,
+    { key: "period", label: `Últimos ${period} días`, clear: null },
+  ].filter(Boolean) as Array<{ key: string; label: string; clear: (() => void) | null }>;
 
   return (
     <main className="page rotation-page">
@@ -333,24 +350,36 @@ export default function RentabilidadMeliPage() {
             <Search aria-hidden="true" />
             <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o categoría" />
           </label>
-          <select value={period} onChange={(event) => setPeriod(Number(event.target.value) as Period)}>
-            <option value={7}>Últimos 7 días</option>
-            <option value={30}>Últimos 30 días</option>
-            <option value={60}>Últimos 60 días</option>
-          </select>
           <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
             <option value="">Todas las categorías</option>
             {categories.map((category) => (
               <option value={category} key={category}>{category}</option>
             ))}
           </select>
+          <select value={period} onChange={(event) => setPeriod(Number(event.target.value) as Period)}>
+            <option value={7}>Últimos 7 días</option>
+            <option value={30}>Últimos 30 días</option>
+            <option value={60}>Últimos 60 días</option>
+          </select>
         </div>
 
-        <div className="rentability-table-status">
-          <span>{hasFilters ? `${filteredRows.length} de ${soldRows.length} productos` : `${soldRows.length} productos`}</span>
-          {hasFilters && (
-            <button type="button" onClick={clearFilters}>Limpiar filtros</button>
-          )}
+        <div className="rotation-table-status">
+          <div className="rotation-active-context">
+            <span>{filteredRows.length} de {soldRows.length} productos</span>
+            {activeFilterEntries.map((filter) => (
+              filter.clear ? (
+                <button className="rotation-active-filter" type="button" key={filter.key} onClick={filter.clear}>
+                  {filter.label} <span aria-hidden="true">x</span>
+                </button>
+              ) : (
+                <span className="rotation-active-filter passive" key={filter.key}>{filter.label}</span>
+              )
+            ))}
+            <span>Ordenado por {sortLabels[sortKey]} {sortDirection === "asc" ? "↑" : "↓"}</span>
+          </div>
+          <div className="rotation-table-actions">
+            {hasFilters && <button className="button ghost small-button" type="button" onClick={clearFilters}>Limpiar filtros</button>}
+          </div>
         </div>
 
         <div className="rotation-table-wrap">
@@ -482,7 +511,7 @@ export default function RentabilidadMeliPage() {
         }
         .rotation-toolbar {
           display: grid;
-          grid-template-columns: minmax(320px, 1fr) 180px 220px;
+          grid-template-columns: minmax(320px, 1fr) 220px 180px;
           gap: 12px;
           align-items: center;
           margin-bottom: 12px;
@@ -497,23 +526,49 @@ export default function RentabilidadMeliPage() {
           font-size: 13px;
           font-weight: 600;
         }
-        .rentability-table-status {
+        .rotation-table-status {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
-          margin: 4px 0 12px;
-          color: #4c6280;
+          gap: 12px;
+          color: #64748b;
           font-size: 12px;
           font-weight: 700;
+          margin-bottom: 10px;
         }
-        .rentability-table-status button {
-          border: 0;
-          background: transparent;
-          color: #2563eb;
-          font-size: 12px;
+        .rotation-active-context {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          flex-wrap: wrap;
+          min-width: 0;
+        }
+        .rotation-active-filter {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          min-height: 24px;
+          border: 1px solid #bfdbfe;
+          border-radius: 999px;
+          background: #eff6ff;
+          color: #1d4ed8;
+          padding: 0 8px;
+          font-size: 11px;
           font-weight: 800;
           cursor: pointer;
+        }
+        .rotation-active-filter.passive {
+          cursor: default;
+        }
+        .rotation-active-filter span {
+          color: inherit;
+          font-size: 12px;
+          margin: 0;
+        }
+        .rotation-table-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
         }
         .rotation-table-wrap {
           width: 100%;
