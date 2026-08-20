@@ -166,6 +166,25 @@ function dateWindows(fromIso: string, toIso: string, chunkDays: number) {
   return result;
 }
 
+function hasDetailedOrderData(order: MeliOrder) {
+  if (order.payments?.some((payment) => payment.installments || payment.payment_method_id)) return true;
+  return (order.order_items || []).some((item) =>
+    item.sale_fee !== undefined ||
+    item.listing_type_id !== undefined ||
+    item.gross_price !== undefined,
+  );
+}
+
+async function detailedOrder(order: MeliOrder, account: Awaited<ReturnType<typeof getConnectedMeliAccount>>) {
+  const orderId = asString(order.id);
+  if (!orderId || hasDetailedOrderData(order)) return order;
+  try {
+    return (await meliFetch(`/orders/${orderId}`, account)) as MeliOrder;
+  } catch {
+    return order;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const account = await getConnectedMeliAccount();
@@ -237,8 +256,9 @@ export async function POST(request: Request) {
         const orders = (Array.isArray(data?.results) ? data.results : []) as MeliOrder[];
         scanned += orders.length;
 
-        for (const order of orders) {
-          const orderId = asString(order.id);
+        for (const searchOrder of orders) {
+          const order = await detailedOrder(searchOrder, account);
+          const orderId = asString(order.id || searchOrder.id);
           if (!orderId || !order.date_created) continue;
 
           for (const orderItem of order.order_items || []) {
