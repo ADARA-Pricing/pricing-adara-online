@@ -1,21 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, Calculator, RefreshCw, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChartNoAxesCombined, RefreshCw, Search } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import { moneyWithCents, percent } from "@/lib/pricing";
 import type { MercadoLibreOrderItem, MercadoLibreShippingCost, Product } from "@/lib/types";
 
 type Period = 7 | 30 | 60;
-type SortKey = "sku" | "productName" | "units" | "revenue" | "netProfit" | "margin" | "stock" | "lastSale";
+type SortKey = "sku" | "productName" | "units" | "revenue" | "netProfit" | "margin" | "stock" | "lastSale" | "activePublications";
 type SortDirection = "asc" | "desc";
 
 type ProfitabilityRow = {
   sku: string;
   productName: string;
   category?: string | null;
+  thumbnail: string | null;
   stock: number;
   activePublications: number;
   units: number;
@@ -43,9 +44,31 @@ function shortDate(value?: string | null) {
   return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit" }).format(new Date(value));
 }
 
-function sortIcon(key: SortKey, sortKey: SortKey, direction: SortDirection) {
-  if (key !== sortKey) return <ArrowUpDown aria-hidden="true" />;
-  return direction === "asc" ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />;
+function formatUnits(value: number) {
+  return new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(value);
+}
+
+function productImage(publications: MercadoLibreShippingCost[]) {
+  return publications.find((publication) => Boolean(publication.meli_thumbnail))?.meli_thumbnail || null;
+}
+
+function productInitial(name: string, sku: string) {
+  return (name || sku || "P").slice(0, 2).toUpperCase();
+}
+
+function marginClass(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "";
+  if (value < 0) return "negative-money";
+  return "positive-money";
+}
+
+function RentabilityThumbnail({ src, label }: { src: string | null; label: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="rotation-product-thumb">
+      {src && !failed ? <img src={src} alt="" onError={() => setFailed(true)} /> : label}
+    </div>
+  );
 }
 
 export default function RentabilidadMeliPage() {
@@ -56,6 +79,7 @@ export default function RentabilidadMeliPage() {
   const [sales, setSales] = useState<MercadoLibreOrderItem[]>([]);
   const [period, setPeriod] = useState<Period>(30);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("netProfit");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [loading, setLoading] = useState(true);
@@ -180,6 +204,7 @@ export default function RentabilidadMeliPage() {
         sku,
         productName: product.name,
         category: product.category,
+        thumbnail: productImage(skuPublications),
         stock: skuPublications.length ? stockFromMl : numberValue(product.stock),
         activePublications: skuPublications.length,
         units,
@@ -194,12 +219,19 @@ export default function RentabilidadMeliPage() {
     });
   }, [products, publications, sales, period]);
 
+  const categories = useMemo(() => {
+    return [...new Set(rows.map((row) => row.category).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "es"));
+  }, [rows]);
+
+  const soldRows = useMemo(() => rows.filter((row) => row.units > 0), [rows]);
+
   const filteredRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const multiplier = sortDirection === "asc" ? 1 : -1;
     return rows
       .filter((row) => row.units > 0)
       .filter((row) => !needle || `${row.sku} ${row.productName} ${row.category || ""}`.toLowerCase().includes(needle))
+      .filter((row) => !categoryFilter || row.category === categoryFilter)
       .sort((a, b) => {
         if (sortKey === "sku" || sortKey === "productName") {
           return String(a[sortKey]).localeCompare(String(b[sortKey]), "es") * multiplier;
@@ -209,7 +241,7 @@ export default function RentabilidadMeliPage() {
         }
         return (numberValue(a[sortKey]) - numberValue(b[sortKey])) * multiplier;
       });
-  }, [rows, query, sortKey, sortDirection]);
+  }, [rows, query, categoryFilter, sortKey, sortDirection]);
 
   const totals = useMemo(() => {
     const units = filteredRows.reduce((total, row) => total + row.units, 0);
@@ -234,16 +266,37 @@ export default function RentabilidadMeliPage() {
     setSortDirection(key === "sku" || key === "productName" ? "asc" : "desc");
   }
 
+  function SortIcon({ column }: { column: SortKey }) {
+    if (sortKey !== column) return <ArrowUpDown className="idle-sort-icon" aria-hidden="true" />;
+    return sortDirection === "asc" ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />;
+  }
+
+  function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+    return (
+      <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+        {children}
+        <SortIcon column={column} />
+      </button>
+    );
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setCategoryFilter("");
+  }
+
+  const hasFilters = Boolean(query.trim() || categoryFilter);
+
   return (
     <main className="page rotation-page">
       <PageHero
         title="Rentabilidad ML"
         description="Margen promedio por producto normalizado a MercadoLibre 1 pago."
-        icon={<Calculator aria-hidden="true" />}
+        icon={<ChartNoAxesCombined aria-hidden="true" />}
         actions={(
-          <button className="button" type="button" onClick={syncSales} disabled={syncing || loading}>
+          <button className="button rentability-sync-button" type="button" onClick={syncSales} disabled={syncing || loading}>
             <RefreshCw aria-hidden="true" />
-            {syncing ? "Sincronizando..." : "Sincronizar ventas ML"}
+            {syncing ? "Sincronizando..." : "Sincronizar ventas"}
           </button>
         )}
       />
@@ -254,12 +307,12 @@ export default function RentabilidadMeliPage() {
       <section className="rotation-summary">
         <article className="kpi-card">
           <span className="kpi-label">Productos vendidos</span>
-          <strong className="kpi-value">{totals.products}</strong>
-          <small className="kpi-meta">Ultimos {period} dias</small>
+          <strong className="kpi-value">{formatUnits(totals.products)}</strong>
+          <small className="kpi-meta">Últimos {period} días</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Unidades</span>
-          <strong className="kpi-value">{totals.units}</strong>
+          <strong className="kpi-value">{formatUnits(totals.units)}</strong>
           <small className="kpi-meta">Vendidas</small>
         </article>
         <article className="kpi-card">
@@ -278,59 +331,380 @@ export default function RentabilidadMeliPage() {
         <div className="rotation-toolbar">
           <label className="search-control">
             <Search aria-hidden="true" />
-            <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o categoria" />
+            <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o categoría" />
           </label>
           <select value={period} onChange={(event) => setPeriod(Number(event.target.value) as Period)}>
-            <option value={7}>Ultimos 7 dias</option>
-            <option value={30}>Ultimos 30 dias</option>
-            <option value={60}>Ultimos 60 dias</option>
+            <option value={7}>Últimos 7 días</option>
+            <option value={30}>Últimos 30 días</option>
+            <option value={60}>Últimos 60 días</option>
           </select>
+          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+            <option value="">Todas las categorías</option>
+            {categories.map((category) => (
+              <option value={category} key={category}>{category}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="rentability-table-status">
+          <span>{hasFilters ? `${filteredRows.length} de ${soldRows.length} productos` : `${soldRows.length} productos`}</span>
+          {hasFilters && (
+            <button type="button" onClick={clearFilters}>Limpiar filtros</button>
+          )}
         </div>
 
         <div className="rotation-table-wrap">
           <table className="rotation-table">
+            <colgroup>
+              <col className="rentability-col-product" />
+              <col className="rentability-col-small" />
+              <col className="rentability-col-small" />
+              <col className="rentability-col-money" />
+              <col className="rentability-col-money" />
+              <col className="rentability-col-small" />
+              <col className="rentability-col-date" />
+              <col className="rentability-col-small" />
+            </colgroup>
             <thead>
               <tr>
                 <th className="sticky-product-column">
-                  <button type="button" onClick={() => toggleSort("productName")}>Producto {sortIcon("productName", sortKey, sortDirection)}</button>
+                  <SortButton column="productName">Producto</SortButton>
                 </th>
-                <th><button type="button" onClick={() => toggleSort("stock")}>Stock {sortIcon("stock", sortKey, sortDirection)}</button></th>
-                <th><button type="button" onClick={() => toggleSort("units")}>Unidades {sortIcon("units", sortKey, sortDirection)}</button></th>
-                <th><button type="button" onClick={() => toggleSort("revenue")}>Facturacion {sortIcon("revenue", sortKey, sortDirection)}</button></th>
-                <th><button type="button" onClick={() => toggleSort("netProfit")}>Neto normalizado {sortIcon("netProfit", sortKey, sortDirection)}</button></th>
-                <th><button type="button" onClick={() => toggleSort("margin")}>Margen {sortIcon("margin", sortKey, sortDirection)}</button></th>
-                <th><button type="button" onClick={() => toggleSort("lastSale")}>Ultima venta {sortIcon("lastSale", sortKey, sortDirection)}</button></th>
-                <th>MLA</th>
+                <th className="numeric-header"><SortButton column="stock">Stock</SortButton></th>
+                <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+                <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+                <th className="numeric-header"><SortButton column="netProfit">Neto normalizado</SortButton></th>
+                <th className="numeric-header"><SortButton column="margin">Margen</SortButton></th>
+                <th className="date-header"><SortButton column="lastSale">Última venta</SortButton></th>
+                <th className="numeric-header"><SortButton column="activePublications">MLA</SortButton></th>
               </tr>
             </thead>
             <tbody>
               {filteredRows.map((row) => (
                 <tr key={row.sku}>
                   <td>
-                    <strong>{row.productName}</strong>
-                    <span>{row.sku}{row.category ? ` · ${row.category}` : ""}</span>
+                    <div className="rotation-product-cell">
+                      <RentabilityThumbnail src={row.thumbnail} label={productInitial(row.productName, row.sku)} />
+                      <div className="rotation-product-text">
+                        <strong>{row.productName}</strong>
+                        <span>{row.sku}{row.category ? ` · ${row.category}` : ""}</span>
+                      </div>
+                    </div>
                   </td>
-                  <td className="numeric">{row.stock}</td>
-                  <td className="numeric">{row.units}</td>
-                  <td className="numeric">{moneyWithCents(row.revenue)}<span>Prom. {moneyWithCents(row.avgPrice)}</span></td>
-                  <td className={`numeric ${row.netProfit < 0 ? "negative-money" : "positive-money"}`}>{moneyWithCents(row.netProfit)}</td>
-                  <td className={`numeric ${numberValue(row.margin) < 0 ? "negative-money" : "positive-money"}`}>
+                  <td className={`numeric ${row.stock <= 0 ? "negative-money" : ""}`}>{formatUnits(row.stock)}</td>
+                  <td className="numeric">{formatUnits(row.units)}</td>
+                  <td className="numeric money-stack">
+                    <strong>{moneyWithCents(row.revenue)}</strong>
+                    <span>Prom. {moneyWithCents(row.avgPrice)}</span>
+                  </td>
+                  <td className="numeric net-profit-cell">{moneyWithCents(row.netProfit)}</td>
+                  <td className={`numeric ${marginClass(row.margin)}`}>
                     {percent(row.margin)}
                     {row.errors > 0 && <span>{row.errors} sin calculo</span>}
                   </td>
                   <td className="date-cell">{shortDate(row.lastSale)}</td>
-                  <td className="numeric">{row.activePublications}</td>
+                  <td className="numeric">{formatUnits(row.activePublications)}</td>
                 </tr>
               ))}
               {!filteredRows.length && (
                 <tr>
-                  <td colSpan={8}>No hay ventas para el periodo seleccionado.</td>
+                  <td colSpan={8}>
+                    <div className="empty-state">No hay ventas para los filtros actuales.</div>
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </section>
+
+      <style jsx>{`
+        .rentability-sync-button {
+          min-height: 40px;
+          white-space: nowrap;
+        }
+        .rotation-summary {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+          margin: 18px 0;
+        }
+        .rotation-summary .kpi-card {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          justify-content: center;
+          min-height: 86px;
+          padding: 14px 16px;
+          border: 1px solid #dbe6f4;
+          border-radius: 12px;
+          background: #fff;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+          gap: 3px;
+        }
+        .rotation-summary .kpi-label,
+        .rotation-summary .kpi-meta {
+          display: block;
+          color: #4c6280;
+          font-size: 12px;
+          font-weight: 600;
+          line-height: 1.25;
+        }
+        .rotation-summary .kpi-value {
+          display: block;
+          color: #020817;
+          font-size: 26px;
+          font-weight: 800;
+          line-height: 1.08;
+          letter-spacing: 0;
+          font-variant-numeric: tabular-nums;
+          white-space: nowrap;
+        }
+        .rotation-sync-info {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin: 12px 0 0;
+          color: #385172;
+          font-size: 13px;
+        }
+        .rotation-sync-info span {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          border: 1px solid #d6e3f5;
+          border-radius: 999px;
+          background: #f8fbff;
+          padding: 7px 10px;
+        }
+        .rotation-card {
+          padding: 18px;
+        }
+        .rotation-toolbar {
+          display: grid;
+          grid-template-columns: minmax(320px, 1fr) 180px 220px;
+          gap: 12px;
+          align-items: center;
+          margin-bottom: 12px;
+        }
+        .rotation-toolbar select {
+          border: 1px solid #cfe0f6;
+          border-radius: 8px;
+          min-height: 40px;
+          padding: 0 12px;
+          background: #fff;
+          color: #0f172a;
+          font-size: 13px;
+          font-weight: 600;
+        }
+        .rentability-table-status {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin: 4px 0 12px;
+          color: #4c6280;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .rentability-table-status button {
+          border: 0;
+          background: transparent;
+          color: #2563eb;
+          font-size: 12px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+        .rotation-table-wrap {
+          width: 100%;
+          overflow-x: auto;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          background: #fff;
+        }
+        .rotation-table {
+          width: 100%;
+          min-width: 1120px;
+          border-collapse: separate;
+          border-spacing: 0;
+          table-layout: fixed;
+        }
+        .rentability-col-product { width: 390px; }
+        .rentability-col-small { width: 104px; }
+        .rentability-col-money { width: 172px; }
+        .rentability-col-date { width: 124px; }
+        .rotation-table thead {
+          background: #f8fafc;
+        }
+        .rotation-table th {
+          height: 40px;
+          border-bottom: 1px solid #e2e8f0;
+          color: #51627a;
+          font-size: 11px;
+          font-weight: 800;
+          line-height: 1.2;
+          padding: 0 12px;
+          text-align: left;
+          text-transform: uppercase;
+          letter-spacing: 0;
+          white-space: nowrap;
+        }
+        .rotation-table th.numeric-header,
+        .rotation-table th.date-header {
+          text-align: right;
+        }
+        .rotation-table td {
+          height: 60px;
+          border-bottom: 1px solid #edf2f7;
+          color: #0f172a;
+          font-size: 13px;
+          padding: 8px 12px;
+          vertical-align: middle;
+        }
+        .rotation-table tbody tr:last-child td {
+          border-bottom: 0;
+        }
+        .rotation-table tbody tr:hover td {
+          background: #f8fbff;
+        }
+        .rotation-table .numeric,
+        .rotation-table .date-cell {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+          white-space: nowrap;
+        }
+        .rotation-table td span {
+          display: block;
+          color: #64748b;
+          font-size: 11px;
+          font-weight: 600;
+          line-height: 1.25;
+          margin-top: 3px;
+        }
+        .rotation-product-cell {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+          min-width: 0;
+        }
+        :global(.rotation-page .rotation-product-thumb) {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px !important;
+          height: 44px !important;
+          min-width: 44px !important;
+          min-height: 44px !important;
+          max-width: 44px !important;
+          max-height: 44px !important;
+          flex: 0 0 44px;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #ffffff;
+          color: #2563eb;
+          font-size: 12px;
+          font-weight: 800;
+          line-height: 1;
+          overflow: hidden;
+        }
+        :global(.rotation-page .rotation-product-thumb img) {
+          display: block;
+          width: 100% !important;
+          height: 100% !important;
+          max-width: 40px !important;
+          max-height: 40px !important;
+          object-fit: contain;
+          flex: 0 0 auto;
+        }
+        .rotation-product-text {
+          min-width: 0;
+        }
+        .rotation-product-text strong {
+          display: -webkit-box;
+          color: #0f172a;
+          font-size: 13px;
+          font-weight: 600;
+          line-height: 1.25;
+          overflow: hidden;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+        .rotation-product-text span {
+          color: #4c6280;
+          font-size: 12px;
+          line-height: 1.25;
+          margin-top: 3px;
+        }
+        .money-stack strong,
+        .net-profit-cell {
+          color: #0f172a;
+          font-weight: 800;
+        }
+        .net-profit-cell {
+          color: #1d4ed8;
+        }
+        .rotation-sort-trigger {
+          display: inline-flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 4px;
+          width: 100%;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          font-size: 11px;
+          font-weight: 800;
+          line-height: 1.2;
+          padding: 0;
+          text-align: inherit;
+          text-transform: uppercase;
+          cursor: pointer;
+        }
+        .numeric-header .rotation-sort-trigger,
+        .date-header .rotation-sort-trigger {
+          justify-content: flex-end;
+        }
+        .rotation-sort-trigger svg {
+          width: 12px;
+          height: 12px;
+          flex: 0 0 12px;
+          color: #2563eb;
+          stroke-width: 2;
+        }
+        .rotation-sort-trigger .idle-sort-icon {
+          color: #94a3b8;
+          opacity: 0;
+        }
+        .rotation-sort-trigger:hover .idle-sort-icon {
+          opacity: 1;
+        }
+        .rotation-sort-trigger.active {
+          color: #2563eb;
+        }
+        .empty-state {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 96px;
+          color: #64748b;
+          font-size: 13px;
+          font-weight: 700;
+        }
+        @media (max-width: 900px) {
+          .rotation-summary {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .rotation-toolbar {
+            grid-template-columns: 1fr;
+          }
+        }
+        @media (max-width: 620px) {
+          .rotation-summary {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </main>
   );
 }
