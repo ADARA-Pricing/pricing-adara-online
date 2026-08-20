@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Database, RefreshCw } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -121,6 +121,11 @@ function daysBetween(from: string) {
   return (Date.now() - date.getTime()) / 86400000;
 }
 
+function shortDate(value?: string | null) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit" }).format(new Date(value));
+}
+
 function stockDaysLabel(value: number | null) {
   if (value === null) return "Sin ventas";
   if (value < 7) return `${value.toFixed(1)} dias`;
@@ -228,6 +233,8 @@ export default function Asesoria360Page() {
   const [draftRows, setDraftRows] = useState<AdvisoryDraftRow[]>([]);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncInfo, setSyncInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function checkSession() {
@@ -302,6 +309,35 @@ export default function Asesoria360Page() {
     else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
   }
 
+  async function syncSales() {
+    setSyncing(true);
+    setError(null);
+    try {
+      const stockResponse = await fetch("/api/mercadolibre/sync-shipping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "shipping" }),
+      });
+      const stockData = await stockResponse.json();
+      if (!stockResponse.ok) throw new Error(stockData?.error || "No se pudo sincronizar stock de publicaciones ML.");
+
+      const response = await fetch("/api/mercadolibre/sync-sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: 60, chunkDays: 7 }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudieron sincronizar ventas.");
+
+      setSyncInfo(`Stock ML: ${stockData.updated || 0} publicaciones actualizadas. Ventas ML: ${data.saved || 0} items guardados, ${data.scanned || 0} ordenes revisadas.`);
+      await loadData();
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : "No se pudieron sincronizar ventas.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   useEffect(() => {
     checkSession();
     loadData();
@@ -345,6 +381,7 @@ export default function Asesoria360Page() {
   }, [installments]);
 
   const productsBySku = useMemo(() => new Map(products.map((product) => [product.sku, product])), [products]);
+  const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
   const publicationsBySku = useMemo(() => {
     const map = new Map<string, MercadoLibreShippingCost[]>();
@@ -456,10 +493,26 @@ export default function Asesoria360Page() {
 
   const advisoryCandidates = useMemo<AdvisoryCandidate[]>(() => {
     const salesBySku = new Map<string, MercadoLibreOrderItem[]>();
+    const publicationSkuByItemId = new Map(
+      publications
+        .filter((publication) => publication.meli_item_id && publication.sku)
+        .map((publication) => [publication.meli_item_id as string, publication.sku as string]),
+    );
+
     sales.forEach((sale) => {
-      const sku = (sale.sku || "").toUpperCase();
-      if (!sku) return;
-      salesBySku.set(sku, [...(salesBySku.get(sku) || []), sale]);
+      const skuKeys = new Set<string>();
+      const saleSku = (sale.sku || "").toUpperCase();
+      if (saleSku) skuKeys.add(saleSku);
+
+      const productSku = sale.product_id ? productsById.get(sale.product_id)?.sku?.toUpperCase() : "";
+      if (productSku) skuKeys.add(productSku);
+
+      const publicationSku = publicationSkuByItemId.get(sale.meli_item_id)?.toUpperCase();
+      if (publicationSku) skuKeys.add(publicationSku);
+
+      skuKeys.forEach((sku) => {
+        salesBySku.set(sku, [...(salesBySku.get(sku) || []), sale]);
+      });
     });
 
     const opportunitiesByItem = new Map<string, MercadoLibrePromotionOpportunity[]>();
@@ -535,13 +588,15 @@ export default function Asesoria360Page() {
         const reasons: string[] = [];
         let score = 0;
         const hasLowMeliContribution = bestMeliContributionRate < 2 && bestMeliContributionAmount < 10000;
+        const hasLowRotation = stock > 0 && (units30 === 0 || stockDays === null || stockDays > 45 || (stock >= 15 && units30 <= 2));
         const needsExtraPromo =
           stock > 0 &&
           (
             !hasActivePromo ||
             publicationsWithMeliContribution === 0 ||
             meliContributionCoverageRatio < 1 ||
-            hasLowMeliContribution
+            hasLowMeliContribution ||
+            hasLowRotation
           );
 
         if (stock > 0) {
@@ -630,7 +685,20 @@ export default function Asesoria360Page() {
       .filter((candidate) => candidate.stock > 0 && candidate.needsExtraPromo && candidate.score > 0)
       .sort((a, b) => b.score - a.score || b.inventoryValue - a.inventoryValue || b.stock - a.stock)
       .slice(0, 12);
-  }, [productGroups, sales, opportunities, targetMargin]);
+  }, [productGroups, sales, productsById, publications, opportunities, targetMargin]);
+
+  const salesCoverage = useMemo(() => {
+    const dates = sales
+      .map((sale) => new Date(sale.order_date).getTime())
+      .filter((time) => Number.isFinite(time))
+      .sort((a, b) => a - b);
+    if (!dates.length) return null;
+    return {
+      first: new Date(dates[0]).toISOString(),
+      last: new Date(dates[dates.length - 1]).toISOString(),
+      count: sales.length,
+    };
+  }, [sales]);
 
   function rowKey(sku: string, date: string) {
     return `${sku}|${date}`;
@@ -719,12 +787,26 @@ export default function Asesoria360Page() {
       <PageHero
         title="Asesoria 360"
         description="Armado semanal de hasta 40 MLA para tarjetas nuevas de descuento."
-        onRefresh={loadData}
-        refreshLabel={loading ? "Actualizando..." : "Actualizar"}
-        refreshDisabled={loading}
+        actions={(
+          <button className="button" type="button" onClick={syncSales} disabled={syncing || loading}>
+            <RefreshCw aria-hidden="true" />
+            {syncing ? "Sincronizando..." : "Sincronizar stock y ventas ML"}
+          </button>
+        )}
       />
 
       {error && <div className="message error">{error}</div>}
+      {(syncInfo || salesCoverage) && (
+        <div className="rotation-sync-info">
+          {syncInfo && <span>{syncInfo}</span>}
+          {salesCoverage && (
+            <span>
+              <Database aria-hidden="true" />
+              Datos cargados: {salesCoverage.count} items vendidos desde {shortDate(salesCoverage.first)} hasta {shortDate(salesCoverage.last)}.
+            </span>
+          )}
+        </div>
+      )}
 
       <section className="card asesoria360-ranking">
         <div className="asesoria360-panel-head">
