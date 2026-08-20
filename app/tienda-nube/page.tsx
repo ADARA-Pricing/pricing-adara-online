@@ -15,6 +15,7 @@ import {
 import type {
   MercadoLibreCategoryFee,
   MercadoLibreInstallmentFee,
+  MercadoLibreShippingCost,
   Product,
   ProductChannelMargin,
   TaxSettings,
@@ -82,6 +83,26 @@ function shortDate(value?: string | null) {
   }).format(new Date(value));
 }
 
+function latestSyncedPublications(publications: MercadoLibreShippingCost[]) {
+  const synced = publications
+    .map((publication) => ({
+      publication,
+      time: new Date(publication.meli_last_sync_at || publication.updated_at || 0).getTime(),
+    }))
+    .filter((item) => Number.isFinite(item.time) && item.time > 0);
+  if (!synced.length) return publications;
+
+  const latest = Math.max(...synced.map((item) => item.time));
+  const syncWindowMs = 10 * 60 * 1000;
+  return synced
+    .filter((item) => latest - item.time <= syncWindowMs)
+    .map((item) => item.publication);
+}
+
+function productImage(publications: MercadoLibreShippingCost[]) {
+  return publications.find((publication) => Boolean(publication.meli_thumbnail))?.meli_thumbnail || null;
+}
+
 function fallbackTiendaNubeOption(): MercadoLibreInstallmentFee {
   return {
     code: "TN",
@@ -115,6 +136,7 @@ export default function TiendaNubePage() {
   const [status, setStatus] = useState<TnStatus | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<TiendanubePublication[]>([]);
+  const [meliPublications, setMeliPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [options, setOptions] = useState<MercadoLibreInstallmentFee[]>([]);
   const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
   const [margins, setMargins] = useState<ProductChannelMargin[]>([]);
@@ -122,6 +144,7 @@ export default function TiendaNubePage() {
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
+  const [onlyWithStock, setOnlyWithStock] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("diff");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [loading, setLoading] = useState(true);
@@ -142,6 +165,7 @@ export default function TiendaNubePage() {
       statusResponse,
       productsResponse,
       publicationsResponse,
+      meliPublicationsResponse,
       optionsResponse,
       categoryFeesResponse,
       marginsResponse,
@@ -150,6 +174,7 @@ export default function TiendaNubePage() {
       fetch("/api/tiendanube/status").then((response) => response.json()),
       supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
       supabase.from("tiendanube_publications").select("*").eq("active", true).order("sku", { ascending: true }),
+      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
       supabase.from("mercadolibre_installment_fees").select("*").eq("active", true),
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
       supabase.from("product_channel_margins").select("*"),
@@ -163,6 +188,8 @@ export default function TiendaNubePage() {
     else setProducts((productsResponse.data || []) as Product[]);
     if (publicationsResponse.error) setError(publicationsResponse.error.message);
     else setPublications((publicationsResponse.data || []) as TiendanubePublication[]);
+    if (meliPublicationsResponse.error) setError(meliPublicationsResponse.error.message);
+    else setMeliPublications((meliPublicationsResponse.data || []) as MercadoLibreShippingCost[]);
     if (optionsResponse.error) setError(optionsResponse.error.message);
     else setOptions((optionsResponse.data || []) as MercadoLibreInstallmentFee[]);
     if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
@@ -198,6 +225,7 @@ export default function TiendaNubePage() {
     const productById = new Map(products.filter((product) => product.id).map((product) => [product.id as string, product]));
     const productBySku = new Map(products.map((product) => [normalizeSku(product.sku), product]));
     const publicationsBySku = new Map<string, TiendanubePublication[]>();
+    const meliPublicationsBySku = new Map<string, MercadoLibreShippingCost[]>();
     const linkedPublicationKeys = new Set<string>();
 
     publications.forEach((publication) => {
@@ -205,10 +233,23 @@ export default function TiendaNubePage() {
       if (!sku) return;
       publicationsBySku.set(sku, [...(publicationsBySku.get(sku) || []), publication]);
     });
+    meliPublications.forEach((publication) => {
+      const product = productById.get(publication.product_id || "");
+      const sku = normalizeSku(publication.sku || product?.sku);
+      if (!sku) return;
+      meliPublicationsBySku.set(sku, [...(meliPublicationsBySku.get(sku) || []), publication]);
+    });
 
     const productRows = products.map((product) => {
       const sku = normalizeSku(product.sku);
       const publication = (publicationsBySku.get(sku) || [])[0] || null;
+      const skuMeliPublications = meliPublicationsBySku.get(sku) || [];
+      const latestMeliPublications = latestSyncedPublications(skuMeliPublications);
+      const activeMeliPublications = latestMeliPublications.filter((item) => item.meli_status === "active");
+      const stockSourcePublications = activeMeliPublications.length ? activeMeliPublications : latestMeliPublications;
+      const stockFromMl = stockSourcePublications.length
+        ? Math.max(...stockSourcePublications.map((item) => numberValue(item.meli_stock)))
+        : 0;
       if (publication?.id) linkedPublicationKeys.add(publication.id);
       const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase()) || null;
       const setting = margins.find((item) => item.product_id === product.id && item.channel_code.toUpperCase() === "TN");
@@ -248,8 +289,8 @@ export default function TiendaNubePage() {
         sku,
         name: product.name,
         category: product.category || null,
-        imageUrl: publication?.image_url || null,
-        stock: numberValue(publication?.stock ?? product.stock),
+        imageUrl: publication?.image_url || productImage(skuMeliPublications),
+        stock: stockSourcePublications.length ? stockFromMl : numberValue(product.stock),
         currentPrice,
         suggestedPrice,
         diff,
@@ -266,6 +307,13 @@ export default function TiendaNubePage() {
       .map((publication) => {
         const sku = normalizeSku(publication.sku);
         const product = sku ? productBySku.get(sku) || null : null;
+        const skuMeliPublications = sku ? meliPublicationsBySku.get(sku) || [] : [];
+        const latestMeliPublications = latestSyncedPublications(skuMeliPublications);
+        const activeMeliPublications = latestMeliPublications.filter((item) => item.meli_status === "active");
+        const stockSourcePublications = activeMeliPublications.length ? activeMeliPublications : latestMeliPublications;
+        const stockFromMl = stockSourcePublications.length
+          ? Math.max(...stockSourcePublications.map((item) => numberValue(item.meli_stock)))
+          : 0;
         return {
           key: `publication-${publication.tiendanube_variant_id}`,
           product,
@@ -273,8 +321,8 @@ export default function TiendaNubePage() {
           sku: sku || "-",
           name: publication.title || "Publicación sin nombre",
           category: product?.category || null,
-          imageUrl: publication.image_url || null,
-          stock: numberValue(publication.stock),
+          imageUrl: publication.image_url || productImage(skuMeliPublications),
+          stock: stockSourcePublications.length ? stockFromMl : numberValue(publication.stock),
           currentPrice: numberValue(publication.promotional_price || publication.price) || null,
           suggestedPrice: null,
           diff: null,
@@ -287,7 +335,7 @@ export default function TiendaNubePage() {
       });
 
     return [...productRows, ...unlinkedRows];
-  }, [categoryFees, margins, products, publications, taxes, tnOption]);
+  }, [categoryFees, margins, meliPublications, products, publications, taxes, tnOption]);
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -295,6 +343,7 @@ export default function TiendaNubePage() {
       .filter((row) => {
         if (categoryFilter && row.category !== categoryFilter) return false;
         if (statusFilter && row.status !== statusFilter) return false;
+        if (onlyWithStock && row.stock <= 0) return false;
         if (!q) return true;
         return `${row.sku} ${row.name} ${row.publication?.tiendanube_product_id || ""} ${row.publication?.tiendanube_variant_id || ""}`.toLowerCase().includes(q);
       })
@@ -315,7 +364,7 @@ export default function TiendaNubePage() {
         if (typeof av === "string" || typeof bv === "string") return String(av).localeCompare(String(bv), "es") * direction;
         return (Number(av) - Number(bv)) * direction;
       });
-  }, [categoryFilter, query, rows, sortDirection, sortKey, statusFilter]);
+  }, [categoryFilter, onlyWithStock, query, rows, sortDirection, sortKey, statusFilter]);
 
   const metrics = useMemo(() => {
     const missing = rows.filter((row) => row.status === "missing").length;
@@ -486,6 +535,11 @@ export default function TiendaNubePage() {
             <option value="unlinked">Sin SKU local</option>
             <option value="ok">OK</option>
           </select>
+          <label className={`rotation-filter-chip ${onlyWithStock ? "active" : ""}`}>
+            <input type="checkbox" checked={onlyWithStock} onChange={(event) => setOnlyWithStock(event.target.checked)} />
+            {onlyWithStock && <Check aria-hidden="true" />}
+            Con stock
+          </label>
         </div>
       </section>
 
