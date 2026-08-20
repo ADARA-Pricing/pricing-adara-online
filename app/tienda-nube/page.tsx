@@ -172,7 +172,7 @@ export default function TiendaNubePage() {
       taxesResponse,
     ] = await Promise.all([
       fetch("/api/tiendanube/status").then((response) => response.json()),
-      supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
+      supabase.from("products").select("*").in("status", ["active", "paused"]).order("sku", { ascending: true }),
       supabase.from("tiendanube_publications").select("*").eq("active", true).order("sku", { ascending: true }),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
       supabase.from("mercadolibre_installment_fees").select("*").eq("active", true),
@@ -240,9 +240,10 @@ export default function TiendaNubePage() {
       meliPublicationsBySku.set(sku, [...(meliPublicationsBySku.get(sku) || []), publication]);
     });
 
-    const productRows = products.map((product) => {
+    const productRows = products.flatMap((product) => {
       const sku = normalizeSku(product.sku);
       const publication = (publicationsBySku.get(sku) || [])[0] || null;
+      if (product.status !== "active" && !publication) return [];
       const skuMeliPublications = meliPublicationsBySku.get(sku) || [];
       const latestMeliPublications = latestSyncedPublications(skuMeliPublications);
       const activeMeliPublications = latestMeliPublications.filter((item) => item.meli_status === "active");
@@ -282,7 +283,7 @@ export default function TiendaNubePage() {
       const needsPrice = diffRate !== null && Math.abs(diffRate) >= 1;
       const status: Row["status"] = publication ? (needsPrice ? "needs_price" : "ok") : "missing";
 
-      return {
+      return [{
         key: `product-${sku}`,
         product,
         publication,
@@ -299,7 +300,7 @@ export default function TiendaNubePage() {
         netProfit: current?.valid ? Number(current.netProfit || 0) : null,
         status,
         statusLabel: status === "ok" ? "OK" : status === "needs_price" ? "Revisar precio" : "Falta en TN",
-      };
+      }];
     });
 
     const unlinkedRows = publications
