@@ -386,7 +386,7 @@ export default function TiendaNubePage() {
     });
   }
 
-  async function syncProducts() {
+  async function syncProducts(successMessage?: string) {
     setSyncing(true);
     setMessage(null);
     setError(null);
@@ -394,7 +394,7 @@ export default function TiendaNubePage() {
       const response = await fetch("/api/tiendanube/sync-products", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudo sincronizar Tienda Nube.");
-      setMessage(`Tienda Nube: ${data.synced || 0} variantes sincronizadas, ${data.linked || 0} vinculadas por SKU.`);
+      setMessage(successMessage || `Tienda Nube: ${data.synced || 0} variantes sincronizadas, ${data.linked || 0} vinculadas por SKU.`);
       await loadData();
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "No se pudo sincronizar Tienda Nube.");
@@ -442,8 +442,12 @@ export default function TiendaNubePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudo crear la publicación.");
-      setMessage(`${row.sku}: producto creado en Tienda Nube como oculto.`);
-      await syncProducts();
+      const extras = [
+        data?.categoryId ? "categoría asignada" : "sin categoría equivalente",
+        data?.imageUrl ? "imagen cargada" : "sin imagen",
+        data?.warning ? `aviso: ${data.warning}` : "",
+      ].filter(Boolean);
+      await syncProducts(`${row.sku}: producto creado en Tienda Nube como oculto (${extras.join(" · ")}).`);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "No se pudo crear la publicación.");
     } finally {
@@ -468,7 +472,7 @@ export default function TiendaNubePage() {
         actions={
           <>
             {status?.connected ? (
-              <button type="button" className="button" onClick={syncProducts} disabled={syncing}>
+              <button type="button" className="button" onClick={() => syncProducts()} disabled={syncing}>
                 <RefreshCw size={16} aria-hidden="true" />
                 {syncing ? "Sincronizando..." : "Sincronizar TN"}
               </button>
