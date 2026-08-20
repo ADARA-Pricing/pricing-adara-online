@@ -12278,3 +12278,236 @@ body {
     justify-content: center;
   }
 }
+
+/* Tienda Nube - alineado visual con Rentabilidad ML */
+.tienda-nube-page .app-page-hero {
+  margin-bottom: 18px;
+}
+
+.tienda-nube-page .page-hero-actions .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tienda-nube-page .tn-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.tienda-nube-page .rentabilidad-kpi-card {
+  min-height: 132px;
+  overflow: hidden;
+}
+
+.tienda-nube-page .rentabilidad-kpi-card strong {
+  overflow-wrap: anywhere;
+}
+
+.tienda-nube-page .rentabilidad-filters-card {
+  margin-bottom: 16px;
+}
+
+.tienda-nube-page .rentabilidad-filter-grid {
+  grid-template-columns: minmax(340px, 1fr) 240px 210px;
+  align-items: center;
+}
+
+.tienda-nube-page .rentabilidad-filter-grid select {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid #cfe0f6;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0 10px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tienda-nube-page .rentabilidad-table-card {
+  overflow: hidden;
+}
+
+.tienda-nube-page .rentabilidad-table-header {
+  align-items: flex-start;
+}
+
+.tienda-nube-page .rentabilidad-table-header p {
+  margin: 0;
+  color: #526580;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tienda-nube-page .tn-table-wrap {
+  overflow-x: auto;
+}
+
+.tienda-nube-page .tn-table {
+  min-width: 1140px;
+  width: 100%;
+}
+
+.tienda-nube-page .tn-table th:first-child {
+  width: 34%;
+}
+
+.tienda-nube-page .tn-table th:nth-child(2) {
+  width: 140px;
+}
+
+.tienda-nube-page .tn-table th:nth-child(3),
+.tienda-nube-page .tn-table th:nth-child(4),
+.tienda-nube-page .tn-table th:nth-child(5),
+.tienda-nube-page .tn-table th:nth-child(6) {
+  width: 140px;
+}
+
+.tienda-nube-page .tn-table th:nth-child(7) {
+  width: 86px;
+}
+
+.tienda-nube-page .tn-table th:nth-child(8) {
+  width: 150px;
+}
+
+.tienda-nube-page .tn-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-transform: inherit;
+}
+
+.tienda-nube-page .tn-product-cell {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 320px;
+}
+
+.tienda-nube-page .tn-product-cell .rotation-product-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid #dbe4f0;
+  background: #f8fafc;
+  color: #1e3a8a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tienda-nube-page .tn-product-cell strong {
+  display: -webkit-box;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.25;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.tienda-nube-page .tn-product-cell span,
+.tienda-nube-page .tn-product-cell small,
+.tienda-nube-page .tn-table .numeric-cell small {
+  display: block;
+  color: #526580;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 3px;
+}
+
+.tienda-nube-page .tn-table .numeric-header,
+.tienda-nube-page .tn-table .numeric-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tienda-nube-page .tn-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 106px;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.tienda-nube-page .tn-status-ok {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.tienda-nube-page .tn-status-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.tienda-nube-page .tn-status-missing {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.tienda-nube-page .tn-status-unlinked {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.tienda-nube-page .tn-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.tienda-nube-page .tn-actions .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px !important;
+  border-radius: 9px !important;
+  padding: 6px 11px !important;
+  font-size: 12px;
+}
+
+.tienda-nube-page .tn-empty {
+  padding: 18px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  text-align: center;
+  font-weight: 700;
+}
+
+@media (max-width: 1260px) {
+  .tienda-nube-page .tn-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tienda-nube-page .rentabilidad-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .tienda-nube-page .tn-kpis,
+  .tienda-nube-page .rentabilidad-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tienda-nube-page .rentabilidad-table-header {
+    flex-direction: column;
+  }
+}

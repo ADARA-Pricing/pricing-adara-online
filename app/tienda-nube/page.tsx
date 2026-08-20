@@ -433,15 +433,31 @@ export default function TiendaNubePage() {
       {error && <div className="alert error">{error}</div>}
       {message && <div className="alert success">{message}</div>}
 
-      <section className="tn-kpis">
-        <div className="kpi-card"><span className="kpi-label">Cuenta</span><strong className="kpi-value">{status?.connected ? `Store ${status.account?.store_id}` : "Sin conectar"}</strong><span className="kpi-meta">{status?.account?.scope || "Permisos pendientes"}</span></div>
-        <div className="kpi-card"><span className="kpi-label">OK</span><strong className="kpi-value">{metrics.ok}</strong><span className="kpi-meta">dentro de tolerancia</span></div>
-        <div className="kpi-card"><span className="kpi-label">Revisar precio</span><strong className="kpi-value">{metrics.needsPrice}</strong><span className="kpi-meta">diferencia mayor a 1%</span></div>
-        <div className="kpi-card"><span className="kpi-label">Faltan en TN</span><strong className="kpi-value">{metrics.missing}</strong><span className="kpi-meta">{metrics.unlinked} sin SKU local</span></div>
+      <section className="rentabilidad-kpi-grid tn-kpis">
+        <article className="card rentabilidad-kpi-card promo">
+          <span>Cuenta</span>
+          <strong>{status?.connected ? `Store ${status.account?.store_id}` : "Sin conectar"}</strong>
+          <small>{status?.account?.scope || "Permisos pendientes"}</small>
+        </article>
+        <article className="card rentabilidad-kpi-card">
+          <span>OK</span>
+          <strong>{metrics.ok}</strong>
+          <small>Dentro de tolerancia</small>
+        </article>
+        <article className="card rentabilidad-kpi-card warning">
+          <span>Revisar precio</span>
+          <strong>{metrics.needsPrice}</strong>
+          <small>Diferencia mayor a 1%</small>
+        </article>
+        <article className="card rentabilidad-kpi-card missing">
+          <span>Faltan en TN</span>
+          <strong>{metrics.missing}</strong>
+          <small>{metrics.unlinked} sin SKU local</small>
+        </article>
       </section>
 
-      <section className="card tn-toolbar-card">
-        <div className="tn-toolbar">
+      <section className="card rentabilidad-filters-card tn-toolbar-card">
+        <div className="rentabilidad-filter-grid tn-toolbar">
           <label className="search-control">
             <Search aria-hidden="true" />
             <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o ID Tienda Nube" />
@@ -460,8 +476,8 @@ export default function TiendaNubePage() {
         </div>
       </section>
 
-      <section className="card tn-table-card">
-        <div className="tn-table-header">
+      <section className="card rentabilidad-table-card tn-table-card">
+        <div className="rentabilidad-table-header tn-table-header">
           <div>
             <h2>Publicaciones Tienda Nube</h2>
             <p>{loading ? "Cargando..." : `${filteredRows.length} de ${rows.length} filas · canal ${tnOption.code}`}</p>
@@ -469,7 +485,7 @@ export default function TiendaNubePage() {
           <span className="badge">Últ. sync {shortDate(publications[0]?.tn_last_sync_at)}</span>
         </div>
         <div className="tn-table-wrap">
-          <table className="tn-table">
+          <table className="rentabilidad-table tn-table">
             <thead>
               <tr>
                 <th><SortButton id="name">Producto</SortButton></th>
@@ -486,7 +502,7 @@ export default function TiendaNubePage() {
               {filteredRows.map((row) => (
                 <tr key={row.key}>
                   <td>
-                    <div className="tn-product-cell">
+                    <div className="rentabilidad-product-cell tn-product-cell">
                       <ProductThumb src={row.imageUrl} label={row.name || row.sku} />
                       <div>
                         <strong>{row.name}</strong>
