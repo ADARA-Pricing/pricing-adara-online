@@ -430,7 +430,16 @@ export default function TiendaNubePage() {
   }
 
   async function createProduct(row: Row) {
-    if (!row.product || !row.suggestedPrice) return;
+    if (!row.product) {
+      setMessage(null);
+      setError(`${row.sku}: no puedo crear la publicación porque no encontré el producto local.`);
+      return;
+    }
+    if (!row.suggestedPrice || row.suggestedPrice <= 0) {
+      setMessage(null);
+      setError(`${row.sku}: no puedo crear la publicación porque no hay precio sugerido TN. Revisá costo, margen y configuración del canal TN.`);
+      return;
+    }
     setBusyKey(row.key);
     setMessage(null);
     setError(null);
@@ -609,9 +618,15 @@ export default function TiendaNubePage() {
                         </button>
                       )}
                       {row.status === "missing" && (
-                        <button className="button small-button" type="button" onClick={() => createProduct(row)} disabled={busyKey === row.key || !row.suggestedPrice}>
+                        <button
+                          className="button small-button"
+                          type="button"
+                          onClick={() => createProduct(row)}
+                          disabled={busyKey === row.key}
+                          title={!row.suggestedPrice ? "No hay precio sugerido TN para crear esta publicación" : "Crear producto en Tienda Nube"}
+                        >
                           <Plus size={14} aria-hidden="true" />
-                          Crear
+                          {busyKey === row.key ? "Creando..." : "Crear"}
                         </button>
                       )}
                       {row.status === "unlinked" && <AlertTriangle size={18} className="tn-warning-icon" aria-label={row.statusLabel} />}
