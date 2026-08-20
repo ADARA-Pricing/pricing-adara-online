@@ -206,7 +206,7 @@ function publicationBranchKind(publication: MercadoLibreShippingCost): AdvisoryP
 }
 
 function publicationBranchLabel(branchKind: AdvisoryPublicationGroup["branchKind"]) {
-  return branchKind === "catalog_listing" ? "Catalogo ML" : "Publicacion vendedor";
+  return branchKind === "catalog_listing" ? "Catálogo ML" : "Publicación vendedor";
 }
 
 function normalizedPublicationTitle(publication: MercadoLibreShippingCost) {
@@ -1031,73 +1031,99 @@ export default function Asesoria360Page() {
                 )}
               </div>
 
-              <div className="asesoria360-publication-table-wrap">
-                <table className="asesoria360-publication-table">
-                  <thead>
-                    <tr>
-                      <th></th>
-                      <th>Publicación</th>
-                      <th>MLA</th>
-                      <th>Tipo</th>
-                      <th>Precio</th>
-                      <th>Estado</th>
-                      <th>Stock</th>
-                      <th>Oferta</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedPublicationRows.map((row) => {
-                      const publication = row.publication;
-                      const offerPrice = offerPriceForPublication(selectedProduct, publication, targetMargin);
-                      const disabled = draftRows.some((draft) => rowKey(draft.sku, draft.date) === rowKey(selectedProduct.sku, selectedDate));
-                      const selected = selectedPublicationId === publication.meli_item_id;
-                      return (
-                        <tr className={selected ? "selected" : ""} key={publication.id || publication.meli_item_id}>
-                          <td>
-                            <input
-                              type="radio"
-                              name="asesoria360-publication"
-                              checked={selected}
-                              onChange={() => setSelectedPublicationId(publication.meli_item_id || null)}
-                              aria-label={`Elegir ${publication.meli_item_id}`}
-                            />
-                          </td>
-                          <td>
-                            <strong>{publication.meli_title || selectedProduct.name}</strong>
-                            <span>{publicationBranchLabel(row.group.branchKind)} · {row.installmentLabel}{publication.meli_catalog_listing ? " · Catálogo" : ""}</span>
-                          </td>
-                          <td>{publication.meli_item_id || "-"}</td>
-                          <td>{publication.meli_listing_type_name || publication.meli_listing_type_id || "Sin dato"}</td>
-                          <td className="numeric">{moneyWithCents(publication.meli_price)}</td>
-                          <td><span className={`badge meli-status-${publication.meli_status || "none"}`}>{publication.meli_status || "-"}</span></td>
-                          <td className="numeric">{publication.meli_stock ?? "-"}</td>
-                          <td className="numeric"><strong>{moneyWithCents(offerPrice)}</strong></td>
-                          <td>
-                            <button
-                              type="button"
-                              className="button small-button"
-                              disabled={disabled || draftRows.length >= MAX_ROWS}
-                              onClick={() => {
-                                setSelectedPublicationId(publication.meli_item_id || null);
-                                addPublication(publication);
-                              }}
-                            >
-                              Agregar
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {!selectedPublicationRows.length && (
-                      <tr>
-                        <td colSpan={9}>
-                          <div className="asesoria360-empty compact">No hay publicaciones para esa búsqueda.</div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              <div className="asesoria360-publication-groups">
+                {selectedPublicationGroups.map((group) => {
+                  const q = publicationQuery.trim().toLowerCase();
+                  const rows = group.rows.filter((row) => {
+                    if (!q) return true;
+                    const publication = row.publication;
+                    return `${publication.meli_title || ""} ${publication.meli_item_id || ""} ${publication.meli_listing_type_id || ""} ${row.installmentLabel}`.toLowerCase().includes(q);
+                  });
+                  if (!rows.length) return null;
+                  const minSalePrice = Math.min(...rows.map((row) => Number(row.publication.meli_price || Infinity)));
+                  const installmentText = rows.map((row) => row.installmentLabel).join(" · ");
+                  const catalogLabel = publicationBranchLabel(group.branchKind);
+                  return (
+                    <article className="asesoria360-publication-group" key={group.key}>
+                      <div className="asesoria360-publication-group-head">
+                        <div>
+                          <strong>{group.title}</strong>
+                          <span>{catalogLabel} · {group.itemIds.length} MLA · {rows.length} variante{rows.length === 1 ? "" : "s"}</span>
+                          <span>{group.catalogProductId ? `Grupo ML ${group.catalogProductId}` : group.domainId || "Sin grupo ML"}</span>
+                        </div>
+                        <div className="asesoria360-publication-group-meta">
+                          <span>{installmentText}</span>
+                          <strong>Desde {Number.isFinite(minSalePrice) ? moneyWithCents(minSalePrice) : "-"}</strong>
+                        </div>
+                      </div>
+
+                      <div className="asesoria360-publication-table-wrap">
+                        <table className="asesoria360-publication-table">
+                          <thead>
+                            <tr>
+                              <th></th>
+                              <th>Cuotas</th>
+                              <th>MLA</th>
+                              <th>Tipo</th>
+                              <th>Precio</th>
+                              <th>Estado</th>
+                              <th>Stock</th>
+                              <th>Oferta</th>
+                              <th></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((row) => {
+                              const publication = row.publication;
+                              const offerPrice = offerPriceForPublication(selectedProduct, publication, targetMargin);
+                              const disabled = draftRows.some((draft) => rowKey(draft.sku, draft.date) === rowKey(selectedProduct.sku, selectedDate));
+                              const selected = selectedPublicationId === publication.meli_item_id;
+                              return (
+                                <tr className={selected ? "selected" : ""} key={publication.id || publication.meli_item_id}>
+                                  <td>
+                                    <input
+                                      type="radio"
+                                      name="asesoria360-publication"
+                                      checked={selected}
+                                      onChange={() => setSelectedPublicationId(publication.meli_item_id || null)}
+                                      aria-label={`Elegir ${publication.meli_item_id}`}
+                                    />
+                                  </td>
+                                  <td>
+                                    <strong>{row.installmentLabel}</strong>
+                                    <span>{publication.meli_catalog_listing ? "Catálogo" : "Vendedor"}</span>
+                                  </td>
+                                  <td>{publication.meli_item_id || "-"}</td>
+                                  <td>{publication.meli_listing_type_name || publication.meli_listing_type_id || "Sin dato"}</td>
+                                  <td className="numeric">{moneyWithCents(publication.meli_price)}</td>
+                                  <td><span className={`badge meli-status-${publication.meli_status || "none"}`}>{publication.meli_status || "-"}</span></td>
+                                  <td className="numeric">{publication.meli_stock ?? "-"}</td>
+                                  <td className="numeric"><strong>{moneyWithCents(offerPrice)}</strong></td>
+                                  <td>
+                                    <button
+                                      type="button"
+                                      className="button small-button asesoria360-add-publication"
+                                      disabled={disabled || draftRows.length >= MAX_ROWS}
+                                      onClick={() => {
+                                        setSelectedPublicationId(publication.meli_item_id || null);
+                                        addPublication(publication);
+                                      }}
+                                    >
+                                      Agregar
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </article>
+                  );
+                })}
+                {!selectedPublicationRows.length && (
+                  <div className="asesoria360-empty compact">No hay publicaciones para esa búsqueda.</div>
+                )}
               </div>
             </>
           )}

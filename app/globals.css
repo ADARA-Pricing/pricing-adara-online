@@ -936,15 +936,25 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   display: inline-flex;
   align-items: center;
   justify-self: start;
-  gap: 8px;
-  min-height: 32px;
+  gap: 6px;
+  min-height: 30px;
   border: 1px solid #dbe4f0;
   border-radius: 999px;
   background: #fff;
-  padding: 0 11px;
+  padding: 0 10px;
   color: #334155;
   font-size: 12px;
   font-weight: 800;
+  position: relative;
+}
+
+.asesoria360-filter-chip input {
+  position: absolute;
+  opacity: 0;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  pointer-events: none;
 }
 
 .asesoria360-filter-chip.active {
@@ -954,8 +964,8 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 }
 
 .asesoria360-filter-chip svg {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
 }
 
 .asesoria360-sku-list {
@@ -1221,9 +1231,62 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   overflow-x: auto;
 }
 
+.asesoria360-publication-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.asesoria360-publication-group {
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.asesoria360-publication-group-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+  background: #f8fbff;
+  border-bottom: 1px solid #dbeafe;
+}
+
+.asesoria360-publication-group-head strong {
+  display: -webkit-box;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.25;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.asesoria360-publication-group-head span {
+  display: block;
+  margin-top: 3px;
+  color: #4c6280;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.asesoria360-publication-group-meta {
+  min-width: 0;
+  text-align: right;
+}
+
+.asesoria360-publication-group-meta strong {
+  display: block;
+  margin-top: 4px;
+  color: #047857;
+  font-size: 12px;
+}
+
 .asesoria360-publication-table {
   width: 100%;
-  min-width: 940px;
+  min-width: 760px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -1240,14 +1303,14 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 }
 
 .asesoria360-publication-table th:first-child { width: 34px; }
-.asesoria360-publication-table th:nth-child(2) { width: 34%; }
-.asesoria360-publication-table th:nth-child(3) { width: 120px; }
-.asesoria360-publication-table th:nth-child(4) { width: 130px; }
+.asesoria360-publication-table th:nth-child(2) { width: 108px; }
+.asesoria360-publication-table th:nth-child(3) { width: 122px; }
+.asesoria360-publication-table th:nth-child(4) { width: 118px; }
 .asesoria360-publication-table th:nth-child(5),
-.asesoria360-publication-table th:nth-child(8) { width: 120px; text-align: right; }
-.asesoria360-publication-table th:nth-child(6) { width: 96px; }
-.asesoria360-publication-table th:nth-child(7) { width: 70px; text-align: right; }
-.asesoria360-publication-table th:nth-child(9) { width: 96px; }
+.asesoria360-publication-table th:nth-child(8) { width: 112px; text-align: right; }
+.asesoria360-publication-table th:nth-child(6) { width: 88px; }
+.asesoria360-publication-table th:nth-child(7) { width: 62px; text-align: right; }
+.asesoria360-publication-table th:nth-child(9) { width: 82px; }
 
 .asesoria360-publication-table td {
   border-bottom: 1px solid #e4edf8;
@@ -1298,6 +1361,15 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
 .asesoria360-publication-table input[type="radio"] {
   accent-color: #2563eb;
+}
+
+.asesoria360-add-publication.button,
+.asesoria360-publication-table .small-button {
+  min-height: 30px !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
 }
 
 .asesoria360-empty {
@@ -1354,6 +1426,14 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
   .asesoria360-candidate-stats {
     grid-template-columns: 1fr;
+  }
+
+  .asesoria360-publication-group-head {
+    grid-template-columns: 1fr;
+  }
+
+  .asesoria360-publication-group-meta {
+    text-align: left;
   }
 }
 
