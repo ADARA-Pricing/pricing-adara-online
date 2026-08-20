@@ -129,6 +129,9 @@ type MeliSellerPromotion = {
 
 type MeliPromotionItem = {
   id?: string;
+  item_id?: string | null;
+  meli_item_id?: string | null;
+  item?: { id?: string | null; item_id?: string | null; meli_item_id?: string | null } | null;
   type?: string | null;
   name?: string | null;
   status?: string | null;
@@ -1163,6 +1166,27 @@ function promotionSellerAmount(item: MeliPromotionItem) {
   return candidateSellerAmount(item) || splitDiscountAmount(item, "seller");
 }
 
+function promotionPayloadBelongsToItem(item: MeliPromotionItem, itemId: string) {
+  const ids = new Set<string>();
+  const values = [
+    item.item_id,
+    item.meli_item_id,
+    item.item?.id,
+    item.item?.item_id,
+    item.item?.meli_item_id,
+    item.offer_id,
+    item.ref_id,
+  ];
+
+  values.forEach((value) => {
+    if (!value) return;
+    const matches: string[] = String(value).match(/MLA\d+/gi) || [];
+    matches.forEach((match) => ids.add(match.toUpperCase()));
+  });
+
+  return !ids.size || ids.has(itemId.toUpperCase());
+}
+
 function promotionOpportunityKey(row: {
   promotion_id?: string | null;
   meli_item_id?: string | null;
@@ -1531,6 +1555,7 @@ export async function POST(request: NextRequest) {
         for (const rawPromotion of payload.data) {
           const promotionItem = rawPromotion as MeliPromotionItem & { type?: string | null; name?: string | null };
           if (!promotionItem.id || !promotionItem.status) continue;
+          if (!promotionPayloadBelongsToItem(promotionItem, item.id)) continue;
           const promotion = sellerPromotionsById.get(String(promotionItem.id)) || null;
           const listingPrice = await listingPriceForMatchedItemAtPrice(item, promotionEffectiveSalePrice(promotionItem));
           pushPromotionOpportunityRow(promotionOpportunityRowFromItem(promotionItem, promotion, item.id, listingPrice));

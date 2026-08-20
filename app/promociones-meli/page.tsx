@@ -422,16 +422,24 @@ function effectiveSalePrice(
 
 function rawPromotionOpportunities(publication: MercadoLibreShippingCost): MercadoLibrePromotionOpportunity[] {
   const raw = Array.isArray(publication.meli_promotions) ? publication.meli_promotions : [];
+  const publicationItemId = publication.meli_item_id || "";
   const sellerPromotionPayload = raw.find((entry) => {
     const value = entry as { endpoint?: string; data?: unknown };
-    return value.endpoint?.includes("/seller-promotions/items/") && Array.isArray(value.data);
+    const endpoint = String(value.endpoint || "");
+    const belongsToPublication = publicationItemId
+      ? endpoint.includes(`/seller-promotions/items/${publicationItemId}?`) ||
+        endpoint.endsWith(`/seller-promotions/items/${publicationItemId}`)
+      : endpoint.includes("/seller-promotions/items/");
+    return belongsToPublication && Array.isArray(value.data);
   }) as { data?: unknown[] } | undefined;
 
   if (!Array.isArray(sellerPromotionPayload?.data)) return [];
 
   return sellerPromotionPayload.data
-    .map((item) => {
+    .map<MercadoLibrePromotionOpportunity | null>((item) => {
       const promo = item as Record<string, unknown>;
+      const rawItemIds = rawPromotionItemIds(promo);
+      if (publicationItemId && rawItemIds.length && !rawItemIds.includes(publicationItemId)) return null;
       const originalPrice = Number(promo.original_price || publication.meli_price || 0);
       const basePromoPrice =
         Number(promo.price || 0) ||
@@ -461,7 +469,7 @@ function rawPromotionOpportunities(publication: MercadoLibreShippingCost): Merca
         promotion_status: typeof promo.status === "string" ? promo.status : null,
         item_promotion_status: typeof promo.status === "string" ? promo.status : null,
         offer_id: typeof promo.ref_id === "string" ? promo.ref_id : null,
-        meli_item_id: publication.meli_item_id || "",
+        meli_item_id: publicationItemId,
         original_price: originalPrice || null,
         promo_price: promoPrice,
         min_discounted_price: Number(promo.min_discounted_price || 0) || null,
@@ -476,7 +484,36 @@ function rawPromotionOpportunities(publication: MercadoLibreShippingCost): Merca
         raw: promo,
       };
     })
+    .filter((item): item is MercadoLibrePromotionOpportunity => Boolean(item))
     .filter((item) => item.promo_price && item.promo_price > 0);
+}
+
+function rawPromotionItemIds(promo: Record<string, unknown>) {
+  const values = [
+    promo.item_id,
+    promo.meli_item_id,
+    promo.item,
+    promo.offer_id,
+    promo.ref_id,
+  ];
+  const ids = new Set<string>();
+
+  values.forEach((value) => {
+    if (!value) return;
+    if (typeof value === "object" && !Array.isArray(value)) {
+      const item = value as Record<string, unknown>;
+      [item.id, item.item_id, item.meli_item_id].forEach((nestedValue) => {
+        if (typeof nestedValue === "string" && /^MLA\d+$/i.test(nestedValue)) ids.add(nestedValue.toUpperCase());
+      });
+      return;
+    }
+
+    const text = String(value);
+    const matches: string[] = text.match(/MLA\d+/gi) || [];
+    matches.forEach((match) => ids.add(match.toUpperCase()));
+  });
+
+  return [...ids];
 }
 
 function bestOpportunity(items: MercadoLibrePromotionOpportunity[], onlyWithMeliContribution = false) {
@@ -1540,7 +1577,8 @@ export default function PromocionesMeliPage() {
           items: [],
         };
         const existingIndex = current.items.findIndex((currentItem) =>
-          currentItem.installmentLabel === item.installmentLabel,
+          currentItem.installmentLabel === item.installmentLabel &&
+          currentItem.itemId === item.itemId,
         );
         if (existingIndex === -1) {
           current.items.push(item);
@@ -1574,7 +1612,7 @@ export default function PromocionesMeliPage() {
       const bySkuInstallment = new Map<string, PromoTrafficLightItem[]>();
 
       items.filter((item) => !hasFutureStart(item.startDate)).forEach((item) => {
-        const key = `${item.sku}|${item.installmentLabel}`;
+        const key = `${item.sku}|${item.itemId}|${item.installmentLabel}`;
         bySkuInstallment.set(key, [...(bySkuInstallment.get(key) || []), item]);
       });
 
