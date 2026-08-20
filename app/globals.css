@@ -12401,12 +12401,26 @@ body {
 .tienda-nube-page .tn-product-cell .rotation-product-thumb {
   width: 44px;
   height: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  flex: 0 0 44px;
   border-radius: 8px;
   border: 1px solid #dbe4f0;
   background: #f8fafc;
   color: #1e3a8a;
   font-size: 12px;
   font-weight: 900;
+  overflow: hidden;
+  position: relative;
+}
+
+.tienda-nube-page .tn-product-cell .rotation-product-thumb img {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain;
 }
 
 .tienda-nube-page .tn-product-cell strong {
