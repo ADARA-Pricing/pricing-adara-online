@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
-import { ChevronRight, Database, RefreshCw } from "lucide-react";
+import { Check, Database, PackageSearch, RefreshCw, Search } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -132,6 +132,31 @@ function stockDaysLabel(value: number | null) {
   return `${Math.round(value)} dias`;
 }
 
+function weekdayChipLabel(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, Number(month || 1) - 1, Number(day || 1));
+  return new Intl.DateTimeFormat("es-AR", { weekday: "short", day: "2-digit" })
+    .format(date)
+    .replace(".", "");
+}
+
+function productInitial(name: string, sku: string) {
+  return (name || sku || "P").slice(0, 2).toUpperCase();
+}
+
+function productImage(publications: MercadoLibreShippingCost[]) {
+  return publications.find((publication) => Boolean(publication.meli_thumbnail))?.meli_thumbnail || null;
+}
+
+function ProductThumbnail({ src, label }: { src: string | null; label: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="asesoria360-product-thumb">
+      {src && !failed ? <img src={src} alt="" onError={() => setFailed(true)} /> : label}
+    </div>
+  );
+}
+
 function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) {
   const status = `${item.item_promotion_status || item.promotion_status || ""}`.toLowerCase();
   return status.includes("started") || status.includes("active");
@@ -226,8 +251,11 @@ export default function Asesoria360Page() {
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
   const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [onlyWithPublications, setOnlyWithPublications] = useState(true);
+  const [publicationQuery, setPublicationQuery] = useState("");
   const [selectedSku, setSelectedSku] = useState<string | null>(null);
-  const [expandedPublicationGroups, setExpandedPublicationGroups] = useState<Record<string, boolean>>({});
+  const [selectedPublicationId, setSelectedPublicationId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(nextWeekday(1));
   const [targetMargin, setTargetMargin] = useState(5);
   const [draftRows, setDraftRows] = useState<AdvisoryDraftRow[]>([]);
@@ -407,8 +435,32 @@ export default function Asesoria360Page() {
       .slice(0, 250);
   }, [products, publicationsBySku, query]);
 
+  const selectorGroups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return products
+      .map((product) => ({ product, publications: publicationsBySku.get(product.sku) || [] }))
+      .filter((group) => !onlyWithPublications || group.publications.length > 0)
+      .filter((group) => !categoryFilter || group.product.category === categoryFilter)
+      .filter((group) => {
+        const text = `${group.product.sku} ${group.product.name} ${group.product.category || ""} ${group.product.brand || ""} ${group.product.model || ""}`.toLowerCase();
+        return !q || text.includes(q);
+      })
+      .sort((a, b) => {
+        if (b.publications.length !== a.publications.length) return b.publications.length - a.publications.length;
+        return a.product.sku.localeCompare(b.product.sku, "es");
+      })
+      .slice(0, 300);
+  }, [categoryFilter, onlyWithPublications, products, publicationsBySku, query]);
+
+  const productCategories = useMemo(() => {
+    return [...new Set(products.map((product) => product.category).filter(Boolean) as string[])]
+      .sort((a, b) => a.localeCompare(b, "es"));
+  }, [products]);
+
   const selectedProduct = selectedSku ? productsBySku.get(selectedSku) || null : null;
   const selectedPublications = selectedSku ? publicationsBySku.get(selectedSku) || [] : [];
+
+  const dateShortcuts = useMemo(() => [1, 2, 3, 4, 5].map((day) => nextWeekday(day)), []);
 
   const selectedPublicationGroups = useMemo<AdvisoryPublicationGroup[]>(() => {
     const families = new Map<string, AdvisoryPublicationGroup>();
@@ -449,6 +501,19 @@ export default function Asesoria360Page() {
         return a.title.localeCompare(b.title, "es");
       });
   }, [selectedPublications]);
+
+  const selectedPublicationRows = useMemo(() => {
+    const q = publicationQuery.trim().toLowerCase();
+    return selectedPublicationGroups.flatMap((group) =>
+      group.rows
+        .filter((row) => {
+          if (!q) return true;
+          const publication = row.publication;
+          return `${publication.meli_title || ""} ${publication.meli_item_id || ""} ${publication.meli_listing_type_id || ""} ${row.installmentLabel}`.toLowerCase().includes(q);
+        })
+        .map((row) => ({ ...row, group })),
+    );
+  }, [publicationQuery, selectedPublicationGroups]);
 
   function categoryFeeForProduct(product: Product) {
     return categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase()) || null;
@@ -851,112 +916,191 @@ export default function Asesoria360Page() {
         <div className="asesoria360-products">
           <div className="asesoria360-panel-head">
             <div>
-              <h2>Elegir SKU</h2>
-              <p>Productos activos con publicaciones MLA disponibles.</p>
+              <h2>01 Elegir producto</h2>
+              <p>Buscá por SKU, nombre, modelo o categoría.</p>
             </div>
-            <span className="badge">{productGroups.length}</span>
+            <span className="badge">{selectorGroups.length}</span>
           </div>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, nombre o modelo" />
+          <div className="asesoria360-product-toolbar">
+            <label className="search-control">
+              <Search aria-hidden="true" />
+              <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o modelo..." />
+            </label>
+            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+              <option value="">Todas las categorías</option>
+              {productCategories.map((category) => <option value={category} key={category}>{category}</option>)}
+            </select>
+            <label className={`asesoria360-filter-chip ${onlyWithPublications ? "active" : ""}`}>
+              <input type="checkbox" checked={onlyWithPublications} onChange={(event) => setOnlyWithPublications(event.target.checked)} />
+              {onlyWithPublications && <Check aria-hidden="true" />}
+              Con publicaciones
+            </label>
+          </div>
           <div className="asesoria360-sku-list">
-            {productGroups.map(({ product, publications: groupPublications }) => (
+            {selectorGroups.map(({ product, publications: groupPublications }) => {
+              const active = selectedSku === product.sku;
+              const thumbnail = productImage(groupPublications);
+              return (
               <button
                 key={product.sku}
                 type="button"
-                className={`asesoria360-sku ${selectedSku === product.sku ? "active" : ""}`}
-                onClick={() => setSelectedSku(product.sku)}
+                className={`asesoria360-sku ${active ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedSku(product.sku);
+                  setSelectedPublicationId(null);
+                  setPublicationQuery("");
+                }}
               >
-                <strong>{product.sku}</strong>
-                <span>{product.name}</span>
-                <small>{groupPublications.length} MLA</small>
+                <ProductThumbnail src={thumbnail} label={productInitial(product.name, product.sku)} />
+                <span className="asesoria360-product-copy">
+                  <strong>{product.name}</strong>
+                  <small>{product.sku} · {product.category || "Sin categoría"}</small>
+                  <small>{groupPublications.length} publicaciones MLA</small>
+                </span>
+                {active && <Check className="asesoria360-selected-check" aria-hidden="true" />}
               </button>
-            ))}
+              );
+            })}
+            {!selectorGroups.length && <div className="asesoria360-empty compact">No hay productos para esos filtros.</div>}
           </div>
         </div>
 
         <div className="asesoria360-publications">
-          <div className="asesoria360-panel-head">
-            <div>
-              <h2>{selectedProduct ? selectedProduct.sku : "Selecciona un SKU"}</h2>
-              <p>{selectedProduct ? selectedProduct.name : "Despues elegis dia, margen y MLA."}</p>
+          {!selectedProduct ? (
+            <div className="asesoria360-start-empty">
+              <PackageSearch aria-hidden="true" />
+              <h2>Seleccioná un producto</h2>
+              <p>Buscá por nombre, SKU o categoría para comenzar.</p>
             </div>
-          </div>
-
-          <div className="asesoria360-controls">
-            <div className="field">
-              <label>Dia para cargar</label>
-              <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
-            </div>
-            <div className="field">
-              <label>Ganancia final objetivo</label>
-              <div className="asesoria360-percent-input">
-                <input value={targetMargin} onChange={(event) => setTargetMargin(Number(toNumber(event.target.value) ?? 0))} />
-                <span>%</span>
+          ) : (
+            <>
+              <div className="asesoria360-flow-steps" aria-label="Flujo de asesoria">
+                <span className="active">01 Elegir producto</span>
+                <span className="active">02 Definir condiciones</span>
+                <span>03 Elegir publicación MLA</span>
               </div>
-            </div>
-          </div>
-          <div className="asesoria360-days">
-            <button type="button" className="button ghost" onClick={() => setSelectedDate(nextWeekday(1))}>Lun prox.</button>
-            <button type="button" className="button ghost" onClick={() => setSelectedDate(nextWeekday(2))}>Mar prox.</button>
-            <button type="button" className="button ghost" onClick={() => setSelectedDate(nextWeekday(3))}>Mie prox.</button>
-            <button type="button" className="button ghost" onClick={() => setSelectedDate(nextWeekday(4))}>Jue prox.</button>
-            <button type="button" className="button ghost" onClick={() => setSelectedDate(nextWeekday(5))}>Vie prox.</button>
-          </div>
 
-          <div className="asesoria360-mla-list">
-            {!selectedProduct && <div className="asesoria360-empty">Elegi un SKU para ver sus publicaciones.</div>}
-            {selectedProduct && selectedPublicationGroups.map((group) => {
-              const expanded = Boolean(expandedPublicationGroups[group.key]);
-              const minSalePrice = Math.min(...group.rows.map((row) => Number(row.publication.meli_price || Infinity)));
-              const installmentText = group.rows.map((row) => row.installmentLabel).join(", ");
-              return (
-                <article key={group.key} className={`asesoria360-family-card ${expanded ? "expanded" : ""}`}>
+              <div className="asesoria360-selected-product">
+                <ProductThumbnail src={productImage(selectedPublications)} label={productInitial(selectedProduct.name, selectedProduct.sku)} />
+                <div>
+                  <h2>{selectedProduct.name}</h2>
+                  <p>{selectedProduct.sku} · {selectedProduct.category || "Sin categoría"}</p>
+                  <span>{selectedPublications.length} publicaciones disponibles</span>
+                </div>
+              </div>
+
+              <div className="asesoria360-section-title">
+                <h3>02 Definir condiciones</h3>
+              </div>
+              <div className="asesoria360-controls">
+                <div className="field">
+                  <label>Fecha para cargar</label>
+                  <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Ganancia final objetivo / margen objetivo</label>
+                  <div className="asesoria360-percent-input">
+                    <input value={targetMargin} onChange={(event) => setTargetMargin(Number(toNumber(event.target.value) ?? 0))} />
+                    <span>%</span>
+                  </div>
+                </div>
+              </div>
+              <div className="asesoria360-days">
+                {dateShortcuts.map((date) => (
                   <button
                     type="button"
-                    className="asesoria360-family-button"
-                    onClick={() => setExpandedPublicationGroups((current) => ({ ...current, [group.key]: !expanded }))}
+                    className={`asesoria360-date-chip ${selectedDate === date ? "active" : ""}`}
+                    onClick={() => setSelectedDate(date)}
+                    key={date}
                   >
-                    <span className="asesoria360-family-main">
-                      <strong>{group.title}</strong>
-                      <small>{publicationBranchLabel(group.branchKind)} | {group.itemIds.length} ID(s) | {group.rows.length} variante(s)</small>
-                      <small>{group.catalogProductId ? `Grupo ML ${group.catalogProductId}` : group.domainId || "Sin grupo ML"}</small>
-                    </span>
-                    <span className="asesoria360-family-installments">{installmentText}</span>
-                    <span className="asesoria360-family-price">Desde {Number.isFinite(minSalePrice) ? moneyWithCents(minSalePrice) : "-"}</span>
-                    <span className="item-action asesoria360-family-toggle">
-                      {expanded ? "Ocultar" : "Ver"}
-                      <ChevronRight aria-hidden="true" />
-                    </span>
+                    {weekdayChipLabel(date)}
                   </button>
+                ))}
+              </div>
 
-                  {expanded && (
-                    <div className="asesoria360-family-rows">
-                      {group.rows.map((row) => {
-                        const publication = row.publication;
-                        const offerPrice = offerPriceForPublication(selectedProduct, publication, targetMargin);
-                        const disabled = draftRows.some((draft) => rowKey(draft.sku, draft.date) === rowKey(selectedProduct.sku, selectedDate));
-                        return (
-                          <article key={publication.id || publication.meli_item_id} className="asesoria360-mla-card">
-                            <div>
-                              <strong>{row.installmentLabel}</strong>
-                              <span>{publication.meli_item_id}</span>
-                              <small>{publication.meli_listing_type_name || publication.meli_listing_type_id || "Tipo sin dato"}</small>
-                            </div>
-                            <div className="asesoria360-price-stack">
-                              <span>Venta {moneyWithCents(publication.meli_price)}</span>
-                              <strong>Oferta {moneyWithCents(offerPrice)}</strong>
-                            </div>
-                            <button type="button" className="button" disabled={disabled || draftRows.length >= MAX_ROWS} onClick={() => addPublication(publication)}>
+              <div className="asesoria360-section-title with-toolbar">
+                <div>
+                  <h3>03 Elegir publicación MLA</h3>
+                  <p>{selectedPublicationRows.length} de {selectedPublications.length} publicaciones</p>
+                </div>
+                {selectedPublications.length > 6 && (
+                  <label className="search-control compact">
+                    <Search aria-hidden="true" />
+                    <input className="search-field" value={publicationQuery} onChange={(event) => setPublicationQuery(event.target.value)} placeholder="Buscar título o MLA" />
+                  </label>
+                )}
+              </div>
+
+              <div className="asesoria360-publication-table-wrap">
+                <table className="asesoria360-publication-table">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>Publicación</th>
+                      <th>MLA</th>
+                      <th>Tipo</th>
+                      <th>Precio</th>
+                      <th>Estado</th>
+                      <th>Stock</th>
+                      <th>Oferta</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedPublicationRows.map((row) => {
+                      const publication = row.publication;
+                      const offerPrice = offerPriceForPublication(selectedProduct, publication, targetMargin);
+                      const disabled = draftRows.some((draft) => rowKey(draft.sku, draft.date) === rowKey(selectedProduct.sku, selectedDate));
+                      const selected = selectedPublicationId === publication.meli_item_id;
+                      return (
+                        <tr className={selected ? "selected" : ""} key={publication.id || publication.meli_item_id}>
+                          <td>
+                            <input
+                              type="radio"
+                              name="asesoria360-publication"
+                              checked={selected}
+                              onChange={() => setSelectedPublicationId(publication.meli_item_id || null)}
+                              aria-label={`Elegir ${publication.meli_item_id}`}
+                            />
+                          </td>
+                          <td>
+                            <strong>{publication.meli_title || selectedProduct.name}</strong>
+                            <span>{publicationBranchLabel(row.group.branchKind)} · {row.installmentLabel}{publication.meli_catalog_listing ? " · Catálogo" : ""}</span>
+                          </td>
+                          <td>{publication.meli_item_id || "-"}</td>
+                          <td>{publication.meli_listing_type_name || publication.meli_listing_type_id || "Sin dato"}</td>
+                          <td className="numeric">{moneyWithCents(publication.meli_price)}</td>
+                          <td><span className={`badge meli-status-${publication.meli_status || "none"}`}>{publication.meli_status || "-"}</span></td>
+                          <td className="numeric">{publication.meli_stock ?? "-"}</td>
+                          <td className="numeric"><strong>{moneyWithCents(offerPrice)}</strong></td>
+                          <td>
+                            <button
+                              type="button"
+                              className="button small-button"
+                              disabled={disabled || draftRows.length >= MAX_ROWS}
+                              onClick={() => {
+                                setSelectedPublicationId(publication.meli_item_id || null);
+                                addPublication(publication);
+                              }}
+                            >
                               Agregar
                             </button>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!selectedPublicationRows.length && (
+                      <tr>
+                        <td colSpan={9}>
+                          <div className="asesoria360-empty compact">No hay publicaciones para esa búsqueda.</div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </section>
 

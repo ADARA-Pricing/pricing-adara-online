@@ -800,9 +800,10 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
 .asesoria360-workspace {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(380px, 0.38fr) minmax(0, 0.62fr);
+  gap: 18px;
   align-items: start;
+  padding: 18px;
 }
 
 .asesoria360-ranking {
@@ -900,7 +901,9 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
 .asesoria360-panel-head h2 {
   margin: 0;
-  font-size: 20px;
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.2;
 }
 
 .asesoria360-panel-head p {
@@ -909,54 +912,266 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   font-size: 13px;
 }
 
-.asesoria360-sku-list,
-.asesoria360-mla-list {
+.asesoria360-product-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 190px);
+  gap: 10px;
+  align-items: center;
+}
+
+.asesoria360-product-toolbar select {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid #cfe0f6;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0 10px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.asesoria360-filter-chip {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 8px;
+  min-height: 32px;
+  border: 1px solid #dbe4f0;
+  border-radius: 999px;
+  background: #fff;
+  padding: 0 11px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.asesoria360-filter-chip.active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.asesoria360-filter-chip svg {
+  width: 13px;
+  height: 13px;
+}
+
+.asesoria360-sku-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-top: 12px;
-  max-height: 560px;
+  max-height: min(650px, calc(100vh - 320px));
   overflow: auto;
-  padding-right: 4px;
+  padding: 2px 4px 2px 0;
 }
 
 .asesoria360-sku {
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 44px minmax(0, 1fr) 18px;
+  gap: 10px;
   align-items: center;
   width: 100%;
-  border: 1px solid #dbeafe;
-  border-radius: 8px;
+  min-height: 72px;
+  border: 1px solid #dfe7f3;
+  border-radius: 12px;
   background: #fff;
-  padding: 10px;
+  padding: 10px 11px;
   color: #0f172a;
   cursor: pointer;
   text-align: left;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 .asesoria360-sku.active {
-  border-color: #2563eb;
+  border-color: #93c5fd;
   background: #eff6ff;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
 }
 
-.asesoria360-sku span,
-.asesoria360-mla-card span {
+.asesoria360-product-thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  overflow: hidden;
+}
+
+.asesoria360-product-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 40px;
+  max-height: 40px;
+  object-fit: contain;
+}
+
+.asesoria360-product-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.asesoria360-product-copy strong {
+  display: -webkit-box;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.asesoria360-product-copy small {
+  color: #4c6280;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.asesoria360-selected-check {
+  width: 16px;
+  height: 16px;
+  color: #2563eb;
+}
+
+.asesoria360-start-empty {
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px dashed #cfe0f6;
+  border-radius: 16px;
+  background: #f8fbff;
+  color: #4c6280;
+  text-align: center;
+}
+
+.asesoria360-start-empty svg {
+  width: 46px;
+  height: 46px;
+  color: #2563eb;
+}
+
+.asesoria360-start-empty h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.asesoria360-start-empty p {
+  margin: 0;
+  color: #64748b;
+}
+
+.asesoria360-flow-steps {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.asesoria360-flow-steps span {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  border: 1px solid #dbe4f0;
+  border-radius: 999px;
+  background: #fff;
+  padding: 0 10px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.asesoria360-flow-steps span.active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.asesoria360-selected-product {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: #f8fbff;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.asesoria360-selected-product .asesoria360-product-thumb {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+}
+
+.asesoria360-selected-product h2 {
+  display: -webkit-box;
+  margin: 0 0 4px;
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.25;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
-.asesoria360-sku small,
-.asesoria360-mla-card small {
+.asesoria360-selected-product p,
+.asesoria360-selected-product span {
+  display: block;
+  margin: 2px 0 0;
   color: #475569;
   font-size: 12px;
+  font-weight: 700;
+}
+
+.asesoria360-section-title {
+  margin: 14px 0 10px;
+}
+
+.asesoria360-section-title h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.asesoria360-section-title p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.asesoria360-section-title.with-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.asesoria360-section-title .search-control.compact {
+  width: min(320px, 100%);
 }
 
 .asesoria360-controls {
   display: grid;
-  grid-template-columns: 190px 170px;
+  grid-template-columns: minmax(180px, 0.45fr) minmax(220px, 0.55fr);
   gap: 12px;
   margin-bottom: 10px;
 }
@@ -975,108 +1190,114 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
 
 .asesoria360-days {
   display: flex;
-  gap: 8px;
+  gap: 7px;
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
 
-.asesoria360-mla-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px 110px;
-  gap: 12px;
+.asesoria360-date-chip {
+  display: inline-flex;
   align-items: center;
-  border: 1px solid #dbeafe;
-  border-radius: 8px;
-  padding: 10px;
+  justify-content: center;
+  min-height: 30px;
+  border: 1px solid #dbe4f0;
+  border-radius: 999px;
   background: #fff;
-}
-
-.asesoria360-family-card {
-  border: 1px solid #dbeafe;
-  border-radius: 8px;
-  background: #fff;
-  overflow: hidden;
-}
-
-.asesoria360-family-card.expanded {
-  border-color: #93c5fd;
-}
-
-.asesoria360-family-button {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 170px 140px 92px;
-  gap: 12px;
-  align-items: center;
-  width: 100%;
-  border: 0;
-  background: #fff;
-  color: #0f172a;
-  padding: 12px;
+  padding: 0 10px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 850;
   cursor: pointer;
-  text-align: left;
 }
 
-.asesoria360-family-card.expanded .asesoria360-family-button {
+.asesoria360-date-chip.active {
+  border-color: #93c5fd;
   background: #eff6ff;
+  color: #1d4ed8;
 }
 
-.asesoria360-family-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.asesoria360-publication-table-wrap {
+  width: 100%;
+  overflow-x: auto;
 }
 
-.asesoria360-family-main strong,
-.asesoria360-family-main small,
-.asesoria360-family-installments,
-.asesoria360-family-price {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.asesoria360-publication-table {
+  width: 100%;
+  min-width: 940px;
+  border-collapse: collapse;
+  table-layout: fixed;
 }
 
-.asesoria360-family-main small,
-.asesoria360-family-installments {
-  color: #475569;
+.asesoria360-publication-table th {
+  border-bottom: 1px solid #dce6f4;
+  background: #f8fafc;
+  color: #526580;
+  font-size: 11px;
+  font-weight: 850;
+  padding: 8px 9px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.asesoria360-publication-table th:first-child { width: 34px; }
+.asesoria360-publication-table th:nth-child(2) { width: 34%; }
+.asesoria360-publication-table th:nth-child(3) { width: 120px; }
+.asesoria360-publication-table th:nth-child(4) { width: 130px; }
+.asesoria360-publication-table th:nth-child(5),
+.asesoria360-publication-table th:nth-child(8) { width: 120px; text-align: right; }
+.asesoria360-publication-table th:nth-child(6) { width: 96px; }
+.asesoria360-publication-table th:nth-child(7) { width: 70px; text-align: right; }
+.asesoria360-publication-table th:nth-child(9) { width: 96px; }
+
+.asesoria360-publication-table td {
+  border-bottom: 1px solid #e4edf8;
+  padding: 9px;
+  vertical-align: middle;
+  color: #0f172a;
   font-size: 12px;
 }
 
-.asesoria360-family-price {
-  color: #047857;
+.asesoria360-publication-table tr.selected td {
+  background: #eff6ff;
+  box-shadow: inset 0 1px 0 #bfdbfe, inset 0 -1px 0 #bfdbfe;
+}
+
+.asesoria360-publication-table tr.selected td:first-child {
+  box-shadow: inset 1px 0 0 #93c5fd, inset 0 1px 0 #bfdbfe, inset 0 -1px 0 #bfdbfe;
+}
+
+.asesoria360-publication-table tr.selected td:last-child {
+  box-shadow: inset -1px 0 0 #93c5fd, inset 0 1px 0 #bfdbfe, inset 0 -1px 0 #bfdbfe;
+}
+
+.asesoria360-publication-table td strong {
+  color: #0f172a;
+}
+
+.asesoria360-publication-table td:nth-child(2) strong {
+  display: -webkit-box;
+  line-height: 1.25;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.asesoria360-publication-table td span {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 11px;
   font-weight: 700;
+}
+
+.asesoria360-publication-table .numeric {
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.asesoria360-family-toggle {
-  justify-self: end;
-}
-
-.asesoria360-family-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border-top: 1px solid #dbeafe;
-  background: #f8fafc;
-}
-
-.asesoria360-mla-card > div:first-child,
-.asesoria360-price-stack {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.asesoria360-price-stack {
-  text-align: right;
-  font-size: 13px;
-}
-
-.asesoria360-price-stack strong {
-  color: #047857;
+.asesoria360-publication-table input[type="radio"] {
+  accent-color: #2563eb;
 }
 
 .asesoria360-empty {
@@ -1088,13 +1309,27 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   background: #f8fafc;
 }
 
+.asesoria360-empty.compact {
+  padding: 14px;
+}
+
 .asesoria360-draft {
   padding: 18px 20px;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1320px) {
+  .asesoria360-workspace {
+    grid-template-columns: minmax(360px, 0.4fr) minmax(0, 0.6fr);
+  }
+}
+
+@media (max-width: 1180px) {
   .asesoria360-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .asesoria360-sku-list {
+    max-height: 420px;
   }
 
   .asesoria360-candidate-card {
@@ -1102,24 +1337,25 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   }
 }
 
-@media (max-width: 720px) {
-  .asesoria360-controls,
-  .asesoria360-candidate-stats,
-  .asesoria360-family-button,
-  .asesoria360-mla-card,
-  .asesoria360-sku {
+@media (max-width: 760px) {
+  .asesoria360-workspace {
+    padding: 14px;
+  }
+
+  .asesoria360-product-toolbar,
+  .asesoria360-controls {
     grid-template-columns: 1fr;
   }
 
-  .asesoria360-family-price {
-    text-align: left;
+  .asesoria360-section-title.with-toolbar {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .asesoria360-price-stack {
-    text-align: left;
+  .asesoria360-candidate-stats {
+    grid-template-columns: 1fr;
   }
 }
-
 
 .pricing-modal-card { padding: 20px; }
 .pricing-modal-grid {
