@@ -107,7 +107,10 @@ function productWithCostAtDate(
   const source = before
     ? { cost: before.new_cost_without_vat, vat: before.new_vat_rate }
     : after
-      ? { cost: after.previous_cost_without_vat, vat: after.previous_vat_rate }
+      ? {
+        cost: Number(after.previous_cost_without_vat || 0) > 0 ? after.previous_cost_without_vat : after.new_cost_without_vat,
+        vat: Number(after.previous_cost_without_vat || 0) > 0 ? after.previous_vat_rate : after.new_vat_rate,
+      }
       : null;
   if (!source) return product;
 
