@@ -41,6 +41,16 @@ type MeliOrder = {
   }>;
 };
 
+type ProductCostHistory = {
+  product_id: string;
+  sku: string | null;
+  previous_cost_without_vat: number | null;
+  new_cost_without_vat: number | null;
+  previous_vat_rate: number | null;
+  new_vat_rate: number | null;
+  changed_at: string;
+};
+
 function normalizeSku(value?: string | null) {
   return (value || "").trim().toUpperCase();
 }
@@ -71,6 +81,41 @@ function marginKey(productId: string | undefined | null, channelCode: string) {
 
 function categoryFeeForProduct(product: Pick<Product, "category">, fees: MercadoLibreCategoryFee[]) {
   return fees.find((item) => item.active && item.category?.toLowerCase() === (product.category || "").toLowerCase()) || null;
+}
+
+function productWithCostAtDate(
+  product: Product | null,
+  orderDate: string,
+  historiesByProductId: Map<string, ProductCostHistory[]>,
+  historiesBySku: Map<string, ProductCostHistory[]>,
+) {
+  if (!product) return null;
+  const target = new Date(orderDate).getTime();
+  if (!Number.isFinite(target)) return product;
+  const histories = [
+    ...(product.id ? historiesByProductId.get(String(product.id)) || [] : []),
+    ...(historiesBySku.get(normalizeSku(product.sku)) || []),
+  ];
+  if (!histories.length) return product;
+
+  const before = [...histories]
+    .filter((history) => new Date(history.changed_at).getTime() <= target)
+    .sort((a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime())[0];
+  const after = [...histories]
+    .filter((history) => new Date(history.changed_at).getTime() > target)
+    .sort((a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime())[0];
+  const source = before
+    ? { cost: before.new_cost_without_vat, vat: before.new_vat_rate }
+    : after
+      ? { cost: after.previous_cost_without_vat, vat: after.previous_vat_rate }
+      : null;
+  if (!source) return product;
+
+  return {
+    ...product,
+    cost_without_vat: Number(source.cost ?? product.cost_without_vat ?? 0),
+    vat_rate: Number(source.vat ?? product.vat_rate ?? 21) as Product["vat_rate"],
+  };
 }
 
 type SalesPublication = Pick<
@@ -192,6 +237,8 @@ function normalizedProfitability({
     normalized_margin_on_net_sale: actualResult.valid && referenceNetSalePrice > 0 ? (actualNetProfit / referenceNetSalePrice) * 100 : null,
     normalized_margin_on_cost: actualResult.valid ? Number(actualResult.marginOnCost || 0) : null,
     normalized_cost_for_profit: actualResult.valid ? Number(actualResult.costForProfit || 0) : null,
+    normalized_product_cost_without_vat: actualResult.valid ? Number(product.cost_without_vat || 0) : null,
+    normalized_product_vat_rate: actualResult.valid ? Number(product.vat_rate || 0) : null,
     normalized_marketplace_fee_amount: actualResult.valid ? Number(actualResult.marketplaceFeeAmount || 0) : null,
     normalized_shipping_cost_amount: actualResult.valid ? Number(actualResult.shippingCostAmount || 0) : null,
     normalized_fixed_fee_amount: actualResult.valid ? Number(actualResult.fixedFeeAmount || 0) : null,
@@ -257,6 +304,7 @@ export async function POST(request: Request) {
       { data: categoryFeesData, error: categoryFeesError },
       { data: taxesData, error: taxesError },
       { data: marginsData, error: marginsError },
+      { data: costHistoryData, error: costHistoryError },
     ] = await Promise.all([
       supabase.from("products").select("*").eq("status", "active"),
       supabase
@@ -266,6 +314,10 @@ export async function POST(request: Request) {
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
       supabase.from("tax_settings").select("*").eq("key", "default").maybeSingle(),
       supabase.from("product_channel_margins").select("*").eq("channel_code", "MC"),
+      supabase
+        .from("product_cost_history")
+        .select("product_id, sku, previous_cost_without_vat, new_cost_without_vat, previous_vat_rate, new_vat_rate, changed_at")
+        .order("changed_at", { ascending: true }),
     ]);
 
     if (productsError) throw new Error(productsError.message);
@@ -273,12 +325,14 @@ export async function POST(request: Request) {
     if (categoryFeesError) throw new Error(categoryFeesError.message);
     if (taxesError) throw new Error(taxesError.message);
     if (marginsError) throw new Error(marginsError.message);
+    if (costHistoryError) throw new Error(costHistoryError.message);
 
     const products = (productsData || []) as Product[];
     const publications = (publicationsData || []) as SalesPublication[];
     const categoryFees = (categoryFeesData || []) as MercadoLibreCategoryFee[];
     const taxes = (taxesData || defaultTaxSettings()) as TaxSettings;
     const margins = (marginsData || []) as ProductChannelMargin[];
+    const costHistory = (costHistoryData || []) as ProductCostHistory[];
     const productBySku = mapBySku(products);
     const productById = new Map(products.filter((product) => product.id).map((product) => [String(product.id), product]));
     const publicationByItemId = new Map(publications.filter((item) => item.meli_item_id).map((item) => [String(item.meli_item_id), item]));
@@ -289,6 +343,13 @@ export async function POST(request: Request) {
       publicationsBySku.set(sku, [...(publicationsBySku.get(sku) || []), publication]);
     });
     const marginByProductAndChannel = new Map(margins.map((item) => [marginKey(item.product_id, item.channel_code), item]));
+    const historiesByProductId = new Map<string, ProductCostHistory[]>();
+    const historiesBySku = new Map<string, ProductCostHistory[]>();
+    costHistory.forEach((history) => {
+      if (history.product_id) historiesByProductId.set(String(history.product_id), [...(historiesByProductId.get(String(history.product_id)) || []), history]);
+      const sku = normalizeSku(history.sku);
+      if (sku) historiesBySku.set(sku, [...(historiesBySku.get(sku) || []), history]);
+    });
 
     const rowsByKey = new Map<string, Record<string, unknown>>();
     const limit = 50;
@@ -323,7 +384,8 @@ export async function POST(request: Request) {
             const skuFromOrder = normalizeSku(orderItem.item?.seller_sku || null);
             const publication = publicationByItemId.get(itemId);
             const sku = skuFromOrder || normalizeSku(publication?.sku || null);
-            const product = productBySku.get(sku) || productById.get(String(publication?.product_id || "")) || null;
+            const currentProduct = productBySku.get(sku) || productById.get(String(publication?.product_id || "")) || null;
+            const product = productWithCostAtDate(currentProduct, order.date_created, historiesByProductId, historiesBySku);
             const quantity = Number(orderItem.quantity || 0);
             const unitPrice = Number(orderItem.unit_price || 0);
             const variationId = asString(orderItem.item?.variation_id);

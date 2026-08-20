@@ -194,6 +194,8 @@ export type MercadoLibreOrderItem = {
   normalized_margin_on_net_sale?: number | null;
   normalized_margin_on_cost?: number | null;
   normalized_cost_for_profit?: number | null;
+  normalized_product_cost_without_vat?: number | null;
+  normalized_product_vat_rate?: number | null;
   normalized_marketplace_fee_amount?: number | null;
   normalized_shipping_cost_amount?: number | null;
   normalized_fixed_fee_amount?: number | null;
