@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, CalendarClock, ChevronRight, CircleAlert, Search, TrendingUp } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
@@ -721,6 +721,7 @@ function promotionCountForPublication(
 export default function PromocionesMeliPage() {
   const router = useRouter();
   const supabase = createClient();
+  const autoPromotionSyncStarted = useRef(false);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
@@ -846,31 +847,34 @@ export default function PromocionesMeliPage() {
     }
   }
 
-  async function syncMercadoLibreData() {
+  async function syncMercadoLibreData(options: { scope?: "all" | "promotions"; silent?: boolean } = {}) {
     if (syncingMeli) return;
+    const scope = options.scope || "promotions";
     setSyncingMeli(true);
-    setError(null);
+    if (!options.silent) setError(null);
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 120000);
     try {
       const response = await fetch("/api/mercadolibre/sync-shipping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "all" }),
+        body: JSON.stringify({ scope }),
         signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(data?.error || "No se pudo sincronizar MercadoLibre.");
+        if (!options.silent) setError(data?.error || "No se pudo sincronizar MercadoLibre.");
         return;
       }
       await loadData();
     } catch (syncError) {
-      setError(
-        syncError instanceof DOMException && syncError.name === "AbortError"
-          ? "La sincronizacion de MercadoLibre tardo mas de 2 minutos. Proba de nuevo o sincroniza por SKU desde Productos."
-          : syncError instanceof Error ? syncError.message : "No se pudo sincronizar MercadoLibre.",
-      );
+      if (!options.silent) {
+        setError(
+          syncError instanceof DOMException && syncError.name === "AbortError"
+            ? "La sincronizacion de MercadoLibre tardo mas de 2 minutos. Proba de nuevo o sincroniza por SKU desde Productos."
+            : syncError instanceof Error ? syncError.message : "No se pudo sincronizar MercadoLibre.",
+        );
+      }
     } finally {
       window.clearTimeout(timeout);
       setSyncingMeli(false);
@@ -949,6 +953,13 @@ export default function PromocionesMeliPage() {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (loading || autoPromotionSyncStarted.current || syncingMeli) return;
+    autoPromotionSyncStarted.current = true;
+    syncMercadoLibreData({ scope: "promotions", silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, syncingMeli]);
 
   const groups = useMemo<ProductPromoGroup[]>(() => {
     const productsById = new Map(products.map((product) => [product.id, product]));
@@ -1829,9 +1840,9 @@ export default function PromocionesMeliPage() {
     <main className="container wide promociones-meli-page">
       <PageHero
         title="Promociones Meli"
-        description={syncingMeli ? "Sincronizando publicaciones y promociones desde MercadoLibre..." : "Revisa productos activos en MercadoLibre, sus publicaciones y las promociones disponibles o vigentes detectadas en la ultima sincronizacion."}
-        onRefresh={syncMercadoLibreData}
-        refreshLabel={syncingMeli ? "Sincronizando..." : "Sincronizar ML"}
+        description={syncingMeli ? "Actualizando promociones desde MercadoLibre..." : "Revisa productos activos en MercadoLibre, sus publicaciones y las promociones disponibles o vigentes detectadas en la ultima sincronizacion."}
+        onRefresh={() => syncMercadoLibreData()}
+        refreshLabel={syncingMeli ? "Actualizando..." : "Actualizar promos"}
         refreshDisabled={syncingMeli}
       />
 
@@ -2343,8 +2354,8 @@ export default function PromocionesMeliPage() {
             <button className="button ghost" type="button" onClick={() => setMissingPromoModalOpen(true)}>
               Sin promo {missingPromoGroups.reduce((total, group) => total + group.items.length, 0)}
             </button>
-            <button className="button ghost" type="button" onClick={syncMercadoLibreData} disabled={syncingMeli}>
-              {syncingMeli ? "Sincronizando..." : "Sincronizar ML"}
+            <button className="button ghost" type="button" onClick={() => syncMercadoLibreData()} disabled={syncingMeli}>
+              {syncingMeli ? "Actualizando..." : "Actualizar promos"}
             </button>
           </div>
         </div>
