@@ -207,6 +207,33 @@ export type MercadoLibreOrderItem = {
   updated_at?: string;
 };
 
+export type TiendanubePublication = {
+  id?: string;
+  tiendanube_store_id: number;
+  tiendanube_product_id: number;
+  tiendanube_variant_id: number;
+  product_id?: string | null;
+  sku?: string | null;
+  title?: string | null;
+  variant_name?: string | null;
+  handle?: string | null;
+  permalink?: string | null;
+  price?: number | null;
+  promotional_price?: number | null;
+  currency?: string | null;
+  stock?: number | null;
+  stock_management?: boolean | null;
+  visibility?: string | null;
+  published?: boolean | null;
+  categories?: unknown;
+  image_url?: string | null;
+  raw?: unknown;
+  active: boolean;
+  tn_last_sync_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type TaxSettings = {
   key: string;
   iibb_rate: number;

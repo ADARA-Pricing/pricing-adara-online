@@ -8,6 +8,7 @@ const items = [
   { href: "/rotacion-sku", label: "Rotacion SKU" },
   { href: "/rentabilidad-meli", label: "Rentabilidad ML" },
   { href: "/mercadolibre", label: "Costo x canal" },
+  { href: "/tienda-nube", label: "Tienda Nube" },
   { href: "/impuestos", label: "Impuestos" },
   { href: "/precios", label: "Precios" },
   { href: "/simulador", label: "Simulador" },
