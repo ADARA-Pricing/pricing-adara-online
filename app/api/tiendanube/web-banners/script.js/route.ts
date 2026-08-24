@@ -6,6 +6,8 @@ const script = `
   var origin = scriptEl && scriptEl.getAttribute("data-adara-origin") || "https://pricing-adara-online.vercel.app";
   var isHome = location.pathname === "/" || location.pathname === "" || /^\\/[a-z]{2}(-[A-Z]{2})?\\/?$/.test(location.pathname);
   if (!isHome || document.getElementById("adara-campaign-carousel")) return;
+  var prehideCarousel = document.querySelector(".template-home .adara-main-carousel, .adara-main-carousel, [data-adara-carousel]");
+  if (prehideCarousel) prehideCarousel.style.setProperty("visibility", "hidden", "important");
 
   function escapeHtml(value) {
     return String(value || "").replace(/[&<>"']/g, function (char) {
@@ -34,7 +36,7 @@ const script = `
 
   function render(banners) {
     if (!Array.isArray(banners) || !banners.length) return;
-    var existingCarousel = document.querySelector(".template-home .adara-main-carousel, .adara-main-carousel, [data-adara-carousel]");
+    var existingCarousel = prehideCarousel || document.querySelector(".template-home .adara-main-carousel, .adara-main-carousel, [data-adara-carousel]");
     var root = document.createElement("section");
     root.id = "adara-campaign-carousel";
     root.className = "adara-campaign-carousel";
