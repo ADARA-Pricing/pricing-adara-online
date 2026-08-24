@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Check, ChartNoAxesCombined, Database, Filter, RefreshCw, Search } from "lucide-react";
@@ -60,6 +60,12 @@ function daysBetween(from: string) {
   return (Date.now() - date.getTime()) / 86400000;
 }
 
+function hoursBetween(from: string) {
+  const date = new Date(from);
+  if (Number.isNaN(date.getTime())) return Infinity;
+  return (Date.now() - date.getTime()) / 3600000;
+}
+
 function stockLabel(days: number | null) {
   if (days === null) return "Sin ventas";
   if (!Number.isFinite(days)) return "-";
@@ -102,6 +108,7 @@ function productInitial(name: string, sku: string) {
 export default function RotacionSkuPage() {
   const router = useRouter();
   const supabase = createClient();
+  const autoSalesSyncStarted = useRef(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [imagePublications, setImagePublications] = useState<MercadoLibreShippingCost[]>([]);
@@ -535,17 +542,30 @@ export default function RotacionSkuPage() {
   }
 
   const salesCoverage = useMemo(() => {
-    const dates = sales
+    const orderDates = sales
       .map((sale) => new Date(sale.order_date).getTime())
       .filter((time) => Number.isFinite(time))
       .sort((a, b) => a - b);
-    if (!dates.length) return null;
+    const syncDates = sales
+      .map((sale) => new Date(sale.updated_at || sale.created_at || sale.order_date).getTime())
+      .filter((time) => Number.isFinite(time))
+      .sort((a, b) => a - b);
+    if (!orderDates.length) return null;
     return {
-      first: new Date(dates[0]).toISOString(),
-      last: new Date(dates[dates.length - 1]).toISOString(),
+      first: new Date(orderDates[0]).toISOString(),
+      last: new Date(orderDates[orderDates.length - 1]).toISOString(),
+      syncedAt: syncDates.length ? new Date(syncDates[syncDates.length - 1]).toISOString() : null,
       count: sales.length,
     };
   }, [sales]);
+  const salesSyncIsStale = salesCoverage?.syncedAt ? hoursBetween(salesCoverage.syncedAt) > 6 : !loading;
+
+  useEffect(() => {
+    if (loading || syncing || autoSalesSyncStarted.current || !salesSyncIsStale) return;
+    autoSalesSyncStarted.current = true;
+    syncSales();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, syncing, salesSyncIsStale]);
 
   return (
     <main className="page rotation-page">
@@ -571,7 +591,8 @@ export default function RotacionSkuPage() {
           {salesCoverage && (
             <span>
               <Database aria-hidden="true" />
-              Datos cargados: {salesCoverage.count} items vendidos desde {shortDate(salesCoverage.first)} hasta {shortDate(salesCoverage.last)}.
+              Datos cargados: {salesCoverage.count} items vendidos desde {shortDate(salesCoverage.first)} hasta {shortDate(salesCoverage.last)}
+              {salesCoverage.syncedAt ? ` · sync ${shortDate(salesCoverage.syncedAt)}${salesSyncIsStale ? " atrasada" : ""}` : ""}.
             </span>
           )}
         </div>
