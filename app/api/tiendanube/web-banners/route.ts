@@ -30,10 +30,10 @@ function cleanOpacity(value: unknown) {
   return Math.max(0, Math.min(0.75, number));
 }
 
-function cleanTextWidth(value: unknown) {
-  const number = Number(value ?? 46);
-  if (!Number.isFinite(number)) return 46;
-  return Math.max(24, Math.min(70, number));
+function cleanTextWidth(value: unknown, fallback: number, min: number, max: number) {
+  const number = Number(value ?? fallback);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
 }
 
 function cleanDate(value: unknown) {
@@ -85,7 +85,8 @@ export async function POST(request: NextRequest) {
       link_url: cleanUrl(body.link_url),
       button_label: cleanOptionalText(body.button_label),
       show_text: Boolean(body.show_text ?? true),
-      text_width_desktop: cleanTextWidth(body.text_width_desktop),
+      text_width_desktop: cleanTextWidth(body.text_width_desktop, 46, 24, 70),
+      text_width_mobile: cleanTextWidth(body.text_width_mobile, 86, 55, 100),
       text_color: cleanColor(body.text_color),
       overlay_opacity: cleanOpacity(body.overlay_opacity),
       active: Boolean(body.active ?? true),
@@ -130,7 +131,8 @@ export async function PUT(request: NextRequest) {
       link_url: cleanUrl(body.link_url),
       button_label: cleanOptionalText(body.button_label),
       show_text: Boolean(body.show_text ?? true),
-      text_width_desktop: cleanTextWidth(body.text_width_desktop),
+      text_width_desktop: cleanTextWidth(body.text_width_desktop, 46, 24, 70),
+      text_width_mobile: cleanTextWidth(body.text_width_mobile, 86, 55, 100),
       text_color: cleanColor(body.text_color),
       overlay_opacity: cleanOpacity(body.overlay_opacity),
       active: Boolean(body.active),

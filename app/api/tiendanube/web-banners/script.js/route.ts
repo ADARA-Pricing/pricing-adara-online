@@ -21,10 +21,10 @@ const script = `
     return Math.max(0, Math.min(0.75, number));
   }
 
-  function normalizeTextWidth(value) {
+  function normalizeTextWidth(value, fallback, min, max) {
     var number = Number(value);
-    if (!isFinite(number)) return 46;
-    return Math.max(24, Math.min(70, number));
+    if (!isFinite(number)) return fallback;
+    return Math.max(min, Math.min(max, number));
   }
 
   function bannerImage(banner) {
@@ -54,7 +54,7 @@ const script = `
       '#adara-campaign-carousel .adara-dots{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:center;gap:8px;z-index:3}',
       '#adara-campaign-carousel .adara-dot{width:9px;height:9px;border:0;border-radius:999px;background:rgba(255,255,255,.55);padding:0;cursor:pointer}',
       '#adara-campaign-carousel .adara-dot.active{background:#fff}',
-      '@media(max-width:720px){#adara-campaign-carousel{margin-bottom:16px}#adara-campaign-carousel .adara-copy{left:18px;right:18px;bottom:24px;max-width:none}}',
+      '@media(max-width:720px){#adara-campaign-carousel{margin-bottom:16px}#adara-campaign-carousel .adara-copy{left:18px;right:18px;bottom:24px;width:var(--adara-copy-width-mobile,86vw);max-width:calc(100vw - 36px)}}',
       '</style>',
       '<div class="adara-track">',
       banners.map(function (banner) {
@@ -64,10 +64,11 @@ const script = `
         var button = escapeHtml(banner.button_label);
         var link = banner.link_url ? escapeHtml(banner.link_url) : "#";
         var showText = banner.show_text !== false;
-        var textWidth = normalizeTextWidth(banner.text_width_desktop);
+        var textWidth = normalizeTextWidth(banner.text_width_desktop, 46, 24, 70);
+        var mobileTextWidth = normalizeTextWidth(banner.text_width_mobile, 86, 55, 100);
         var text = /^#[0-9a-f]{6}$/i.test(String(banner.text_color || "")) ? banner.text_color : "#ffffff";
         var overlay = normalizeOpacity(banner.overlay_opacity);
-        return '<a class="adara-slide" href="' + link + '" style="--adara-text:' + text + ';--adara-overlay:' + overlay + ';--adara-copy-width:' + textWidth + 'vw">' +
+        return '<a class="adara-slide" href="' + link + '" style="--adara-text:' + text + ';--adara-overlay:' + overlay + ';--adara-copy-width:' + textWidth + 'vw;--adara-copy-width-mobile:' + mobileTextWidth + 'vw">' +
           '<img src="' + image + '" alt="' + title + '" loading="eager">' +
           (showText ? '<span class="adara-overlay"></span><span class="adara-copy"><h2>' + title + '</h2>' +
           (subtitle ? '<p>' + subtitle + '</p>' : '') +

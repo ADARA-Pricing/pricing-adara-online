@@ -12652,13 +12652,62 @@ body {
   min-height: 18px;
 }
 
+.tienda-nube-page .tn-banner-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.tienda-nube-page .tn-banner-preview-head > span {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.tienda-nube-page .tn-banner-preview-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #cfe0f6;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.tienda-nube-page .tn-banner-preview-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 10px;
+  color: #475569;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tienda-nube-page .tn-banner-preview-toggle button.active {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
 .tienda-nube-page .tn-banner-preview {
   position: relative;
   overflow: hidden;
   aspect-ratio: 1580 / 600;
-  margin: 16px 0;
+  margin: 10px 0 16px;
   border-radius: 8px;
   background: #111827;
+}
+
+.tienda-nube-page .tn-banner-preview.is-mobile {
+  aspect-ratio: 820 / 1200;
+  width: min(100%, 340px);
+  margin-inline: auto;
 }
 
 .tienda-nube-page .tn-banner-preview img,
@@ -12684,6 +12733,12 @@ body {
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
 }
 
+.tienda-nube-page .tn-banner-preview.is-mobile > div:last-child {
+  left: 18px;
+  right: 18px;
+  bottom: 24px;
+}
+
 .tienda-nube-page .tn-banner-preview h3 {
   margin: 0 0 8px;
   font-size: 34px;
@@ -12694,6 +12749,14 @@ body {
 .tienda-nube-page .tn-banner-preview p {
   margin: 0 0 14px;
   font-size: 16px;
+}
+
+.tienda-nube-page .tn-banner-preview.is-mobile h3 {
+  font-size: 28px;
+}
+
+.tienda-nube-page .tn-banner-preview.is-mobile p {
+  font-size: 14px;
 }
 
 .tienda-nube-page .tn-banner-preview strong {

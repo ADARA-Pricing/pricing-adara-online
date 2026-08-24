@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, Check, ExternalLink, Globe2, Image as ImageIcon, Plus, RefreshCw, Save, Search, Store, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Check, ExternalLink, Globe2, Image as ImageIcon, Monitor, Plus, RefreshCw, Save, Search, Smartphone, Store, Trash2, Upload } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -71,6 +71,7 @@ type BannerForm = {
   button_label: string;
   show_text: boolean;
   text_width_desktop: number;
+  text_width_mobile: number;
   text_color: string;
   overlay_opacity: number;
   active: boolean;
@@ -88,6 +89,7 @@ const emptyBannerForm: BannerForm = {
   button_label: "Comprar ahora",
   show_text: true,
   text_width_desktop: 46,
+  text_width_mobile: 86,
   text_color: "#ffffff",
   overlay_opacity: 0.28,
   active: true,
@@ -192,6 +194,7 @@ function bannerToForm(banner: TiendanubeWebBanner): BannerForm {
     button_label: banner.button_label || "",
     show_text: banner.show_text !== false,
     text_width_desktop: Number(banner.text_width_desktop ?? 46),
+    text_width_mobile: Number(banner.text_width_mobile ?? 86),
     text_color: banner.text_color || "#ffffff",
     overlay_opacity: Number(banner.overlay_opacity ?? 0.28),
     active: Boolean(banner.active),
@@ -253,6 +256,7 @@ export default function TiendaNubePage() {
   const [syncing, setSyncing] = useState(false);
   const [savingBanner, setSavingBanner] = useState(false);
   const [uploadingBannerImage, setUploadingBannerImage] = useState<BannerImageVariant | null>(null);
+  const [bannerPreviewVariant, setBannerPreviewVariant] = useState<BannerImageVariant>("desktop");
   const [installingWebScript, setInstallingWebScript] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -968,6 +972,10 @@ export default function TiendaNubePage() {
               <input type="range" min="24" max="70" step="1" value={bannerForm.text_width_desktop} onChange={(event) => setBannerForm((current) => ({ ...current, text_width_desktop: Number(event.target.value) }))} />
             </label>
             <label>
+              <span>Ancho texto mobile: {bannerForm.text_width_mobile}%</span>
+              <input type="range" min="55" max="100" step="1" value={bannerForm.text_width_mobile} onChange={(event) => setBannerForm((current) => ({ ...current, text_width_mobile: Number(event.target.value) }))} />
+            </label>
+            <label>
               <span>Orden</span>
               <input type="number" value={bannerForm.position} onChange={(event) => setBannerForm((current) => ({ ...current, position: Number(event.target.value || 0) }))} />
             </label>
@@ -993,12 +1001,26 @@ export default function TiendaNubePage() {
             </label>
           </div>
 
-          <div className="tn-banner-preview">
-            {bannerForm.image_url ? <img src={bannerForm.image_url} alt="" /> : <div><ImageIcon aria-hidden="true" />Sin imagen</div>}
+          <div className="tn-banner-preview-head">
+            <span>Vista previa</span>
+            <div className="tn-banner-preview-toggle" role="group" aria-label="Vista previa del banner">
+              <button className={bannerPreviewVariant === "desktop" ? "active" : ""} type="button" onClick={() => setBannerPreviewVariant("desktop")}>
+                <Monitor size={14} aria-hidden="true" />
+                Web
+              </button>
+              <button className={bannerPreviewVariant === "mobile" ? "active" : ""} type="button" onClick={() => setBannerPreviewVariant("mobile")}>
+                <Smartphone size={14} aria-hidden="true" />
+                Mobile
+              </button>
+            </div>
+          </div>
+
+          <div className={`tn-banner-preview is-${bannerPreviewVariant}`}>
+            {(bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url) ? <img src={bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url} alt="" /> : <div><ImageIcon aria-hidden="true" />Sin imagen</div>}
             {bannerForm.show_text ? (
               <>
                 <span style={{ background: `rgba(0,0,0,${bannerForm.overlay_opacity})` }} />
-                <div style={{ color: bannerForm.text_color, width: `${bannerForm.text_width_desktop}%`, maxWidth: "88%" }}>
+                <div style={{ color: bannerForm.text_color, width: `${bannerPreviewVariant === "mobile" ? bannerForm.text_width_mobile : bannerForm.text_width_desktop}%`, maxWidth: bannerPreviewVariant === "mobile" ? "calc(100% - 36px)" : "88%" }}>
                   <h3>{bannerForm.title || "Título de campaña"}</h3>
                   <p>{bannerForm.subtitle || "Subtítulo opcional del banner"}</p>
                   {bannerForm.button_label ? <strong>{bannerForm.button_label}</strong> : null}
