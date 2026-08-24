@@ -84,6 +84,7 @@ const script = `
         root.style.marginTop = "";
         return;
       }
+      if ((window.scrollY || window.pageYOffset || 0) > 20) return;
       var header = document.querySelector(".js-head-main, .head-main, header");
       if (!header || !window.getComputedStyle) return;
       var position = window.getComputedStyle(header).position;
@@ -96,7 +97,6 @@ const script = `
     }
     offsetMobileHeader();
     window.addEventListener("load", offsetMobileHeader);
-    window.addEventListener("resize", offsetMobileHeader);
     window.setTimeout(offsetMobileHeader, 600);
     window.setTimeout(offsetMobileHeader, 1800);
 
