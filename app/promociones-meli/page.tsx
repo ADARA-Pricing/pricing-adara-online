@@ -582,6 +582,11 @@ function promoBuyerPrice(item: PromoComparison) {
   return Number(item.promoPrice || item.effectiveSalePrice || 0);
 }
 
+function promoActivationBlockKey(item: Pick<PromoComparison, "itemId" | "promotionId" | "offerId">) {
+  if (!item.itemId || !item.promotionId || !item.offerId) return null;
+  return [item.itemId, item.promotionId, item.offerId].join("|");
+}
+
 function promoImprovesMeliSupport(candidate: PromoComparison, active: PromoComparison) {
   const candidateMeliRate = Number(candidate.meliRate || 0);
   const activeMeliRate = Number(active.meliRate || 0);
@@ -757,6 +762,7 @@ export default function PromocionesMeliPage() {
   const [syncingMeli, setSyncingMeli] = useState(false);
   const [activatingPromotionKey, setActivatingPromotionKey] = useState<string | null>(null);
   const [activationErrors, setActivationErrors] = useState<Record<string, string>>({});
+  const [blockedActivationKeys, setBlockedActivationKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -891,6 +897,7 @@ export default function PromocionesMeliPage() {
   }
 
   function canActivatePromotion(promo: PromoComparison) {
+    if (isPolicyBlockedPromotion(promo)) return false;
     return (
       promo.status === "Para activar" &&
       promo.promotionType === "SMART" &&
@@ -898,6 +905,24 @@ export default function PromocionesMeliPage() {
       Boolean(promo.promotionId) &&
       Boolean(promo.offerId?.startsWith(`CANDIDATE-${promo.itemId}-`))
     );
+  }
+
+  function isPolicyBlockedPromotion(promo: PromoComparison) {
+    const key = promoActivationBlockKey(promo);
+    return Boolean(key && blockedActivationKeys.includes(key));
+  }
+
+  function saveBlockedActivationKeys(keys: string[]) {
+    const uniqueKeys = [...new Set(keys)].slice(-500);
+    setBlockedActivationKeys(uniqueKeys);
+    window.localStorage.setItem("promos-meli-blocked-activations", JSON.stringify(uniqueKeys));
+  }
+
+  function markPolicyBlockedPromotion(promo: PromoComparison, message: string) {
+    const key = promoActivationBlockKey(promo);
+    if (!key) return;
+    saveBlockedActivationKeys([...blockedActivationKeys, key]);
+    setActivationErrors((current) => ({ ...current, [promo.key]: message }));
   }
 
   async function activatePromotion(promo: PromoComparison) {
@@ -925,6 +950,9 @@ export default function PromocionesMeliPage() {
         const message = data?.error || "No se pudo activar la promocion.";
         setError(message);
         setActivationErrors((current) => ({ ...current, [promo.key]: message }));
+        if (response.status === 403 || message.includes("PA_UNAUTHORIZED_RESULT_FROM_POLICIES")) {
+          markPolicyBlockedPromotion(promo, message);
+        }
         window.alert(message);
         return;
       }
@@ -1013,6 +1041,12 @@ export default function PromocionesMeliPage() {
     setDesktopAlertsEnabled(window.localStorage.getItem("promos-meli-alerts-enabled") === "true");
     setDesktopAlertMeliRate(Number(window.localStorage.getItem("promos-meli-alerts-meli-rate") || 3) || 3);
     setDesktopAlertInterval(Number(window.localStorage.getItem("promos-meli-alerts-interval") || 30) || 30);
+    try {
+      const blockedKeys = JSON.parse(window.localStorage.getItem("promos-meli-blocked-activations") || "[]");
+      setBlockedActivationKeys(Array.isArray(blockedKeys) ? blockedKeys.map(String) : []);
+    } catch {
+      setBlockedActivationKeys([]);
+    }
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1472,7 +1506,8 @@ export default function PromocionesMeliPage() {
               netProfit: rentability.netProfit,
             };
           })
-          .filter(Boolean) as Array<{ promo: PromoComparison; margin: number; netProfit: number }>;
+          .filter(Boolean)
+          .filter((item) => !isPolicyBlockedPromotion(item.promo)) as Array<{ promo: PromoComparison; margin: number; netProfit: number }>;
 
         const activePromos = calculatedPromos.filter((item) => item.promo.status === "Vigente");
         const candidatePromos = calculatedPromos.filter((item) =>
@@ -1762,7 +1797,7 @@ export default function PromocionesMeliPage() {
       scheduled: groupBySku(scheduled),
       scheduledShared: groupBySku(scheduledShared),
     };
-  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold]);
+  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold, blockedActivationKeys]);
 
   const desktopAlertCandidates = useMemo(() => {
     const flatten = (groups: PromoTrafficLightGroup[]) => groups.flatMap((group) => group.items);
@@ -2209,7 +2244,8 @@ export default function PromocionesMeliPage() {
                             endDate: item.end_date || null,
                             fixedFeeAmount,
                           };
-                        }),
+                        })
+                        .filter((promo) => !isPolicyBlockedPromotion(promo)),
                     ]).sort((a, b) => {
                       if (a.meliAmount !== b.meliAmount) return b.meliAmount - a.meliAmount;
                       return Number(b.rentability ?? -999) - Number(a.rentability ?? -999);
