@@ -205,7 +205,17 @@ function groupProductPublications(publications: MercadoLibreShippingCost[]) {
 
 function sharedStockFromPublications(publications: MercadoLibreShippingCost[]) {
   const activePublications = publications.filter((publication) => publication.meli_status === "active");
-  const stockSourcePublications = activePublications.length ? activePublications : publications;
+  const statusSourcePublications = activePublications.length ? activePublications : publications;
+  const latestSyncTime = Math.max(
+    ...statusSourcePublications.map((publication) =>
+      new Date(publication.meli_last_sync_at || publication.updated_at || 0).getTime(),
+    ),
+  );
+  const stockSourcePublications = Number.isFinite(latestSyncTime) && latestSyncTime > 0
+    ? statusSourcePublications.filter((publication) =>
+        new Date(publication.meli_last_sync_at || publication.updated_at || 0).getTime() === latestSyncTime,
+      )
+    : statusSourcePublications;
   const stocks = stockSourcePublications
     .map((publication) => Number(publication.meli_stock || 0))
     .filter((stock) => Number.isFinite(stock) && stock >= 0);
