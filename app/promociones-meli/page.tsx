@@ -756,6 +756,7 @@ export default function PromocionesMeliPage() {
   const [yellowThreshold, setYellowThreshold] = useState(5);
   const [syncingMeli, setSyncingMeli] = useState(false);
   const [activatingPromotionKey, setActivatingPromotionKey] = useState<string | null>(null);
+  const [activationErrors, setActivationErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -921,12 +922,23 @@ export default function PromocionesMeliPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(data?.error || "No se pudo activar la promocion.");
+        const message = data?.error || "No se pudo activar la promocion.";
+        setError(message);
+        setActivationErrors((current) => ({ ...current, [promo.key]: message }));
+        window.alert(message);
         return;
       }
+      setActivationErrors((current) => {
+        const next = { ...current };
+        delete next[promo.key];
+        return next;
+      });
       await syncMercadoLibreData({ scope: "promotions", silent: true });
     } catch (activationError) {
-      setError(activationError instanceof Error ? activationError.message : "No se pudo activar la promocion.");
+      const message = activationError instanceof Error ? activationError.message : "No se pudo activar la promocion.";
+      setError(message);
+      setActivationErrors((current) => ({ ...current, [promo.key]: message }));
+      window.alert(message);
     } finally {
       setActivatingPromotionKey(null);
     }
@@ -2355,14 +2367,19 @@ export default function PromocionesMeliPage() {
                                     <td>{promo.netProfit !== null ? moneyWithCents(promo.netProfit) : "-"}</td>
                                     <td>
                                       {canActivatePromotion(promo) ? (
-                                        <button
-                                          className="button ghost"
-                                          type="button"
-                                          onClick={() => activatePromotion(promo)}
-                                          disabled={Boolean(activatingPromotionKey)}
-                                        >
-                                          {activatingPromotionKey === promo.key ? "Activando..." : "Activar"}
-                                        </button>
+                                        <>
+                                          <button
+                                            className="button ghost"
+                                            type="button"
+                                            onClick={() => activatePromotion(promo)}
+                                            disabled={Boolean(activatingPromotionKey)}
+                                          >
+                                            {activatingPromotionKey === promo.key ? "Activando..." : "Activar"}
+                                          </button>
+                                          {activationErrors[promo.key] && (
+                                            <span className="promo-date-badge">Bloqueada por Meli</span>
+                                          )}
+                                        </>
                                       ) : promo.status === "Para activar" && promo.offerId?.startsWith("CANDIDATE-") ? (
                                         <span className="promo-date-badge">API</span>
                                       ) : (

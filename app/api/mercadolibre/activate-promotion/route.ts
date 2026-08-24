@@ -59,9 +59,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo activar la promocion.";
+    const status = message === "No autorizado."
+      ? 401
+      : message.startsWith("403")
+        ? 403
+        : 500;
     return NextResponse.json(
       { error: message },
-      { status: message === "No autorizado." ? 401 : 500 },
+      { status },
     );
   }
 }
