@@ -1359,9 +1359,7 @@ export async function POST(request: NextRequest) {
     const listingTypeNames = promotionsOnly ? new Map<string, string>() : await getListingTypeNames(account);
 
     let productsQuery = supabase.from("products").select("*");
-    productsQuery = targetSkus.length
-      ? productsQuery.in("sku", targetSkus)
-      : productsQuery.eq("status", "active");
+    if (targetSkus.length) productsQuery = productsQuery.in("sku", targetSkus);
 
     const { data: products, error: productsError } = await productsQuery;
 
