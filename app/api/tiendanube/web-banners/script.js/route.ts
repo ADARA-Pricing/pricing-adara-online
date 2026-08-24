@@ -37,7 +37,7 @@ const script = `
       '#adara-campaign-carousel{position:relative;width:100%;overflow:hidden;background:#111;margin:0 0 24px;isolation:isolate}',
       '#adara-campaign-carousel .adara-track{display:flex;transition:transform .45s ease;will-change:transform}',
       '#adara-campaign-carousel .adara-slide{min-width:100%;position:relative;display:block;color:var(--adara-text,#fff);text-decoration:none}',
-      '#adara-campaign-carousel .adara-slide img{display:block;width:100%;height:auto;object-fit:contain;background:#111}',
+      '#adara-campaign-carousel .adara-slide img{display:block!important;width:100%!important;height:auto!important;max-height:none!important;object-fit:contain!important;object-position:center center!important;background:#111}',
       '#adara-campaign-carousel .adara-overlay{position:absolute;inset:0;background:#000;opacity:var(--adara-overlay,.28);pointer-events:none}',
       '#adara-campaign-carousel .adara-copy{position:absolute;inset:auto auto 10% 6%;max-width:min(560px,80vw);z-index:2;color:var(--adara-text,#fff);text-shadow:0 2px 14px rgba(0,0,0,.35)}',
       '#adara-campaign-carousel .adara-copy h2{margin:0 0 8px;font-size:clamp(28px,4vw,56px);line-height:1.02;font-weight:800;letter-spacing:0}',
@@ -78,6 +78,27 @@ const script = `
       var target = document.querySelector(".js-home-sections-container") || document.querySelector("main") || document.querySelector(".js-home-main") || document.body;
       target.insertBefore(root, target.firstChild);
     }
+
+    function offsetMobileHeader() {
+      if (!window.matchMedia || !window.matchMedia("(max-width: 720px)").matches) {
+        root.style.marginTop = "";
+        return;
+      }
+      var header = document.querySelector(".js-head-main, .head-main, header");
+      if (!header || !window.getComputedStyle) return;
+      var position = window.getComputedStyle(header).position;
+      if (position !== "fixed" && position !== "sticky") return;
+      root.style.marginTop = "";
+      var headerBottom = Math.max(0, Math.round(header.getBoundingClientRect().bottom));
+      var rootTop = Math.round(root.getBoundingClientRect().top);
+      var offset = Math.max(0, headerBottom - rootTop);
+      if (offset > 0) root.style.marginTop = offset + "px";
+    }
+    offsetMobileHeader();
+    window.addEventListener("load", offsetMobileHeader);
+    window.addEventListener("resize", offsetMobileHeader);
+    window.setTimeout(offsetMobileHeader, 600);
+    window.setTimeout(offsetMobileHeader, 1800);
 
     var index = 0;
     var track = root.querySelector(".adara-track");
