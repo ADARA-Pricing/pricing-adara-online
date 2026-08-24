@@ -998,7 +998,11 @@ export default function PromocionesMeliPage() {
 
       current.publications.push(publication);
       current.opportunities.push(...publicationOpportunities);
-      current.activePromotionCount += publication.meli_promo_price ? 1 : 0;
+      current.activePromotionCount += promotionCountForPublication(
+        publication,
+        publicationOpportunities,
+        false,
+      );
       current.bestMeliAmount = Math.max(
         current.bestMeliAmount,
         meliContributionAmount(
@@ -1875,7 +1879,7 @@ export default function PromocionesMeliPage() {
             </div>
             <div>
               <span>Promos</span>
-              <strong>{selectedGroup ? selectedGroup.activePromotionCount + selectedGroup.opportunities.length : opportunities.filter(isCurrentOpportunity).length}</strong>
+              <strong>{selectedGroup ? selectedGroup.activePromotionCount : opportunities.filter(isCurrentOpportunity).length}</strong>
             </div>
           </div>
           <button className="button" type="button" onClick={() => setProductPickerOpen(true)}>
@@ -1939,7 +1943,7 @@ export default function PromocionesMeliPage() {
                         <span>pub.</span>
                       </span>
                       <span className="promociones-product-meta">
-                        <strong>{group.activePromotionCount + group.opportunities.length}</strong>
+                        <strong>{group.activePromotionCount}</strong>
                         <span>promos</span>
                       </span>
                     </button>

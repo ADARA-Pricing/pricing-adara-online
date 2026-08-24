@@ -1554,7 +1554,7 @@ export async function POST(request: NextRequest) {
         if (!payload.endpoint?.includes(`/seller-promotions/items/${item.id}`) || !Array.isArray(payload.data)) continue;
         for (const rawPromotion of payload.data) {
           const promotionItem = rawPromotion as MeliPromotionItem & { type?: string | null; name?: string | null };
-          if (!promotionItem.id || !promotionItem.status) continue;
+          if (!(promotionItem.id || promotionItem.type) || !promotionItem.status) continue;
           if (!promotionPayloadBelongsToItem(promotionItem, item.id)) continue;
           const promotion = sellerPromotionsById.get(String(promotionItem.id)) || null;
           const listingPrice = await listingPriceForMatchedItemAtPrice(item, promotionEffectiveSalePrice(promotionItem));
