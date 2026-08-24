@@ -641,6 +641,10 @@ function meliContributionRateForItem(item: PromoTrafficLightItem) {
   return 0;
 }
 
+function promoHasMeliContribution(item: PromoComparison) {
+  return Number(item.meliAmount || 0) > 0 || Number(item.meliRate || 0) > 0;
+}
+
 function dedupePromoComparisons(items: PromoComparison[]) {
   const map = new Map<string, PromoComparison>();
   items.forEach((item) => {
@@ -1660,7 +1664,7 @@ export default function PromocionesMeliPage() {
             scheduledItem.promo.scheduled &&
             samePromotionEconomics(scheduledItem.promo, item.promo)
           ) &&
-          (Number(item.promo.meliAmount || 0) > 0 || Number(item.promo.meliRate || 0) > 0),
+          promoHasMeliContribution(item.promo),
         );
         const scheduledPromos = calculatedPromos.filter((item) =>
           item.promo.status === "Para activar" &&
@@ -1710,7 +1714,10 @@ export default function PromocionesMeliPage() {
           if (margin < redThreshold) addItem(red, item);
         });
 
-        if (isActivePublication && bestScheduled && bestScheduled.margin > yellowThreshold) {
+        const shouldSurfaceScheduled = (item: { promo: PromoComparison; margin: number }) =>
+          item.margin > yellowThreshold || (promoHasMeliContribution(item.promo) && item.margin > redThreshold);
+
+        if (isActivePublication && bestScheduled && shouldSurfaceScheduled(bestScheduled)) {
           const promo = bestScheduled.promo;
           addItem(scheduled, {
             key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}-scheduled`,
@@ -1735,7 +1742,7 @@ export default function PromocionesMeliPage() {
           });
         }
 
-        if (isActivePublication && bestSharedScheduled && bestSharedScheduled.margin > yellowThreshold) {
+        if (isActivePublication && bestSharedScheduled && shouldSurfaceScheduled(bestSharedScheduled)) {
           const promo = bestSharedScheduled.promo;
           addItem(scheduledShared, {
             key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}-scheduled-shared`,
