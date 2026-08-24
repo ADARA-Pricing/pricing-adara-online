@@ -247,6 +247,7 @@ export default function TiendaNubePage() {
   const [syncing, setSyncing] = useState(false);
   const [savingBanner, setSavingBanner] = useState(false);
   const [uploadingBannerImage, setUploadingBannerImage] = useState<BannerImageVariant | null>(null);
+  const [installingWebScript, setInstallingWebScript] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -660,6 +661,22 @@ export default function TiendaNubePage() {
     }
   }
 
+  async function installWebScript() {
+    setInstallingWebScript(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/tiendanube/install-web-script", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudo instalar el script.");
+      setMessage(data?.message || "Script instalado en la tienda. El carrusel puede tardar unos minutos en aparecer por caché.");
+    } catch (installError) {
+      setError(installError instanceof Error ? installError.message : "No se pudo instalar el script.");
+    } finally {
+      setInstallingWebScript(false);
+    }
+  }
+
   const SortButton = ({ id, children }: { id: SortKey; children: React.ReactNode }) => (
     <button type="button" className="tn-sort-button" onClick={() => changeSort(id)}>
       {children}{sortKey === id ? (sortDirection === "asc" ? " ↑" : " ↓") : ""}
@@ -952,7 +969,10 @@ export default function TiendaNubePage() {
               <h2>Banners cargados</h2>
               <p>{webBanners.length} banner{webBanners.length === 1 ? "" : "s"} configurado{webBanners.length === 1 ? "" : "s"}</p>
             </div>
-            <span className="badge">Script público</span>
+            <button className="button small-button" type="button" onClick={installWebScript} disabled={installingWebScript || !status?.connected}>
+              <Globe2 size={14} aria-hidden="true" />
+              {installingWebScript ? "Instalando..." : "Instalar en la tienda"}
+            </button>
           </div>
           <div className="tn-script-box">
             <code>{`<script src="https://pricing-adara-online.vercel.app/api/tiendanube/web-banners/script.js"></script>`}</code>

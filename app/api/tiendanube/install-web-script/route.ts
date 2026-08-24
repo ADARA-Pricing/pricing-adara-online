@@ -1,0 +1,80 @@
+import { NextResponse } from "next/server";
+import { requireApiUser } from "@/lib/serverAuth";
+import { getConnectedTiendanubeAccount, tiendanubeAppConfig } from "@/lib/tiendanube";
+
+function scriptId() {
+  return Number(process.env.TIENDANUBE_WEB_BANNER_SCRIPT_ID || process.env.TIENDANUBE_SCRIPT_ID || 0);
+}
+
+function hasScriptsScope(scope?: string | null) {
+  return String(scope || "")
+    .split(/[,\s]+/)
+    .map((item) => item.trim().toLowerCase())
+    .includes("scripts");
+}
+
+async function tiendanubeScriptsFetch(path: string, account: NonNullable<Awaited<ReturnType<typeof getConnectedTiendanubeAccount>>>, init?: RequestInit) {
+  const { userAgent } = tiendanubeAppConfig();
+  const response = await fetch(`https://api.tiendanube.com/v1/${account.store_id}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.headers || {}),
+      Authorization: `Bearer ${account.access_token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": userAgent,
+    },
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = data?.message || data?.description || data?.error || `Error Tienda Nube ${response.status}`;
+    throw new Error(`${response.status}: ${message}`);
+  }
+  return data;
+}
+
+export async function POST() {
+  try {
+    await requireApiUser();
+    const account = await getConnectedTiendanubeAccount();
+    if (!account) return NextResponse.json({ error: "Primero conectá Tienda Nube." }, { status: 400 });
+
+    if (!hasScriptsScope(account.scope)) {
+      return NextResponse.json({
+        error: "La conexión actual no tiene permiso scripts. Agregá el scope scripts en la app de Tienda Nube y reconectá la tienda.",
+        needsReconnect: true,
+        currentScope: account.scope || null,
+      }, { status: 400 });
+    }
+
+    const configuredScriptId = scriptId();
+    if (!configuredScriptId) {
+      return NextResponse.json({
+        error: "Falta configurar TIENDANUBE_WEB_BANNER_SCRIPT_ID con el ID del script creado en Partners.",
+        needsScriptId: true,
+      }, { status: 400 });
+    }
+
+    const existing = await tiendanubeScriptsFetch("/scripts", account).catch(() => null);
+    const existingScript = Array.isArray(existing?.result)
+      ? existing.result.find((item: { id?: number }) => Number(item.id) === configuredScriptId)
+      : null;
+
+    if (existingScript) {
+      return NextResponse.json({ ok: true, installed: true, script: existingScript, message: "El script ya estaba instalado." });
+    }
+
+    const script = await tiendanubeScriptsFetch("/scripts", account, {
+      method: "POST",
+      body: JSON.stringify({
+        script_id: configuredScriptId,
+        query_params: "{}",
+      }),
+    });
+
+    return NextResponse.json({ ok: true, installed: true, script });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo instalar el script.";
+    return NextResponse.json({ error: message }, { status: message === "No autorizado." ? 401 : 500 });
+  }
+}
