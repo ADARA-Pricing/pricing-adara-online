@@ -12733,7 +12733,7 @@ body {
 
 .tienda-nube-page .tn-banner-item {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) auto auto;
+  grid-template-columns: 92px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 10px;
   padding: 10px;
@@ -12761,6 +12761,17 @@ body {
 .tienda-nube-page .tn-banner-item span,
 .tienda-nube-page .tn-banner-item small {
   color: #526580;
+}
+
+.tienda-nube-page .tn-banner-order-controls {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.tienda-nube-page .tn-banner-order-controls .button {
+  width: 34px;
+  padding: 0;
+  justify-content: center;
 }
 
 .tienda-nube-page .tn-danger-button {
@@ -12801,6 +12812,10 @@ body {
 
   .tienda-nube-page .tn-banner-item {
     grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .tienda-nube-page .tn-banner-order-controls {
+    grid-column: 1 / -1;
   }
 
   .tienda-nube-page .tn-banner-item .button {

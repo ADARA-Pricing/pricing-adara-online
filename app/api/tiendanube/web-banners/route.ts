@@ -154,6 +154,36 @@ export async function PUT(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const user = await requireApiUser();
+    const body = await request.json();
+    const orderedIds = Array.isArray(body.ordered_ids)
+      ? body.ordered_ids.map((id) => cleanText(id)).filter(Boolean)
+      : [];
+
+    if (!orderedIds.length) {
+      return NextResponse.json({ error: "Falta el orden de banners." }, { status: 400 });
+    }
+
+    const supabase = createAdminClient();
+    const updates = orderedIds.map((id, position) =>
+      supabase
+        .from("tiendanube_web_banners")
+        .update({ position, updated_by: user.id })
+        .eq("id", id)
+    );
+    const results = await Promise.all(updates);
+    const error = results.find((result) => result.error)?.error;
+    if (error) throw new Error(error.message);
+
+    return NextResponse.json({ ok: true, banners: await listBanners() });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo reordenar los banners.";
+    return NextResponse.json({ error: message }, { status: message === "No autorizado." ? 401 : 500 });
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   try {
     await requireApiUser();

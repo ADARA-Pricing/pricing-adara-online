@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, ExternalLink, Globe2, Image as ImageIcon, Plus, RefreshCw, Save, Search, Store, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Check, ExternalLink, Globe2, Image as ImageIcon, Plus, RefreshCw, Save, Search, Store, Trash2, Upload } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -667,6 +667,38 @@ export default function TiendaNubePage() {
     }
   }
 
+  async function moveBanner(fromIndex: number, direction: -1 | 1) {
+    const toIndex = fromIndex + direction;
+    if (toIndex < 0 || toIndex >= webBanners.length) return;
+
+    const nextBanners = [...webBanners];
+    const [moved] = nextBanners.splice(fromIndex, 1);
+    nextBanners.splice(toIndex, 0, moved);
+    const orderedIds = nextBanners.map((banner) => banner.id).filter(Boolean);
+    if (orderedIds.length !== nextBanners.length) return;
+
+    setWebBanners(nextBanners.map((banner, position) => ({ ...banner, position })));
+    setBusyKey(`banner-order-${moved.id}`);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/tiendanube/web-banners", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ordered_ids: orderedIds }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudo reordenar los banners.");
+      setWebBanners((data?.banners || nextBanners) as TiendanubeWebBanner[]);
+      setMessage("Orden de banners actualizado.");
+    } catch (moveError) {
+      setError(moveError instanceof Error ? moveError.message : "No se pudo reordenar los banners.");
+      await loadData();
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function installWebScript() {
     setInstallingWebScript(true);
     setMessage(null);
@@ -996,13 +1028,21 @@ export default function TiendaNubePage() {
             <code>{`<script src="https://pricing-adara-online.vercel.app/api/tiendanube/web-banners/script.js"></script>`}</code>
           </div>
           <div className="tn-banner-list">
-            {webBanners.map((banner) => (
+            {webBanners.map((banner, index) => (
               <div className="tn-banner-item" key={banner.id}>
                 <img src={banner.image_url} alt="" />
                 <div>
                   <strong>{banner.title}</strong>
                   <span>{banner.active ? "Activo" : "Pausado"} · orden {banner.position}</span>
                   <small>{banner.link_url || "Sin link"}</small>
+                </div>
+                <div className="tn-banner-order-controls" aria-label="Orden del banner">
+                  <button className="button ghost small-button" type="button" onClick={() => moveBanner(index, -1)} disabled={index === 0 || busyKey === `banner-order-${banner.id}`} title="Subir banner">
+                    <ArrowUp size={14} aria-hidden="true" />
+                  </button>
+                  <button className="button ghost small-button" type="button" onClick={() => moveBanner(index, 1)} disabled={index === webBanners.length - 1 || busyKey === `banner-order-${banner.id}`} title="Bajar banner">
+                    <ArrowDown size={14} aria-hidden="true" />
+                  </button>
                 </div>
                 <button className="button ghost small-button" type="button" onClick={() => editBanner(banner)}>Editar</button>
                 <button className="button ghost small-button tn-danger-button" type="button" onClick={() => deleteBanner(banner)} title="Eliminar banner">
