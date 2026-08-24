@@ -69,6 +69,7 @@ type BannerForm = {
   mobile_image_url: string;
   link_url: string;
   button_label: string;
+  show_text: boolean;
   text_color: string;
   overlay_opacity: number;
   active: boolean;
@@ -84,6 +85,7 @@ const emptyBannerForm: BannerForm = {
   mobile_image_url: "",
   link_url: "",
   button_label: "Comprar ahora",
+  show_text: true,
   text_color: "#ffffff",
   overlay_opacity: 0.28,
   active: true,
@@ -186,6 +188,7 @@ function bannerToForm(banner: TiendanubeWebBanner): BannerForm {
     mobile_image_url: banner.mobile_image_url || "",
     link_url: banner.link_url || "",
     button_label: banner.button_label || "",
+    show_text: banner.show_text !== false,
     text_color: banner.text_color || "#ffffff",
     overlay_opacity: Number(banner.overlay_opacity ?? 0.28),
     active: Boolean(banner.active),
@@ -921,6 +924,10 @@ export default function TiendaNubePage() {
               <span>Botón</span>
               <input value={bannerForm.button_label} onChange={(event) => setBannerForm((current) => ({ ...current, button_label: event.target.value }))} placeholder="Comprar ahora" />
             </label>
+            <label className="tn-banner-check">
+              <input type="checkbox" checked={bannerForm.show_text} onChange={(event) => setBannerForm((current) => ({ ...current, show_text: event.target.checked }))} />
+              <span>Mostrar texto y botón encima</span>
+            </label>
             <label>
               <span>Orden</span>
               <input type="number" value={bannerForm.position} onChange={(event) => setBannerForm((current) => ({ ...current, position: Number(event.target.value || 0) }))} />
@@ -949,12 +956,16 @@ export default function TiendaNubePage() {
 
           <div className="tn-banner-preview">
             {bannerForm.image_url ? <img src={bannerForm.image_url} alt="" /> : <div><ImageIcon aria-hidden="true" />Sin imagen</div>}
-            <span style={{ background: `rgba(0,0,0,${bannerForm.overlay_opacity})` }} />
-            <div style={{ color: bannerForm.text_color }}>
-              <h3>{bannerForm.title || "Título de campaña"}</h3>
-              <p>{bannerForm.subtitle || "Subtítulo opcional del banner"}</p>
-              {bannerForm.button_label ? <strong>{bannerForm.button_label}</strong> : null}
-            </div>
+            {bannerForm.show_text ? (
+              <>
+                <span style={{ background: `rgba(0,0,0,${bannerForm.overlay_opacity})` }} />
+                <div style={{ color: bannerForm.text_color }}>
+                  <h3>{bannerForm.title || "Título de campaña"}</h3>
+                  <p>{bannerForm.subtitle || "Subtítulo opcional del banner"}</p>
+                  {bannerForm.button_label ? <strong>{bannerForm.button_label}</strong> : null}
+                </div>
+              </>
+            ) : null}
           </div>
 
           <button className="button tn-save-banner" type="button" onClick={saveBanner} disabled={savingBanner}>

@@ -28,6 +28,7 @@ const script = `
 
   function render(banners) {
     if (!Array.isArray(banners) || !banners.length) return;
+    var existingCarousel = document.querySelector(".template-home .adara-main-carousel, .adara-main-carousel, [data-adara-carousel]");
     var root = document.createElement("section");
     root.id = "adara-campaign-carousel";
     root.className = "adara-campaign-carousel";
@@ -54,16 +55,15 @@ const script = `
         var subtitle = escapeHtml(banner.subtitle);
         var button = escapeHtml(banner.button_label);
         var link = banner.link_url ? escapeHtml(banner.link_url) : "#";
+        var showText = banner.show_text !== false;
         var text = /^#[0-9a-f]{6}$/i.test(String(banner.text_color || "")) ? banner.text_color : "#ffffff";
         var overlay = normalizeOpacity(banner.overlay_opacity);
         return '<a class="adara-slide" href="' + link + '" style="--adara-text:' + text + ';--adara-overlay:' + overlay + '">' +
           '<img src="' + image + '" alt="' + title + '" loading="eager">' +
-          '<span class="adara-overlay"></span>' +
-          '<span class="adara-copy">' +
-          '<h2>' + title + '</h2>' +
+          (showText ? '<span class="adara-overlay"></span><span class="adara-copy"><h2>' + title + '</h2>' +
           (subtitle ? '<p>' + subtitle + '</p>' : '') +
           (button ? '<span class="adara-button">' + button + '</span>' : '') +
-          '</span>' +
+          '</span>' : '') +
           '</a>';
       }).join(""),
       '</div>',
@@ -72,8 +72,12 @@ const script = `
       }).join("") + '</div>' : ''
     ].join("");
 
-    var target = document.querySelector("main") || document.querySelector(".js-home-main") || document.body;
-    target.insertBefore(root, target.firstChild);
+    if (existingCarousel && existingCarousel.parentNode) {
+      existingCarousel.parentNode.replaceChild(root, existingCarousel);
+    } else {
+      var target = document.querySelector(".js-home-sections-container") || document.querySelector("main") || document.querySelector(".js-home-main") || document.body;
+      target.insertBefore(root, target.firstChild);
+    }
 
     var index = 0;
     var track = root.querySelector(".adara-track");
