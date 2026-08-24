@@ -70,6 +70,9 @@ type InstallmentSummary = {
 type PromoComparison = {
   key: string;
   promotionId?: string | null;
+  promotionType?: string | null;
+  offerId?: string | null;
+  itemId?: string | null;
   status: "Vigente" | "Para activar";
   name: string;
   promoPrice: number | null;
@@ -696,6 +699,10 @@ function promotionCountForPublication(
     .map((item) => {
       return {
         key: item.offer_id || item.promotion_id || `${publication.meli_item_id}-${item.promo_price}`,
+        promotionId: item.promotion_id || null,
+        promotionType: item.promotion_type || null,
+        offerId: item.offer_id || null,
+        itemId: publication.meli_item_id || null,
         status: isActiveOpportunity(item) ? "Vigente" as const : "Para activar" as const,
         name: item.promotion_name || item.promotion_id,
         promoPrice: Number(item.promo_price || 0) || null,
@@ -748,6 +755,7 @@ export default function PromocionesMeliPage() {
   const [redThreshold, setRedThreshold] = useState(5);
   const [yellowThreshold, setYellowThreshold] = useState(5);
   const [syncingMeli, setSyncingMeli] = useState(false);
+  const [activatingPromotionKey, setActivatingPromotionKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -878,6 +886,49 @@ export default function PromocionesMeliPage() {
     } finally {
       window.clearTimeout(timeout);
       setSyncingMeli(false);
+    }
+  }
+
+  function canActivatePromotion(promo: PromoComparison) {
+    return (
+      promo.status === "Para activar" &&
+      promo.promotionType === "SMART" &&
+      Boolean(promo.itemId) &&
+      Boolean(promo.promotionId) &&
+      Boolean(promo.offerId?.startsWith(`CANDIDATE-${promo.itemId}-`))
+    );
+  }
+
+  async function activatePromotion(promo: PromoComparison) {
+    if (!canActivatePromotion(promo) || activatingPromotionKey) return;
+    const confirmed = window.confirm(
+      `Activar ${promo.name} en ${promo.itemId}?\n\nPrecio comprador: ${promo.promoPrice ? moneyWithCents(promo.promoPrice) : "-"}\nAporte vendedor: ${promo.sellerAmount ? moneyWithCents(promo.sellerAmount) : percent(promo.sellerRate)}\nAporte ML: ${promo.meliAmount ? moneyWithCents(promo.meliAmount) : percent(promo.meliRate)}`,
+    );
+    if (!confirmed) return;
+
+    setActivatingPromotionKey(promo.key);
+    setError(null);
+    try {
+      const response = await fetch("/api/mercadolibre/activate-promotion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: promo.itemId,
+          promotionId: promo.promotionId,
+          promotionType: promo.promotionType,
+          offerId: promo.offerId,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data?.error || "No se pudo activar la promocion.");
+        return;
+      }
+      await syncMercadoLibreData({ scope: "promotions", silent: true });
+    } catch (activationError) {
+      setError(activationError instanceof Error ? activationError.message : "No se pudo activar la promocion.");
+    } finally {
+      setActivatingPromotionKey(null);
     }
   }
 
@@ -1303,6 +1354,9 @@ export default function PromocionesMeliPage() {
             ? [{
                 key: `${publication.meli_item_id}-active-light`,
                 promotionId: null,
+                promotionType: null,
+                offerId: null,
+                itemId: publication.meli_item_id || null,
                 status: "Vigente" as const,
                 name: publication.meli_promo_name || publication.meli_promo_status || "Promo vigente",
                 promoPrice: Number(publication.meli_promo_price || 0),
@@ -1360,6 +1414,9 @@ export default function PromocionesMeliPage() {
             return {
               key: opportunity.offer_id || opportunity.promotion_id || `${publication.meli_item_id}-${opportunity.promo_price}`,
               promotionId: opportunity.promotion_id || null,
+              promotionType: opportunity.promotion_type || null,
+              offerId: opportunity.offer_id || null,
+              itemId: publication.meli_item_id || null,
               status: isActiveOpportunity(opportunity) ? "Vigente" as const : "Para activar" as const,
               name: opportunity.promotion_name || opportunity.promotion_id,
               promoPrice: Number(opportunity.promo_price || 0) || null,
@@ -2078,6 +2135,9 @@ export default function PromocionesMeliPage() {
                             return [{
                               key: `${selectedSummary.publication.meli_item_id}-active`,
                               promotionId: null,
+                              promotionType: null,
+                              offerId: null,
+                              itemId: selectedSummary.publication.meli_item_id || null,
                               status: "Vigente" as const,
                               name: selectedSummary.publication.meli_promo_name || selectedSummary.publication.meli_promo_status || "Promo vigente",
                               promoPrice: Number(selectedSummary.publication.meli_promo_price || 0),
@@ -2120,6 +2180,9 @@ export default function PromocionesMeliPage() {
                           return {
                             key: item.offer_id || item.promotion_id || `${selectedSummary.publication.meli_item_id}-${item.promo_price}`,
                             promotionId: item.promotion_id || null,
+                            promotionType: item.promotion_type || null,
+                            offerId: item.offer_id || null,
+                            itemId: selectedSummary.publication.meli_item_id || null,
                             status: isActiveOpportunity(item) ? "Vigente" as const : "Para activar" as const,
                             name: item.promotion_name || item.promotion_id,
                             promoPrice: Number(item.promo_price || 0) || null,
@@ -2265,6 +2328,7 @@ export default function PromocionesMeliPage() {
                                   <th>Aporte vendedor</th>
                                   <th>Rentabilidad</th>
                                   <th>Neto</th>
+                                  <th>Accion</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -2289,6 +2353,22 @@ export default function PromocionesMeliPage() {
                                       </strong>
                                     </td>
                                     <td>{promo.netProfit !== null ? moneyWithCents(promo.netProfit) : "-"}</td>
+                                    <td>
+                                      {canActivatePromotion(promo) ? (
+                                        <button
+                                          className="button ghost"
+                                          type="button"
+                                          onClick={() => activatePromotion(promo)}
+                                          disabled={Boolean(activatingPromotionKey)}
+                                        >
+                                          {activatingPromotionKey === promo.key ? "Activando..." : "Activar"}
+                                        </button>
+                                      ) : promo.status === "Para activar" && promo.offerId?.startsWith("CANDIDATE-") ? (
+                                        <span className="promo-date-badge">API</span>
+                                      ) : (
+                                        "-"
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
