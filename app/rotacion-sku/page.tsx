@@ -162,7 +162,7 @@ export default function RotacionSkuPage() {
     since.setDate(since.getDate() - 65);
 
     const [productsResponse, publicationsResponse, imagePublicationsResponse, salesResponse] = await Promise.all([
-      supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
+      supabase.from("products").select("*").order("sku", { ascending: true }),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).eq("meli_status", "active"),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
       fetchSalesSince(since.toISOString()),
@@ -244,7 +244,16 @@ export default function RotacionSkuPage() {
       imagePubsBySku.set(sku, [...(imagePubsBySku.get(sku) || []), publication]);
     });
 
-    return products.map((product) => {
+    return products
+      .filter((product) => {
+        const sku = product.sku.toUpperCase();
+        return (
+          product.status === "active" ||
+          (pubsBySku.get(sku) || []).length > 0 ||
+          (salesBySku.get(sku) || []).length > 0
+        );
+      })
+      .map((product) => {
       const sku = product.sku.toUpperCase();
       const skuSales = salesBySku.get(sku) || [];
       const skuPublications = pubsBySku.get(sku) || [];
