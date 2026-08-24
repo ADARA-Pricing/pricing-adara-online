@@ -12575,6 +12575,46 @@ body {
   color: #526580;
 }
 
+.tienda-nube-page .tn-banner-upload-field {
+  display: grid;
+  gap: 8px;
+  color: #526580;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tienda-nube-page .tn-banner-upload-field small {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 22px;
+  align-items: center;
+  border: 1px solid #dbe4f0;
+  border-radius: 999px;
+  padding: 0 9px;
+  background: #fff;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tienda-nube-page .tn-banner-upload-box {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px !important;
+  min-height: 84px;
+  border: 2px dashed #2483ff;
+  border-radius: 8px;
+  background: #e7f2ff;
+  color: #0067d8 !important;
+  cursor: pointer;
+  text-align: center;
+}
+
+.tienda-nube-page .tn-banner-upload-box input {
+  display: none;
+}
+
 .tienda-nube-page .tn-banner-form input {
   width: 100%;
   min-height: 42px;

@@ -27,6 +27,7 @@ type SortKey = "sku" | "name" | "price" | "suggested" | "diff" | "margin" | "sto
 type SortDirection = "asc" | "desc";
 type StatusFilter = "" | "ok" | "needs_price" | "missing" | "unlinked";
 type TiendaNubeTab = "prices" | "web";
+type BannerImageVariant = "desktop" | "mobile";
 
 type TnStatus = {
   connected: boolean;
@@ -88,6 +89,11 @@ const emptyBannerForm: BannerForm = {
   active: true,
   starts_at: "",
   ends_at: "",
+};
+
+const bannerImageSpecs: Record<BannerImageVariant, { label: string; width: number; height: number; field: "image_url" | "mobile_image_url" }> = {
+  desktop: { label: "Desktop", width: 1580, height: 600, field: "image_url" },
+  mobile: { label: "Mobile", width: 820, height: 1200, field: "mobile_image_url" },
 };
 
 function normalizeSku(value?: string | null) {
@@ -188,6 +194,35 @@ function bannerToForm(banner: TiendanubeWebBanner): BannerForm {
   };
 }
 
+function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function imageSize(file: File) {
+  return new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const size = { width: image.naturalWidth, height: image.naturalHeight };
+      URL.revokeObjectURL(url);
+      resolve(size);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("No se pudo validar el tamaño de la imagen."));
+    };
+    image.src = url;
+  });
+}
+
 export default function TiendaNubePage() {
   const router = useRouter();
   const supabase = createClient();
@@ -211,6 +246,7 @@ export default function TiendaNubePage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [savingBanner, setSavingBanner] = useState(false);
+  const [uploadingBannerImage, setUploadingBannerImage] = useState<BannerImageVariant | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -569,6 +605,41 @@ export default function TiendaNubePage() {
     }
   }
 
+  async function uploadBannerImage(file: File | undefined, variant: BannerImageVariant) {
+    if (!file) return;
+    const spec = bannerImageSpecs[variant];
+    setUploadingBannerImage(variant);
+    setMessage(null);
+    setError(null);
+    try {
+      const size = await imageSize(file);
+      const base64 = await fileToBase64(file);
+      const response = await fetch("/api/tiendanube/web-banners/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          variant,
+          fileName: file.name,
+          contentType: file.type,
+          data: base64,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudo subir la imagen.");
+      setBannerForm((current) => ({ ...current, [spec.field]: data.url }));
+      const matchesRecommended = size.width === spec.width && size.height === spec.height;
+      setMessage(
+        matchesRecommended
+          ? `${spec.label}: imagen subida con medida recomendada ${spec.width} x ${spec.height}px.`
+          : `${spec.label}: imagen subida (${size.width} x ${size.height}px). Recomendado: ${spec.width} x ${spec.height}px.`,
+      );
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "No se pudo subir la imagen.");
+    } finally {
+      setUploadingBannerImage(null);
+    }
+  }
+
   async function deleteBanner(banner: TiendanubeWebBanner) {
     if (!banner.id) return;
     if (!window.confirm(`¿Eliminar el banner "${banner.title}"?`)) return;
@@ -804,14 +875,26 @@ export default function TiendaNubePage() {
               <span>Subtítulo</span>
               <input value={bannerForm.subtitle} onChange={(event) => setBannerForm((current) => ({ ...current, subtitle: event.target.value }))} placeholder="Tablets, notebooks y accesorios seleccionados" />
             </label>
-            <label>
+            <div className="tn-banner-upload-field">
               <span>Imagen desktop</span>
-              <input value={bannerForm.image_url} onChange={(event) => setBannerForm((current) => ({ ...current, image_url: event.target.value }))} placeholder="https://..." />
-            </label>
-            <label>
+              <small>Tamaño recomendado: 1580 x 600 px</small>
+              <label className="tn-banner-upload-box">
+                <Upload size={18} aria-hidden="true" />
+                {uploadingBannerImage === "desktop" ? "Subiendo..." : "Elegir imagen desktop"}
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => uploadBannerImage(event.target.files?.[0], "desktop")} />
+              </label>
+              <input value={bannerForm.image_url} onChange={(event) => setBannerForm((current) => ({ ...current, image_url: event.target.value }))} placeholder="URL imagen desktop" />
+            </div>
+            <div className="tn-banner-upload-field">
               <span>Imagen mobile</span>
-              <input value={bannerForm.mobile_image_url} onChange={(event) => setBannerForm((current) => ({ ...current, mobile_image_url: event.target.value }))} placeholder="https://... opcional" />
-            </label>
+              <small>Tamaño recomendado: 820 x 1200 px</small>
+              <label className="tn-banner-upload-box">
+                <Upload size={18} aria-hidden="true" />
+                {uploadingBannerImage === "mobile" ? "Subiendo..." : "Elegir imagen mobile"}
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => uploadBannerImage(event.target.files?.[0], "mobile")} />
+              </label>
+              <input value={bannerForm.mobile_image_url} onChange={(event) => setBannerForm((current) => ({ ...current, mobile_image_url: event.target.value }))} placeholder="URL imagen mobile opcional" />
+            </div>
             <label>
               <span>Link</span>
               <input value={bannerForm.link_url} onChange={(event) => setBannerForm((current) => ({ ...current, link_url: event.target.value }))} placeholder="/productos?mpage=2 o https://..." />
