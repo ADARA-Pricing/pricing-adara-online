@@ -89,6 +89,7 @@ type PromoComparison = {
   joined?: boolean;
   scheduled?: boolean;
   fixedFeeAmount?: number | null;
+  stockToReserve?: number | null;
 };
 
 type PromoTrafficLightItem = {
@@ -582,9 +583,33 @@ function promoBuyerPrice(item: PromoComparison) {
   return Number(item.promoPrice || item.effectiveSalePrice || 0);
 }
 
-function promoActivationBlockKey(item: Pick<PromoComparison, "itemId" | "promotionId" | "offerId">) {
-  if (!item.itemId || !item.promotionId || !item.offerId) return null;
-  return [item.itemId, item.promotionId, item.offerId].join("|");
+function promoActivationBlockKey(item: Pick<PromoComparison, "itemId" | "promotionId" | "promotionType" | "offerId" | "promoPrice">) {
+  if (!item.itemId || !item.promotionId) return null;
+  return [
+    item.itemId,
+    item.promotionId,
+    item.offerId || item.promotionType || "promo",
+    Math.round(Number(item.promoPrice || 0) * 100),
+  ].join("|");
+}
+
+const OFFER_ACTIVATION_TYPES = new Set(["SMART", "PRICE_MATCHING", "PRE_NEGOTIATED", "UNHEALTHY_STOCK"]);
+const PRICE_ACTIVATION_TYPES = new Set(["DEAL", "SELLER_CAMPAIGN"]);
+const STOCK_PRICE_ACTIVATION_TYPES = new Set(["LIGHTNING"]);
+
+function activationTypeLabel(value?: string | null) {
+  if (!value) return "promo";
+  return value.replace(/_/g, " ").toLowerCase();
+}
+
+function opportunityStockToReserve(item: MercadoLibrePromotionOpportunity) {
+  const raw = (item.raw || {}) as { stock?: { min?: number | string | null; max?: number | string | null } | number | string | null };
+  if (typeof raw.stock === "object" && raw.stock) {
+    const min = Number(raw.stock.min || 0);
+    if (Number.isFinite(min) && min > 0) return min;
+  }
+  const stock = Number(raw.stock || 0);
+  return Number.isFinite(stock) && stock > 0 ? stock : null;
 }
 
 function promoImprovesMeliSupport(candidate: PromoComparison, active: PromoComparison) {
@@ -898,13 +923,112 @@ export default function PromocionesMeliPage() {
 
   function canActivatePromotion(promo: PromoComparison) {
     if (isPolicyBlockedPromotion(promo)) return false;
-    return (
-      promo.status === "Para activar" &&
-      promo.promotionType === "SMART" &&
-      Boolean(promo.itemId) &&
-      Boolean(promo.promotionId) &&
-      Boolean(promo.offerId?.startsWith(`CANDIDATE-${promo.itemId}-`))
-    );
+    if (
+      promo.status !== "Para activar" ||
+      !promo.itemId ||
+      !promo.promotionId ||
+      !promo.promotionType
+    ) {
+      return false;
+    }
+
+    if (OFFER_ACTIVATION_TYPES.has(promo.promotionType)) {
+      return Boolean(promo.offerId);
+    }
+
+    if (PRICE_ACTIVATION_TYPES.has(promo.promotionType)) {
+      return Boolean(promo.promoPrice);
+    }
+
+    if (STOCK_PRICE_ACTIVATION_TYPES.has(promo.promotionType)) {
+      return Boolean(promo.promoPrice && promo.stockToReserve);
+    }
+
+    return false;
+  }
+
+  function nonActivableReason(promo: PromoComparison) {
+    if (promo.status !== "Para activar") return null;
+    if (!promo.promotionType || !promo.promotionId) return "Sin ID";
+    if (isPolicyBlockedPromotion(promo)) return "Bloqueada por Meli";
+    if (OFFER_ACTIVATION_TYPES.has(promo.promotionType) && !promo.offerId) return "Sin offer";
+    if (PRICE_ACTIVATION_TYPES.has(promo.promotionType) && !promo.promoPrice) return "Sin precio";
+    if (STOCK_PRICE_ACTIVATION_TYPES.has(promo.promotionType) && !promo.stockToReserve) return "Sin stock";
+    if (!canActivatePromotion(promo)) return "No soportada";
+    return null;
+  }
+
+  function activationConfirmationText(promo: PromoComparison) {
+    const parts = [
+      `Activar ${promo.name} (${activationTypeLabel(promo.promotionType)}) en ${promo.itemId}?`,
+      "",
+      `Precio comprador esperado: ${promo.promoPrice ? moneyWithCents(promo.promoPrice) : "-"}`,
+      `Aporte vendedor esperado: ${promo.sellerAmount ? moneyWithCents(promo.sellerAmount) : percent(promo.sellerRate)}`,
+      `Aporte ML esperado: ${promo.meliAmount ? moneyWithCents(promo.meliAmount) : percent(promo.meliRate)}`,
+    ];
+    if (promo.stockToReserve) parts.push(`Stock reservado: ${promo.stockToReserve}`);
+    parts.push("", "Esta accion se envia a MercadoLibre y puede dejar la promo activa o programada.");
+    return parts.join("\n");
+  }
+
+  function activationPriceWarning(promo: PromoComparison, verification?: {
+    actualPrice?: number | null;
+    expectedPrice?: number | null;
+    priceDifference?: number | null;
+    priceDifferenceRate?: number | null;
+    status?: string | null;
+    meliPercentage?: number | null;
+    sellerPercentage?: number | null;
+  } | null, row?: PublicationPromoRow | null) {
+    const warnings: string[] = [];
+    const actualPrice = Number(verification?.actualPrice || 0);
+    const expectedPrice = Number(verification?.expectedPrice || promo.promoPrice || 0);
+    if (actualPrice && expectedPrice) {
+      const difference = actualPrice - expectedPrice;
+      const differenceRate = (difference / expectedPrice) * 100;
+      if (Math.abs(difference) >= 1 || Math.abs(differenceRate) >= 0.25) {
+        warnings.push(
+          `Precio esperado: ${moneyWithCents(expectedPrice)}`,
+          `Precio real: ${moneyWithCents(actualPrice)}`,
+          `Diferencia precio: ${moneyWithCents(difference)} (${percent(differenceRate)})`,
+        );
+      }
+    }
+
+    if (row && actualPrice && promo.rentability !== null) {
+      const meliRate = Number(verification?.meliPercentage || promo.meliRate || 0);
+      const sellerRate = Number(verification?.sellerPercentage || promo.sellerRate || 0);
+      const actualMeliAmount = meliContributionAmount(
+        actualPrice,
+        null,
+        meliRate,
+        promo.originalPrice || expectedPrice,
+        sellerRate,
+      );
+      const actualEffectiveSalePrice = effectiveSalePrice(
+        actualPrice,
+        actualMeliAmount,
+        meliRate,
+        promo.originalPrice || expectedPrice,
+        sellerRate,
+      );
+      const actualRentability = rentabilityForRow(row, actualEffectiveSalePrice, actualPrice, promo.fixedFeeAmount);
+      if (actualRentability && Math.abs(actualRentability.margin - promo.rentability) >= 1.5) {
+        warnings.push(
+          `Rentabilidad esperada: ${percent(promo.rentability)}`,
+          `Rentabilidad real estimada: ${percent(actualRentability.margin)}`,
+          `Diferencia margen: ${percent(actualRentability.margin - promo.rentability)}`,
+        );
+      }
+    }
+
+    if (!warnings.length) return null;
+    return [
+      "MercadoLibre dejo una promo distinta a lo esperado.",
+      "",
+      ...warnings,
+      `Estado Meli: ${verification?.status || "-"}`,
+    ].join("\n");
   }
 
   function isPolicyBlockedPromotion(promo: PromoComparison) {
@@ -925,11 +1049,9 @@ export default function PromocionesMeliPage() {
     setActivationErrors((current) => ({ ...current, [promo.key]: message }));
   }
 
-  async function activatePromotion(promo: PromoComparison) {
+  async function activatePromotion(promo: PromoComparison, row?: PublicationPromoRow | null) {
     if (!canActivatePromotion(promo) || activatingPromotionKey) return;
-    const confirmed = window.confirm(
-      `Activar ${promo.name} en ${promo.itemId}?\n\nPrecio comprador: ${promo.promoPrice ? moneyWithCents(promo.promoPrice) : "-"}\nAporte vendedor: ${promo.sellerAmount ? moneyWithCents(promo.sellerAmount) : percent(promo.sellerRate)}\nAporte ML: ${promo.meliAmount ? moneyWithCents(promo.meliAmount) : percent(promo.meliRate)}`,
-    );
+    const confirmed = window.confirm(activationConfirmationText(promo));
     if (!confirmed) return;
 
     setActivatingPromotionKey(promo.key);
@@ -943,6 +1065,9 @@ export default function PromocionesMeliPage() {
           promotionId: promo.promotionId,
           promotionType: promo.promotionType,
           offerId: promo.offerId,
+          dealPrice: promo.promoPrice,
+          stock: promo.stockToReserve,
+          expectedPrice: promo.promoPrice,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -955,6 +1080,11 @@ export default function PromocionesMeliPage() {
         }
         window.alert(message);
         return;
+      }
+      const warning = activationPriceWarning(promo, data?.verification, row);
+      if (warning) {
+        setError(warning);
+        window.alert(warning);
       }
       setActivationErrors((current) => {
         const next = { ...current };
@@ -1485,6 +1615,7 @@ export default function PromocionesMeliPage() {
               joined: isJoinedOpportunity(opportunity),
               scheduled: isScheduledOpportunity({ ...opportunity, start_date: startDate, end_date: endDate }),
               fixedFeeAmount: promotionFixedFeeAmount(opportunity),
+              stockToReserve: opportunityStockToReserve(opportunity),
             };
           }),
         ];
@@ -2243,6 +2374,7 @@ export default function PromocionesMeliPage() {
                             startDate: item.start_date || null,
                             endDate: item.end_date || null,
                             fixedFeeAmount,
+                            stockToReserve: opportunityStockToReserve(item),
                           };
                         })
                         .filter((promo) => !isPolicyBlockedPromotion(promo)),
@@ -2407,7 +2539,7 @@ export default function PromocionesMeliPage() {
                                           <button
                                             className="button ghost"
                                             type="button"
-                                            onClick={() => activatePromotion(promo)}
+                                            onClick={() => activatePromotion(promo, selectedSummary.row)}
                                             disabled={Boolean(activatingPromotionKey)}
                                           >
                                             {activatingPromotionKey === promo.key ? "Activando..." : "Activar"}
@@ -2416,8 +2548,8 @@ export default function PromocionesMeliPage() {
                                             <span className="promo-date-badge">Bloqueada por Meli</span>
                                           )}
                                         </>
-                                      ) : promo.status === "Para activar" && promo.offerId?.startsWith("CANDIDATE-") ? (
-                                        <span className="promo-date-badge">API</span>
+                                      ) : nonActivableReason(promo) ? (
+                                        <span className="promo-date-badge">{nonActivableReason(promo)}</span>
                                       ) : (
                                         "-"
                                       )}
