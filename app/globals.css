@@ -12597,6 +12597,12 @@ body {
   font-weight: 800;
 }
 
+.tienda-nube-page .tn-banner-link-field small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .tienda-nube-page .tn-banner-upload-box {
   display: flex !important;
   align-items: center;

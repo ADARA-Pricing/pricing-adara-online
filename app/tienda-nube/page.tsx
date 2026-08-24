@@ -895,9 +895,10 @@ export default function TiendaNubePage() {
               </label>
               <input value={bannerForm.mobile_image_url} onChange={(event) => setBannerForm((current) => ({ ...current, mobile_image_url: event.target.value }))} placeholder="URL imagen mobile opcional" />
             </div>
-            <label>
-              <span>Link</span>
-              <input value={bannerForm.link_url} onChange={(event) => setBannerForm((current) => ({ ...current, link_url: event.target.value }))} placeholder="/productos?mpage=2 o https://..." />
+            <label className="tn-banner-link-field">
+              <span>Destino al tocar el banner</span>
+              <small>Puede ser una URL completa o una ruta de la tienda.</small>
+              <input value={bannerForm.link_url} onChange={(event) => setBannerForm((current) => ({ ...current, link_url: event.target.value }))} placeholder="/productos/tablets o https://www.adaragroup.com.ar/..." />
             </label>
             <label>
               <span>Botón</span>
