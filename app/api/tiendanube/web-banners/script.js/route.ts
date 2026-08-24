@@ -7,7 +7,7 @@ const script = `
   var isHome = location.pathname === "/" || location.pathname === "" || /^\\/[a-z]{2}(-[A-Z]{2})?\\/?$/.test(location.pathname);
   if (!isHome || document.getElementById("adara-campaign-carousel")) return;
   var prehideCarousel = document.querySelector(".template-home .adara-main-carousel, .adara-main-carousel, [data-adara-carousel]");
-  if (prehideCarousel) prehideCarousel.style.setProperty("visibility", "hidden", "important");
+  if (prehideCarousel) prehideCarousel.style.setProperty("display", "none", "important");
 
   function escapeHtml(value) {
     return String(value || "").replace(/[&<>"']/g, function (char) {
