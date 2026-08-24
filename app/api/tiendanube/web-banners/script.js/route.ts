@@ -88,6 +88,28 @@ const script = `
       target.insertBefore(root, target.firstChild);
     }
 
+    function placeAfter(anchor, node) {
+      if (!anchor || !node || !anchor.parentNode) return anchor;
+      if (anchor.nextSibling !== node) anchor.parentNode.insertBefore(node, anchor.nextSibling);
+      return node;
+    }
+
+    function enforceSectionOrder() {
+      var anchor = root;
+      anchor = placeAfter(anchor, document.querySelector(".template-home .section-categories-home"));
+      anchor = placeAfter(anchor, document.querySelector("[data-adara-bestsellers]"));
+      anchor = placeAfter(anchor, document.querySelector("[data-adara-notebooks]"));
+      placeAfter(anchor, document.querySelector("[data-adara-tablets]"));
+    }
+    enforceSectionOrder();
+    window.addEventListener("load", enforceSectionOrder);
+    window.setTimeout(enforceSectionOrder, 500);
+    window.setTimeout(enforceSectionOrder, 1500);
+    window.setTimeout(enforceSectionOrder, 3500);
+    if (window.MutationObserver && root.parentNode) {
+      new MutationObserver(function () { window.setTimeout(enforceSectionOrder, 80); }).observe(root.parentNode, { childList: true });
+    }
+
     function offsetMobileHeader() {
       if (!window.matchMedia || !window.matchMedia("(max-width: 720px)").matches) {
         root.style.marginTop = "";
