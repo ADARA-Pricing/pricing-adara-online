@@ -7,10 +7,11 @@ function scriptId() {
 }
 
 function hasScriptsScope(scope?: string | null) {
-  return String(scope || "")
+  const scopes = String(scope || "")
     .split(/[,\s]+/)
     .map((item) => item.trim().toLowerCase())
-    .includes("scripts");
+    .filter(Boolean);
+  return scopes.includes("scripts") || scopes.includes("write_scripts");
 }
 
 async function tiendanubeScriptsFetch(path: string, account: NonNullable<Awaited<ReturnType<typeof getConnectedTiendanubeAccount>>>, init?: RequestInit) {
