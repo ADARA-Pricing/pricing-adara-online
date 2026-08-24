@@ -37,7 +37,7 @@ const script = `
       '#adara-campaign-carousel{position:relative;width:100%;overflow:hidden;background:#111;margin:0 0 24px;isolation:isolate}',
       '#adara-campaign-carousel .adara-track{display:flex;transition:transform .45s ease;will-change:transform}',
       '#adara-campaign-carousel .adara-slide{min-width:100%;position:relative;display:block;color:var(--adara-text,#fff);text-decoration:none}',
-      '#adara-campaign-carousel .adara-slide img{display:block;width:100%;height:clamp(260px,34vw,520px);object-fit:cover}',
+      '#adara-campaign-carousel .adara-slide img{display:block;width:100%;height:auto;aspect-ratio:1580/600;object-fit:contain;background:#111}',
       '#adara-campaign-carousel .adara-overlay{position:absolute;inset:0;background:#000;opacity:var(--adara-overlay,.28);pointer-events:none}',
       '#adara-campaign-carousel .adara-copy{position:absolute;inset:auto auto 10% 6%;max-width:min(560px,80vw);z-index:2;color:var(--adara-text,#fff);text-shadow:0 2px 14px rgba(0,0,0,.35)}',
       '#adara-campaign-carousel .adara-copy h2{margin:0 0 8px;font-size:clamp(28px,4vw,56px);line-height:1.02;font-weight:800;letter-spacing:0}',
@@ -46,7 +46,7 @@ const script = `
       '#adara-campaign-carousel .adara-dots{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:center;gap:8px;z-index:3}',
       '#adara-campaign-carousel .adara-dot{width:9px;height:9px;border:0;border-radius:999px;background:rgba(255,255,255,.55);padding:0;cursor:pointer}',
       '#adara-campaign-carousel .adara-dot.active{background:#fff}',
-      '@media(max-width:720px){#adara-campaign-carousel{margin-bottom:16px}#adara-campaign-carousel .adara-copy{left:18px;right:18px;bottom:24px;max-width:none}#adara-campaign-carousel .adara-slide img{height:420px}}',
+      '@media(max-width:720px){#adara-campaign-carousel{margin-bottom:16px}#adara-campaign-carousel .adara-copy{left:18px;right:18px;bottom:24px;max-width:none}#adara-campaign-carousel .adara-slide img{aspect-ratio:820/1200}}',
       '</style>',
       '<div class="adara-track">',
       banners.map(function (banner) {
