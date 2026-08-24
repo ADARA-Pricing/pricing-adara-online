@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, ExternalLink, Plus, RefreshCw, Search, Store, Upload } from "lucide-react";
+import { AlertTriangle, Check, ExternalLink, Globe2, Image as ImageIcon, Plus, RefreshCw, Save, Search, Store, Trash2, Upload } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -20,11 +20,13 @@ import type {
   ProductChannelMargin,
   TaxSettings,
   TiendanubePublication,
+  TiendanubeWebBanner,
 } from "@/lib/types";
 
 type SortKey = "sku" | "name" | "price" | "suggested" | "diff" | "margin" | "stock" | "status";
 type SortDirection = "asc" | "desc";
 type StatusFilter = "" | "ok" | "needs_price" | "missing" | "unlinked";
+type TiendaNubeTab = "prices" | "web";
 
 type TnStatus = {
   connected: boolean;
@@ -55,6 +57,37 @@ type Row = {
   netProfit: number | null;
   status: "ok" | "needs_price" | "missing" | "unlinked";
   statusLabel: string;
+};
+
+type BannerForm = {
+  id?: string;
+  position: number;
+  title: string;
+  subtitle: string;
+  image_url: string;
+  mobile_image_url: string;
+  link_url: string;
+  button_label: string;
+  text_color: string;
+  overlay_opacity: number;
+  active: boolean;
+  starts_at: string;
+  ends_at: string;
+};
+
+const emptyBannerForm: BannerForm = {
+  position: 0,
+  title: "",
+  subtitle: "",
+  image_url: "",
+  mobile_image_url: "",
+  link_url: "",
+  button_label: "Comprar ahora",
+  text_color: "#ffffff",
+  overlay_opacity: 0.28,
+  active: true,
+  starts_at: "",
+  ends_at: "",
 };
 
 function normalizeSku(value?: string | null) {
@@ -130,12 +163,40 @@ function ProductThumb({ src, label }: { src: string | null; label: string }) {
   );
 }
 
+function dateInputValue(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 16);
+}
+
+function bannerToForm(banner: TiendanubeWebBanner): BannerForm {
+  return {
+    id: banner.id,
+    position: Number(banner.position || 0),
+    title: banner.title || "",
+    subtitle: banner.subtitle || "",
+    image_url: banner.image_url || "",
+    mobile_image_url: banner.mobile_image_url || "",
+    link_url: banner.link_url || "",
+    button_label: banner.button_label || "",
+    text_color: banner.text_color || "#ffffff",
+    overlay_opacity: Number(banner.overlay_opacity ?? 0.28),
+    active: Boolean(banner.active),
+    starts_at: dateInputValue(banner.starts_at),
+    ends_at: dateInputValue(banner.ends_at),
+  };
+}
+
 export default function TiendaNubePage() {
   const router = useRouter();
   const supabase = createClient();
+  const [activeTab, setActiveTab] = useState<TiendaNubeTab>("prices");
   const [status, setStatus] = useState<TnStatus | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<TiendanubePublication[]>([]);
+  const [webBanners, setWebBanners] = useState<TiendanubeWebBanner[]>([]);
+  const [bannerForm, setBannerForm] = useState<BannerForm>(emptyBannerForm);
   const [meliPublications, setMeliPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [options, setOptions] = useState<MercadoLibreInstallmentFee[]>([]);
   const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
@@ -149,6 +210,7 @@ export default function TiendaNubePage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [savingBanner, setSavingBanner] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -170,6 +232,7 @@ export default function TiendaNubePage() {
       categoryFeesResponse,
       marginsResponse,
       taxesResponse,
+      bannersResponse,
     ] = await Promise.all([
       fetch("/api/tiendanube/status").then((response) => response.json()),
       supabase.from("products").select("*").in("status", ["active", "paused"]).order("sku", { ascending: true }),
@@ -179,6 +242,7 @@ export default function TiendaNubePage() {
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
       supabase.from("product_channel_margins").select("*"),
       supabase.from("tax_settings").select("*").eq("key", "default").maybeSingle(),
+      fetch("/api/tiendanube/web-banners").then((response) => response.json()),
     ]);
 
     setLoading(false);
@@ -197,6 +261,8 @@ export default function TiendaNubePage() {
     if (marginsResponse.error) setError(marginsResponse.error.message);
     else setMargins((marginsResponse.data || []) as ProductChannelMargin[]);
     if (!taxesResponse.error && taxesResponse.data) setTaxes(taxesResponse.data as TaxSettings);
+    if (bannersResponse?.error) setError(bannersResponse.error);
+    else setWebBanners((bannersResponse?.banners || []) as TiendanubeWebBanner[]);
   }
 
   useEffect(() => {
@@ -464,6 +530,65 @@ export default function TiendaNubePage() {
     }
   }
 
+  function editBanner(banner: TiendanubeWebBanner) {
+    setBannerForm(bannerToForm(banner));
+    setActiveTab("web");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function clearBannerForm() {
+    setBannerForm({
+      ...emptyBannerForm,
+      position: webBanners.length ? Math.max(...webBanners.map((banner) => Number(banner.position || 0))) + 1 : 0,
+    });
+  }
+
+  async function saveBanner() {
+    setSavingBanner(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/tiendanube/web-banners", {
+        method: bannerForm.id ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...bannerForm,
+          starts_at: bannerForm.starts_at || null,
+          ends_at: bannerForm.ends_at || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudo guardar el banner.");
+      setMessage("Banner guardado. La web lo toma desde el endpoint publicado.");
+      clearBannerForm();
+      await loadData();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "No se pudo guardar el banner.");
+    } finally {
+      setSavingBanner(false);
+    }
+  }
+
+  async function deleteBanner(banner: TiendanubeWebBanner) {
+    if (!banner.id) return;
+    if (!window.confirm(`¿Eliminar el banner "${banner.title}"?`)) return;
+    setSavingBanner(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/tiendanube/web-banners?id=${encodeURIComponent(banner.id)}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudo eliminar el banner.");
+      setMessage("Banner eliminado.");
+      await loadData();
+      if (bannerForm.id === banner.id) clearBannerForm();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "No se pudo eliminar el banner.");
+    } finally {
+      setSavingBanner(false);
+    }
+  }
+
   const SortButton = ({ id, children }: { id: SortKey; children: React.ReactNode }) => (
     <button type="button" className="tn-sort-button" onClick={() => changeSort(id)}>
       {children}{sortKey === id ? (sortDirection === "asc" ? " ↑" : " ↓") : ""}
@@ -509,6 +634,19 @@ export default function TiendaNubePage() {
         </div>
       )}
 
+      <section className="tn-tabs" aria-label="Secciones Tienda Nube">
+        <button className={activeTab === "prices" ? "active" : ""} type="button" onClick={() => setActiveTab("prices")}>
+          <Store size={16} aria-hidden="true" />
+          Precios y stock
+        </button>
+        <button className={activeTab === "web" ? "active" : ""} type="button" onClick={() => setActiveTab("web")}>
+          <Globe2 size={16} aria-hidden="true" />
+          Página web
+        </button>
+      </section>
+
+      {activeTab === "prices" ? (
+      <>
       <section className="rentabilidad-kpi-grid tn-kpis">
         <article className="card rentabilidad-kpi-card promo">
           <span>Cuenta</span>
@@ -645,6 +783,116 @@ export default function TiendaNubePage() {
           </table>
         </div>
       </section>
+      </>
+      ) : (
+      <section className="tn-web-grid">
+        <article className="card tn-banner-editor">
+          <div className="tn-section-head">
+            <div>
+              <h2>{bannerForm.id ? "Editar banner" : "Nuevo banner"}</h2>
+              <p>Cambios visibles desde el script público de la tienda.</p>
+            </div>
+            <button className="button ghost small-button" type="button" onClick={clearBannerForm}>Limpiar</button>
+          </div>
+
+          <div className="tn-banner-form">
+            <label>
+              <span>Título</span>
+              <input value={bannerForm.title} onChange={(event) => setBannerForm((current) => ({ ...current, title: event.target.value }))} placeholder="Cyber Week ADARA" />
+            </label>
+            <label>
+              <span>Subtítulo</span>
+              <input value={bannerForm.subtitle} onChange={(event) => setBannerForm((current) => ({ ...current, subtitle: event.target.value }))} placeholder="Tablets, notebooks y accesorios seleccionados" />
+            </label>
+            <label>
+              <span>Imagen desktop</span>
+              <input value={bannerForm.image_url} onChange={(event) => setBannerForm((current) => ({ ...current, image_url: event.target.value }))} placeholder="https://..." />
+            </label>
+            <label>
+              <span>Imagen mobile</span>
+              <input value={bannerForm.mobile_image_url} onChange={(event) => setBannerForm((current) => ({ ...current, mobile_image_url: event.target.value }))} placeholder="https://... opcional" />
+            </label>
+            <label>
+              <span>Link</span>
+              <input value={bannerForm.link_url} onChange={(event) => setBannerForm((current) => ({ ...current, link_url: event.target.value }))} placeholder="/productos?mpage=2 o https://..." />
+            </label>
+            <label>
+              <span>Botón</span>
+              <input value={bannerForm.button_label} onChange={(event) => setBannerForm((current) => ({ ...current, button_label: event.target.value }))} placeholder="Comprar ahora" />
+            </label>
+            <label>
+              <span>Orden</span>
+              <input type="number" value={bannerForm.position} onChange={(event) => setBannerForm((current) => ({ ...current, position: Number(event.target.value || 0) }))} />
+            </label>
+            <label>
+              <span>Color texto</span>
+              <input type="color" value={bannerForm.text_color} onChange={(event) => setBannerForm((current) => ({ ...current, text_color: event.target.value }))} />
+            </label>
+            <label>
+              <span>Oscurecer imagen</span>
+              <input type="range" min="0" max="0.75" step="0.01" value={bannerForm.overlay_opacity} onChange={(event) => setBannerForm((current) => ({ ...current, overlay_opacity: Number(event.target.value) }))} />
+            </label>
+            <label>
+              <span>Inicio</span>
+              <input type="datetime-local" value={bannerForm.starts_at} onChange={(event) => setBannerForm((current) => ({ ...current, starts_at: event.target.value }))} />
+            </label>
+            <label>
+              <span>Fin</span>
+              <input type="datetime-local" value={bannerForm.ends_at} onChange={(event) => setBannerForm((current) => ({ ...current, ends_at: event.target.value }))} />
+            </label>
+            <label className="tn-banner-check">
+              <input type="checkbox" checked={bannerForm.active} onChange={(event) => setBannerForm((current) => ({ ...current, active: event.target.checked }))} />
+              <span>Activo en la web</span>
+            </label>
+          </div>
+
+          <div className="tn-banner-preview">
+            {bannerForm.image_url ? <img src={bannerForm.image_url} alt="" /> : <div><ImageIcon aria-hidden="true" />Sin imagen</div>}
+            <span style={{ background: `rgba(0,0,0,${bannerForm.overlay_opacity})` }} />
+            <div style={{ color: bannerForm.text_color }}>
+              <h3>{bannerForm.title || "Título de campaña"}</h3>
+              <p>{bannerForm.subtitle || "Subtítulo opcional del banner"}</p>
+              {bannerForm.button_label ? <strong>{bannerForm.button_label}</strong> : null}
+            </div>
+          </div>
+
+          <button className="button tn-save-banner" type="button" onClick={saveBanner} disabled={savingBanner}>
+            <Save size={16} aria-hidden="true" />
+            {savingBanner ? "Guardando..." : bannerForm.id ? "Guardar cambios" : "Crear banner"}
+          </button>
+        </article>
+
+        <article className="card tn-banner-list-card">
+          <div className="tn-section-head">
+            <div>
+              <h2>Banners cargados</h2>
+              <p>{webBanners.length} banner{webBanners.length === 1 ? "" : "s"} configurado{webBanners.length === 1 ? "" : "s"}</p>
+            </div>
+            <span className="badge">Script público</span>
+          </div>
+          <div className="tn-script-box">
+            <code>{`<script src="https://pricing-adara-online.vercel.app/api/tiendanube/web-banners/script.js"></script>`}</code>
+          </div>
+          <div className="tn-banner-list">
+            {webBanners.map((banner) => (
+              <div className="tn-banner-item" key={banner.id}>
+                <img src={banner.image_url} alt="" />
+                <div>
+                  <strong>{banner.title}</strong>
+                  <span>{banner.active ? "Activo" : "Pausado"} · orden {banner.position}</span>
+                  <small>{banner.link_url || "Sin link"}</small>
+                </div>
+                <button className="button ghost small-button" type="button" onClick={() => editBanner(banner)}>Editar</button>
+                <button className="button ghost small-button tn-danger-button" type="button" onClick={() => deleteBanner(banner)} title="Eliminar banner">
+                  <Trash2 size={14} aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+            {!webBanners.length && <div className="tn-empty">Todavía no hay banners cargados.</div>}
+          </div>
+        </article>
+      </section>
+      )}
     </main>
   );
 }

@@ -234,6 +234,26 @@ export type TiendanubePublication = {
   updated_at?: string;
 };
 
+export type TiendanubeWebBanner = {
+  id?: string;
+  position: number;
+  title: string;
+  subtitle?: string | null;
+  image_url: string;
+  mobile_image_url?: string | null;
+  link_url?: string | null;
+  button_label?: string | null;
+  text_color: string;
+  overlay_opacity: number;
+  active: boolean;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type TaxSettings = {
   key: string;
   iibb_rate: number;
