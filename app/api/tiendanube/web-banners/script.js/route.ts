@@ -35,7 +35,7 @@ const script = `
     root.innerHTML = [
       '<style>',
       '#adara-campaign-carousel{position:relative;width:100%;overflow:hidden;background:#111;margin:0 0 24px;isolation:isolate}',
-      '#adara-campaign-carousel .adara-track{display:flex;transition:transform .45s ease;will-change:transform}',
+      '#adara-campaign-carousel .adara-track{display:flex;transition:transform .45s ease;will-change:transform;touch-action:pan-y}',
       '#adara-campaign-carousel .adara-slide{min-width:100%;position:relative;display:block;color:var(--adara-text,#fff);text-decoration:none}',
       '#adara-campaign-carousel .adara-slide img{display:block!important;width:100%!important;height:auto!important;max-height:none!important;object-fit:contain!important;object-position:center center!important;background:#111}',
       '#adara-campaign-carousel .adara-overlay{position:absolute;inset:0;background:#000;opacity:var(--adara-overlay,.28);pointer-events:none}',
@@ -103,12 +103,43 @@ const script = `
     var index = 0;
     var track = root.querySelector(".adara-track");
     var dots = Array.prototype.slice.call(root.querySelectorAll(".adara-dot"));
+    var touchStartX = 0;
+    var touchStartY = 0;
+    var touchDeltaX = 0;
+    var touchDeltaY = 0;
+    var swiped = false;
     function go(next) {
       index = (next + banners.length) % banners.length;
       track.style.transform = "translateX(" + (-index * 100) + "%)";
       dots.forEach(function (dot, dotIndex) { dot.classList.toggle("active", dotIndex === index); });
     }
     dots.forEach(function (dot, dotIndex) { dot.addEventListener("click", function () { go(dotIndex); }); });
+    if (banners.length > 1 && window.TouchEvent) {
+      track.addEventListener("touchstart", function (event) {
+        if (!event.touches || !event.touches.length) return;
+        touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY;
+        touchDeltaX = 0;
+        touchDeltaY = 0;
+        swiped = false;
+      }, { passive: true });
+      track.addEventListener("touchmove", function (event) {
+        if (!event.touches || !event.touches.length) return;
+        touchDeltaX = event.touches[0].clientX - touchStartX;
+        touchDeltaY = event.touches[0].clientY - touchStartY;
+      }, { passive: true });
+      track.addEventListener("touchend", function () {
+        if (Math.abs(touchDeltaX) < 45 || Math.abs(touchDeltaX) < Math.abs(touchDeltaY) * 1.25) return;
+        swiped = true;
+        go(index + (touchDeltaX < 0 ? 1 : -1));
+        window.setTimeout(function () { swiped = false; }, 250);
+      }, { passive: true });
+      root.addEventListener("click", function (event) {
+        if (!swiped) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }, true);
+    }
     if (banners.length > 1) window.setInterval(function () { go(index + 1); }, 6500);
   }
 
