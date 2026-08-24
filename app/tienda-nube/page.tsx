@@ -70,6 +70,7 @@ type BannerForm = {
   link_url: string;
   button_label: string;
   show_text: boolean;
+  text_width_desktop: number;
   text_color: string;
   overlay_opacity: number;
   active: boolean;
@@ -86,6 +87,7 @@ const emptyBannerForm: BannerForm = {
   link_url: "",
   button_label: "Comprar ahora",
   show_text: true,
+  text_width_desktop: 46,
   text_color: "#ffffff",
   overlay_opacity: 0.28,
   active: true,
@@ -189,6 +191,7 @@ function bannerToForm(banner: TiendanubeWebBanner): BannerForm {
     link_url: banner.link_url || "",
     button_label: banner.button_label || "",
     show_text: banner.show_text !== false,
+    text_width_desktop: Number(banner.text_width_desktop ?? 46),
     text_color: banner.text_color || "#ffffff",
     overlay_opacity: Number(banner.overlay_opacity ?? 0.28),
     active: Boolean(banner.active),
@@ -929,6 +932,10 @@ export default function TiendaNubePage() {
               <span>Mostrar texto y botón encima</span>
             </label>
             <label>
+              <span>Ancho texto desktop: {bannerForm.text_width_desktop}%</span>
+              <input type="range" min="24" max="70" step="1" value={bannerForm.text_width_desktop} onChange={(event) => setBannerForm((current) => ({ ...current, text_width_desktop: Number(event.target.value) }))} />
+            </label>
+            <label>
               <span>Orden</span>
               <input type="number" value={bannerForm.position} onChange={(event) => setBannerForm((current) => ({ ...current, position: Number(event.target.value || 0) }))} />
             </label>
@@ -959,7 +966,7 @@ export default function TiendaNubePage() {
             {bannerForm.show_text ? (
               <>
                 <span style={{ background: `rgba(0,0,0,${bannerForm.overlay_opacity})` }} />
-                <div style={{ color: bannerForm.text_color }}>
+                <div style={{ color: bannerForm.text_color, width: `${bannerForm.text_width_desktop}%`, maxWidth: "88%" }}>
                   <h3>{bannerForm.title || "Título de campaña"}</h3>
                   <p>{bannerForm.subtitle || "Subtítulo opcional del banner"}</p>
                   {bannerForm.button_label ? <strong>{bannerForm.button_label}</strong> : null}

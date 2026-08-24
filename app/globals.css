@@ -12655,7 +12655,7 @@ body {
 .tienda-nube-page .tn-banner-preview {
   position: relative;
   overflow: hidden;
-  min-height: 280px;
+  aspect-ratio: 1580 / 600;
   margin: 16px 0;
   border-radius: 8px;
   background: #111827;
@@ -12664,8 +12664,8 @@ body {
 .tienda-nube-page .tn-banner-preview img,
 .tienda-nube-page .tn-banner-preview > div:first-child {
   width: 100%;
-  height: 320px;
-  object-fit: cover;
+  height: 100%;
+  object-fit: contain;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -12681,7 +12681,6 @@ body {
   position: absolute;
   left: 28px;
   bottom: 28px;
-  max-width: 560px;
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
 }
 

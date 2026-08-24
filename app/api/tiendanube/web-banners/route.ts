@@ -30,6 +30,12 @@ function cleanOpacity(value: unknown) {
   return Math.max(0, Math.min(0.75, number));
 }
 
+function cleanTextWidth(value: unknown) {
+  const number = Number(value ?? 46);
+  if (!Number.isFinite(number)) return 46;
+  return Math.max(24, Math.min(70, number));
+}
+
 function cleanDate(value: unknown) {
   const text = cleanText(value);
   if (!text) return null;
@@ -79,6 +85,7 @@ export async function POST(request: NextRequest) {
       link_url: cleanUrl(body.link_url),
       button_label: cleanOptionalText(body.button_label),
       show_text: Boolean(body.show_text ?? true),
+      text_width_desktop: cleanTextWidth(body.text_width_desktop),
       text_color: cleanColor(body.text_color),
       overlay_opacity: cleanOpacity(body.overlay_opacity),
       active: Boolean(body.active ?? true),
@@ -123,6 +130,7 @@ export async function PUT(request: NextRequest) {
       link_url: cleanUrl(body.link_url),
       button_label: cleanOptionalText(body.button_label),
       show_text: Boolean(body.show_text ?? true),
+      text_width_desktop: cleanTextWidth(body.text_width_desktop),
       text_color: cleanColor(body.text_color),
       overlay_opacity: cleanOpacity(body.overlay_opacity),
       active: Boolean(body.active),

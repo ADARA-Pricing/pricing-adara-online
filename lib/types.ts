@@ -244,6 +244,7 @@ export type TiendanubeWebBanner = {
   link_url?: string | null;
   button_label?: string | null;
   show_text?: boolean | null;
+  text_width_desktop?: number | null;
   text_color: string;
   overlay_opacity: number;
   active: boolean;

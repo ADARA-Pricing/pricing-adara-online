@@ -19,6 +19,12 @@ const script = `
     return Math.max(0, Math.min(0.75, number));
   }
 
+  function normalizeTextWidth(value) {
+    var number = Number(value);
+    if (!isFinite(number)) return 46;
+    return Math.max(24, Math.min(70, number));
+  }
+
   function bannerImage(banner) {
     if (window.matchMedia && window.matchMedia("(max-width: 720px)").matches && banner.mobile_image_url) {
       return banner.mobile_image_url;
@@ -39,7 +45,7 @@ const script = `
       '#adara-campaign-carousel .adara-slide{min-width:100%;position:relative;display:block;color:var(--adara-text,#fff);text-decoration:none}',
       '#adara-campaign-carousel .adara-slide img{display:block!important;width:100%!important;height:auto!important;max-height:none!important;object-fit:contain!important;object-position:center center!important;background:#111}',
       '#adara-campaign-carousel .adara-overlay{position:absolute;inset:0;background:#000;opacity:var(--adara-overlay,.28);pointer-events:none}',
-      '#adara-campaign-carousel .adara-copy{position:absolute;inset:auto auto 10% 6%;max-width:min(760px,46vw);z-index:2;color:var(--adara-text,#fff);text-shadow:0 2px 14px rgba(0,0,0,.35)}',
+      '#adara-campaign-carousel .adara-copy{position:absolute;inset:auto auto 10% 6%;width:min(920px,var(--adara-copy-width,46vw));max-width:88vw;z-index:2;color:var(--adara-text,#fff);text-shadow:0 2px 14px rgba(0,0,0,.35)}',
       '#adara-campaign-carousel .adara-copy h2{margin:0 0 8px;font-size:clamp(28px,4vw,56px);line-height:1.02;font-weight:800;letter-spacing:0}',
       '#adara-campaign-carousel .adara-copy p{margin:0 0 18px;font-size:clamp(15px,1.6vw,20px);line-height:1.35}',
       '#adara-campaign-carousel .adara-button{display:inline-flex;align-items:center;min-height:42px;padding:0 18px;border-radius:6px;background:#fff;color:#111;font-weight:700;text-shadow:none}',
@@ -56,9 +62,10 @@ const script = `
         var button = escapeHtml(banner.button_label);
         var link = banner.link_url ? escapeHtml(banner.link_url) : "#";
         var showText = banner.show_text !== false;
+        var textWidth = normalizeTextWidth(banner.text_width_desktop);
         var text = /^#[0-9a-f]{6}$/i.test(String(banner.text_color || "")) ? banner.text_color : "#ffffff";
         var overlay = normalizeOpacity(banner.overlay_opacity);
-        return '<a class="adara-slide" href="' + link + '" style="--adara-text:' + text + ';--adara-overlay:' + overlay + '">' +
+        return '<a class="adara-slide" href="' + link + '" style="--adara-text:' + text + ';--adara-overlay:' + overlay + ';--adara-copy-width:' + textWidth + 'vw">' +
           '<img src="' + image + '" alt="' + title + '" loading="eager">' +
           (showText ? '<span class="adara-overlay"></span><span class="adara-copy"><h2>' + title + '</h2>' +
           (subtitle ? '<p>' + subtitle + '</p>' : '') +
