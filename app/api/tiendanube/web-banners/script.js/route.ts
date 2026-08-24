@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 const script = `
 (function () {
   var scriptEl = document.currentScript;
-  var origin = scriptEl && scriptEl.src ? new URL(scriptEl.src).origin : "https://pricing-adara-online.vercel.app";
+  var origin = scriptEl && scriptEl.getAttribute("data-adara-origin") || "https://pricing-adara-online.vercel.app";
   var isHome = location.pathname === "/" || location.pathname === "" || /^\\/[a-z]{2}(-[A-Z]{2})?\\/?$/.test(location.pathname);
   if (!isHome || document.getElementById("adara-campaign-carousel")) return;
 
