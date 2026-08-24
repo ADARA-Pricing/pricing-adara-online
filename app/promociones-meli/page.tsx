@@ -2434,7 +2434,7 @@ export default function PromocionesMeliPage() {
                         </div>
                         <span className="badge promociones-traffic-count">
                           <BadgePercent aria-hidden="true" />
-                          {group.items.length} {group.items.length === 1 ? "promo" : "promos"}
+                          {group.items.length} {group.items.length === 1 ? "ajuste" : "ajustes"}
                         </span>
                         <div className="promociones-traffic-sku-summary">
                           <small>{summary.installmentText}</small>
@@ -2458,6 +2458,7 @@ export default function PromocionesMeliPage() {
                               <div className="promociones-traffic-item promociones-traffic-item-active" key={item.activeComparison.key}>
                                 <div className="promociones-traffic-main">
                                   <strong>{item.installmentLabel}</strong>
+                                  <span className="promo-date-badge">Actual</span>
                                   <span>
                                     {item.activeComparison.promotionName}
                                     {promoValidityLabel(item.activeComparison.startDate, item.activeComparison.endDate) ? ` | ${promoValidityLabel(item.activeComparison.startDate, item.activeComparison.endDate)}` : ""}
@@ -2485,6 +2486,7 @@ export default function PromocionesMeliPage() {
                             <div className="promociones-traffic-item">
                               <div className="promociones-traffic-main">
                                 <strong>{item.installmentLabel}</strong>
+                                {column.key === "yellow" && <span className="promo-date-badge">Sugerida</span>}
                                 <span>
                                   {item.promotionName}
                                   {column.key === "yellow" && validity ? ` | ${validity}` : ""}
