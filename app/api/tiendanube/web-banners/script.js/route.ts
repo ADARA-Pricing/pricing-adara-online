@@ -8,6 +8,8 @@ const script = `
   if (!isHome || document.getElementById("adara-campaign-carousel")) return;
   var prehideCarousel = document.querySelector(".template-home .adara-main-carousel, .adara-main-carousel, [data-adara-carousel]");
   if (prehideCarousel) prehideCarousel.style.setProperty("display", "none", "important");
+  var prehidePromo = document.querySelector(".template-home .adara-hero-banners, .adara-hero-banners, [data-adara-after-institutional-carousel], .template-home .adara-promo-banners, .adara-promo-banners");
+  if (prehidePromo) prehidePromo.style.setProperty("display", "none", "important");
 
   function escapeHtml(value) {
     return String(value || "").replace(/[&<>"']/g, function (char) {
@@ -176,8 +178,10 @@ const script = `
   }
 
   function renderPromo(banners) {
-    if (!Array.isArray(banners) || !banners.length || document.getElementById("adara-promo-strip-dynamic")) return;
-    var existingPromo = document.querySelector(".template-home .adara-promo-banners, .adara-promo-banners");
+    if (!Array.isArray(banners) || !banners.length) return;
+    var existingDynamic = document.getElementById("adara-promo-strip-dynamic");
+    if (existingDynamic && existingDynamic.parentNode) existingDynamic.parentNode.removeChild(existingDynamic);
+    var existingPromo = document.querySelector(".template-home .adara-hero-banners, .adara-hero-banners, [data-adara-after-institutional-carousel], .template-home .adara-promo-banners, .adara-promo-banners");
     var root = document.createElement("section");
     root.id = "adara-promo-strip-dynamic";
     root.className = "adara-promo-banners adara-promo-strip-dynamic";
@@ -222,11 +226,14 @@ const script = `
     if (existingPromo && existingPromo.parentNode) {
       existingPromo.parentNode.replaceChild(root, existingPromo);
     } else {
-      var anchor = document.querySelector(".template-home .section-categories-home");
+      var anchor = document.querySelector(".template-home .section-institutional-home, .section-institutional-home");
       var target = document.querySelector(".js-home-sections-container") || document.querySelector("main") || document.body;
       if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(root, anchor.nextSibling);
       else target.appendChild(root);
     }
+    Array.prototype.forEach.call(document.querySelectorAll(".template-home .adara-hero-banners, .adara-hero-banners, [data-adara-after-institutional-carousel], .template-home .adara-promo-banners, .adara-promo-banners"), function (node) {
+      if (node !== root && node.id !== "adara-promo-strip-dynamic" && node.parentNode) node.parentNode.removeChild(node);
+    });
   }
 
   fetch(origin + "/api/tiendanube/web-banners/public", { cache: "no-store" })
