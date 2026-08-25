@@ -194,7 +194,7 @@ const script = `
       '#adara-promo-strip-dynamic .adara-copy h2{margin:0 0 8px;font-size:clamp(26px,3.4vw,50px);line-height:1.04;font-weight:800;letter-spacing:0}',
       '#adara-promo-strip-dynamic .adara-copy p{margin:0 0 16px;font-size:clamp(14px,1.4vw,19px);line-height:1.35}',
       '#adara-promo-strip-dynamic .adara-button{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:6px;background:#fff;color:#111;font-weight:700;text-shadow:none}',
-      '@media(max-width:720px){#adara-promo-strip-dynamic{padding:18px 0 28px!important}#adara-promo-strip-dynamic .adara-promo-shell{width:calc(100vw - 28px)!important}#adara-promo-strip-dynamic .adara-promo-card{aspect-ratio:1122/1402!important}#adara-promo-strip-dynamic .adara-copy{left:18px;right:18px;bottom:24px;width:var(--adara-copy-width-mobile,86vw);max-width:calc(100% - 36px)}}',
+      '@media(max-width:720px){#adara-promo-strip-dynamic{padding:18px 0 28px!important}#adara-promo-strip-dynamic .adara-promo-shell{width:calc(100vw - 28px)!important}#adara-promo-strip-dynamic .adara-promo-card{aspect-ratio:1586/992!important}#adara-promo-strip-dynamic .adara-copy{left:18px;right:18px;bottom:24px;width:var(--adara-copy-width-mobile,86vw);max-width:calc(100% - 36px)}}',
       '</style>',
       '<div class="adara-promo-shell"><div class="adara-promo-track">',
       banners.map(function (banner) {
