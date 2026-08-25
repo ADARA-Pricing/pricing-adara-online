@@ -198,6 +198,87 @@ function compareText(a?: string | null, b?: string | null) {
   return String(a || "").localeCompare(String(b || ""), "es", { sensitivity: "base" });
 }
 
+type FormulaResult = {
+  value: number | null;
+  expression: string | null;
+  error: string | null;
+};
+
+function evaluateFormulaInput(rawValue: string): FormulaResult {
+  const raw = String(rawValue || "").trim();
+  if (!raw.startsWith("=")) return { value: toNumber(raw), expression: null, error: null };
+
+  const expression = raw.slice(1).replace(/\s+/g, "").replace(/,/g, ".");
+  if (!expression) return { value: null, expression: "", error: "Falta la fórmula." };
+  if (!/^[0-9+\-*/().]+$/.test(expression)) {
+    return { value: null, expression, error: "Usá solo números, paréntesis y + - * /." };
+  }
+
+  let index = 0;
+  function peek() {
+    return expression[index];
+  }
+  function consume(char: string) {
+    if (peek() === char) {
+      index += 1;
+      return true;
+    }
+    return false;
+  }
+  function parseNumber() {
+    const start = index;
+    while (/[0-9.]/.test(peek() || "")) index += 1;
+    const token = expression.slice(start, index);
+    if (!token || token === ".") throw new Error("Número inválido.");
+    const number = Number(token);
+    if (!Number.isFinite(number)) throw new Error("Número inválido.");
+    return number;
+  }
+  function parseFactor(): number {
+    if (consume("+")) return parseFactor();
+    if (consume("-")) return -parseFactor();
+    if (consume("(")) {
+      const value = parseExpression();
+      if (!consume(")")) throw new Error("Falta cerrar un paréntesis.");
+      return value;
+    }
+    return parseNumber();
+  }
+  function parseTerm() {
+    let value = parseFactor();
+    while (peek() === "*" || peek() === "/") {
+      const operator = peek();
+      index += 1;
+      const next = parseFactor();
+      if (operator === "*") value *= next;
+      else {
+        if (next === 0) throw new Error("No se puede dividir por cero.");
+        value /= next;
+      }
+    }
+    return value;
+  }
+  function parseExpression() {
+    let value = parseTerm();
+    while (peek() === "+" || peek() === "-") {
+      const operator = peek();
+      index += 1;
+      const next = parseTerm();
+      value = operator === "+" ? value + next : value - next;
+    }
+    return value;
+  }
+
+  try {
+    const value = parseExpression();
+    if (index !== expression.length) throw new Error("Fórmula inválida.");
+    if (!Number.isFinite(value)) throw new Error("Resultado inválido.");
+    return { value, expression, error: null };
+  } catch (error) {
+    return { value: null, expression, error: error instanceof Error ? error.message : "Fórmula inválida." };
+  }
+}
+
 function isCurrentShippingCost(shipping: MercadoLibreShippingCost) {
   return shipping.active !== false && shipping.meli_status !== "closed";
 }
@@ -456,6 +537,10 @@ export default function SimulatorPage() {
       setError("Poné un nombre de producto para guardar la simulación.");
       return;
     }
+    if (costWithoutVatInput.error) {
+      setError(`Revisá la fórmula de costo sin IVA: ${costWithoutVatInput.error}`);
+      return;
+    }
 
     setSavingSimulation(true);
     setError(null);
@@ -466,7 +551,7 @@ export default function SimulatorPage() {
       provider: form.provider.trim() || null,
       category: form.category || null,
       publication_url: form.publicationUrl.trim() || null,
-      cost_without_vat: Number(toNumber(form.costWithoutVat) || 0),
+      cost_without_vat: Number(costWithoutVatInput.value || 0),
       desired_margin_rate: Number(simulation.linkedMargin || 0),
       sale_price: Number(simulation.grossSalePrice || 0),
       vat_condition: form.vatCondition,
@@ -699,8 +784,10 @@ export default function SimulatorPage() {
     return orderChannels(hasMc ? custom : [mercadoLibreClassicOption(), ...custom]);
   }, [installments]);
 
+  const costWithoutVatInput = useMemo(() => evaluateFormulaInput(form.costWithoutVat), [form.costWithoutVat]);
+
   const simulation = useMemo(() => {
-    const costWithoutVat = Number(toNumber(form.costWithoutVat) || 0);
+    const costWithoutVat = Number(costWithoutVatInput.value || 0);
     const inputSalePrice = Number(toNumber(form.salePrice) || 0);
     const desiredMarginRate = Number(toNumber(form.desiredMarginRate) || 0);
     const productVatRate = vatRateFromCondition(form.vatCondition);
@@ -850,7 +937,7 @@ export default function SimulatorPage() {
       rows,
       summary,
     };
-  }, [form, categories, options, taxes, lastEdited, products, shippingCosts]);
+  }, [form, categories, options, taxes, lastEdited, products, shippingCosts, costWithoutVatInput.value]);
 
   const summaryStatus = statusLabel(simulation.summary?.valid ? simulation.summary.marginOnNetSale : 0);
 
@@ -888,7 +975,7 @@ export default function SimulatorPage() {
             <div className="simulator-base-picker-summary">
               <div>
                 <strong>{form.productName || "Elegir producto guardado"}</strong>
-                <span>{form.category || "Sin categoria"} · Costo {moneyWithCents(toNumber(form.costWithoutVat) || 0)}</span>
+                <span>{form.category || "Sin categoria"} · Costo {moneyWithCents(costWithoutVatInput.value || 0)}</span>
               </div>
               <button className="button secondary" type="button" onClick={() => setBaseProductPickerOpen(true)}>
                 <Search aria-hidden="true" />
@@ -954,8 +1041,15 @@ export default function SimulatorPage() {
                 inputMode="decimal"
                 value={form.costWithoutVat}
                 onChange={(event) => update("costWithoutVat", event.target.value)}
-                placeholder="241332"
+                placeholder="241332 o =292011/1.21"
               />
+              <span className={costWithoutVatInput.error ? "small simulator-input-error" : "small"}>
+                {costWithoutVatInput.error
+                  ? costWithoutVatInput.error
+                  : costWithoutVatInput.expression
+                    ? `Resultado: ${moneyWithCents(costWithoutVatInput.value || 0)}`
+                    : "Acepta números o fórmulas, por ejemplo =292011/1.21."}
+              </span>
             </div>
 
             <div className="field">

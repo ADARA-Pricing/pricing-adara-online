@@ -4916,6 +4916,11 @@ td strong {
   padding: 22px;
 }
 
+.simulator-page .simulator-input-error {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
 .simulator-page .simulator-summary-card {
   position: sticky;
   top: 88px;
