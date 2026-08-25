@@ -53,6 +53,7 @@ type Row = {
   stock: number;
   currentPrice: number | null;
   suggestedPrice: number | null;
+  desiredMargin: number | null;
   diff: number | null;
   diffRate: number | null;
   margin: number | null;
@@ -122,6 +123,17 @@ function normalizeSku(value?: string | null) {
 function numberValue(value: unknown) {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function targetMarginValue(value: string | undefined, fallback: number) {
+  if (value === undefined || value.trim() === "") return fallback;
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function marginInputValue(value?: number | null) {
+  if (value === undefined || value === null || !Number.isFinite(value)) return "";
+  return String(Number(value.toFixed(2)));
 }
 
 function statusBadgeClass(status: Row["status"]) {
@@ -276,6 +288,7 @@ export default function TiendaNubePage() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [targetMargins, setTargetMargins] = useState<Record<string, string>>({});
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -398,10 +411,12 @@ export default function TiendaNubePage() {
       if (publication?.id) linkedPublicationKeys.add(publication.id);
       const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase()) || null;
       const setting = margins.find((item) => item.product_id === product.id && item.channel_code.toUpperCase() === "TN");
-      const desiredMargin = Number(setting?.desired_margin_rate ?? 5);
+      const rowKey = `product-${sku}`;
+      const configuredMargin = Number(setting?.desired_margin_rate ?? 5);
+      const desiredMargin = targetMarginValue(targetMargins[rowKey], configuredMargin);
       const suggested = calculatePriceSummary(product, tnOption, categoryFee, taxes, null, {
         desiredMarginRate: desiredMargin,
-        desiredNetProfit: setting?.desired_net_profit ?? null,
+        desiredNetProfit: null,
         structureAmount: setting?.structure_amount ?? null,
         manualShippingAmount: setting?.manual_shipping_amount ?? null,
         salesCommissionRate: setting?.sales_commission_rate ?? null,
@@ -428,7 +443,7 @@ export default function TiendaNubePage() {
       const status: Row["status"] = publication ? (needsPrice ? "needs_price" : "ok") : "missing";
 
       return [{
-        key: `product-${sku}`,
+        key: rowKey,
         product,
         publication,
         sku,
@@ -438,6 +453,7 @@ export default function TiendaNubePage() {
         stock: stockSourcePublications.length ? stockFromMl : numberValue(product.stock),
         currentPrice,
         suggestedPrice,
+        desiredMargin,
         diff,
         diffRate,
         margin: current?.valid ? Number(current.marginOnNetSale || 0) : null,
@@ -470,6 +486,7 @@ export default function TiendaNubePage() {
           stock: stockSourcePublications.length ? stockFromMl : numberValue(publication.stock),
           currentPrice: numberValue(publication.promotional_price || publication.price) || null,
           suggestedPrice: null,
+          desiredMargin: null,
           diff: null,
           diffRate: null,
           margin: null,
@@ -480,7 +497,7 @@ export default function TiendaNubePage() {
       });
 
     return [...productRows, ...unlinkedRows];
-  }, [categoryFees, margins, meliPublications, products, publications, taxes, tnOption]);
+  }, [categoryFees, margins, meliPublications, products, publications, targetMargins, taxes, tnOption]);
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -893,7 +910,7 @@ export default function TiendaNubePage() {
                 <th className="numeric-header"><SortButton id="price">TN actual</SortButton></th>
                 <th className="numeric-header"><SortButton id="suggested">Sugerido TN</SortButton></th>
                 <th className="numeric-header"><SortButton id="diff">Diferencia</SortButton></th>
-                <th className="numeric-header"><SortButton id="margin">Margen actual</SortButton></th>
+                <th className="numeric-header"><SortButton id="margin">Margen / objetivo</SortButton></th>
                 <th className="numeric-header"><SortButton id="stock">Stock</SortButton></th>
                 <th></th>
               </tr>
@@ -921,6 +938,21 @@ export default function TiendaNubePage() {
                   <td className={`numeric-cell ${row.margin !== null && row.margin < 0 ? "negative-money" : "positive-money"}`}>
                     <strong>{row.margin !== null ? percent(row.margin) : "-"}</strong>
                     <small>{moneyWithCents(row.netProfit)}</small>
+                    {row.product && row.suggestedPrice ? (
+                      <label className="tn-target-margin-control">
+                        <span>Objetivo</span>
+                        <input
+                          type="number"
+                          min="-50"
+                          max="80"
+                          step="0.5"
+                          value={targetMargins[row.key] ?? marginInputValue(row.desiredMargin)}
+                          onChange={(event) => setTargetMargins((current) => ({ ...current, [row.key]: event.target.value }))}
+                          aria-label={`Margen objetivo para ${row.sku}`}
+                        />
+                        <em>%</em>
+                      </label>
+                    ) : null}
                   </td>
                   <td className="numeric-cell">{row.stock}</td>
                   <td>
@@ -930,10 +962,10 @@ export default function TiendaNubePage() {
                           <ExternalLink size={14} aria-hidden="true" />
                         </a>
                       )}
-                      {row.status === "needs_price" && (
+                      {row.publication && row.suggestedPrice && (
                         <button className="button small-button" type="button" onClick={() => updatePrice(row)} disabled={busyKey === row.key || !row.suggestedPrice}>
                           <Check size={14} aria-hidden="true" />
-                          Ajustar
+                          {busyKey === row.key ? "Ajustando..." : "Ajustar"}
                         </button>
                       )}
                       {row.status === "missing" && (

@@ -18,10 +18,18 @@ export async function POST(request: NextRequest) {
     const account = await getConnectedTiendanubeAccount();
     if (!account) return NextResponse.json({ error: "Primero conecta Tienda Nube." }, { status: 400 });
 
-    const data = await tiendanubeFetch(`/products/${parsedProductId}/variants/${parsedVariantId}`, account, {
-      method: "PUT",
-      body: JSON.stringify({ price: String(Math.round(parsedPrice)) }),
-    });
+    let data: unknown;
+    try {
+      data = await tiendanubeFetch(`/products/${parsedProductId}/variants/${parsedVariantId}`, account, {
+        method: "PUT",
+        body: JSON.stringify({ price: String(Math.round(parsedPrice)), promotional_price: null }),
+      });
+    } catch {
+      data = await tiendanubeFetch(`/products/${parsedProductId}/variants/${parsedVariantId}`, account, {
+        method: "PUT",
+        body: JSON.stringify({ price: String(Math.round(parsedPrice)) }),
+      });
+    }
 
     const supabase = createAdminClient();
     const now = new Date().toISOString();
@@ -29,6 +37,7 @@ export async function POST(request: NextRequest) {
       .from("tiendanube_publications")
       .update({
         price: parsedPrice,
+        promotional_price: null,
         raw: data,
         tn_last_sync_at: now,
         updated_at: now,

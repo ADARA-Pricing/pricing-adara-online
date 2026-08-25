@@ -12504,6 +12504,35 @@ body {
   font-size: 12px;
 }
 
+.tienda-nube-page .tn-target-margin-control {
+  display: inline-grid;
+  grid-template-columns: auto 58px auto;
+  align-items: center;
+  gap: 4px;
+  justify-content: end;
+  margin-top: 7px;
+  color: #526580;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tienda-nube-page .tn-target-margin-control input {
+  width: 58px;
+  height: 28px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 0 6px;
+  text-align: right;
+  color: #0f172a;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  background: #fff;
+}
+
+.tienda-nube-page .tn-target-margin-control em {
+  font-style: normal;
+}
+
 .tienda-nube-page .tn-empty {
   padding: 18px;
   border: 1px dashed #cbd5e1;
