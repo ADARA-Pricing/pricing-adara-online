@@ -76,22 +76,23 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireApiUser();
     const body = await request.json();
-    const title = cleanText(body.title);
+    const placement = cleanPlacement(body.placement);
+    const title = placement === "promo_strip" ? cleanText(body.title) || "Banner bajo mensaje" : cleanText(body.title);
     const imageUrl = cleanUrl(body.image_url);
     if (!title) return NextResponse.json({ error: "El título es obligatorio." }, { status: 400 });
     if (!imageUrl) return NextResponse.json({ error: "La imagen es obligatoria." }, { status: 400 });
 
     const supabase = createAdminClient();
     const payload = {
-      placement: cleanPlacement(body.placement),
+      placement,
       position: Number.isFinite(Number(body.position)) ? Number(body.position) : 0,
       title,
-      subtitle: cleanOptionalText(body.subtitle),
+      subtitle: placement === "promo_strip" ? null : cleanOptionalText(body.subtitle),
       image_url: imageUrl,
       mobile_image_url: cleanUrl(body.mobile_image_url),
       link_url: cleanUrl(body.link_url),
-      button_label: cleanOptionalText(body.button_label),
-      show_text: Boolean(body.show_text ?? true),
+      button_label: placement === "promo_strip" ? null : cleanOptionalText(body.button_label),
+      show_text: placement === "promo_strip" ? false : Boolean(body.show_text ?? true),
       text_width_desktop: cleanTextWidth(body.text_width_desktop, 46, 24, 70),
       text_width_mobile: cleanTextWidth(body.text_width_mobile, 86, 55, 100),
       text_color: cleanColor(body.text_color),
@@ -122,7 +123,8 @@ export async function PUT(request: NextRequest) {
     const user = await requireApiUser();
     const body = await request.json();
     const id = cleanText(body.id);
-    const title = cleanText(body.title);
+    const placement = cleanPlacement(body.placement);
+    const title = placement === "promo_strip" ? cleanText(body.title) || "Banner bajo mensaje" : cleanText(body.title);
     const imageUrl = cleanUrl(body.image_url);
     if (!id) return NextResponse.json({ error: "Falta el ID del banner." }, { status: 400 });
     if (!title) return NextResponse.json({ error: "El título es obligatorio." }, { status: 400 });
@@ -130,15 +132,15 @@ export async function PUT(request: NextRequest) {
 
     const supabase = createAdminClient();
     const payload = {
-      placement: cleanPlacement(body.placement),
+      placement,
       position: Number.isFinite(Number(body.position)) ? Number(body.position) : 0,
       title,
-      subtitle: cleanOptionalText(body.subtitle),
+      subtitle: placement === "promo_strip" ? null : cleanOptionalText(body.subtitle),
       image_url: imageUrl,
       mobile_image_url: cleanUrl(body.mobile_image_url),
       link_url: cleanUrl(body.link_url),
-      button_label: cleanOptionalText(body.button_label),
-      show_text: Boolean(body.show_text ?? true),
+      button_label: placement === "promo_strip" ? null : cleanOptionalText(body.button_label),
+      show_text: placement === "promo_strip" ? false : Boolean(body.show_text ?? true),
       text_width_desktop: cleanTextWidth(body.text_width_desktop, 46, 24, 70),
       text_width_mobile: cleanTextWidth(body.text_width_mobile, 86, 55, 100),
       text_color: cleanColor(body.text_color),

@@ -986,14 +986,18 @@ export default function TiendaNubePage() {
           </div>
 
           <div className="tn-banner-form">
-            <label>
-              <span>Título</span>
-              <input value={bannerForm.title} onChange={(event) => setBannerForm((current) => ({ ...current, title: event.target.value }))} placeholder="Cyber Week ADARA" />
-            </label>
-            <label>
-              <span>Subtítulo</span>
-              <input value={bannerForm.subtitle} onChange={(event) => setBannerForm((current) => ({ ...current, subtitle: event.target.value }))} placeholder="Tablets, notebooks y accesorios seleccionados" />
-            </label>
+            {bannerForm.placement === "main_carousel" ? (
+              <>
+                <label>
+                  <span>Título</span>
+                  <input value={bannerForm.title} onChange={(event) => setBannerForm((current) => ({ ...current, title: event.target.value }))} placeholder="Cyber Week ADARA" />
+                </label>
+                <label>
+                  <span>Subtítulo</span>
+                  <input value={bannerForm.subtitle} onChange={(event) => setBannerForm((current) => ({ ...current, subtitle: event.target.value }))} placeholder="Tablets, notebooks y accesorios seleccionados" />
+                </label>
+              </>
+            ) : null}
             <div className="tn-banner-upload-field">
               <span>Imagen desktop</span>
               <small>Tamaño recomendado: {bannerImageSpec(bannerForm.placement, "desktop").width} x {bannerImageSpec(bannerForm.placement, "desktop").height} px</small>
@@ -1019,33 +1023,37 @@ export default function TiendaNubePage() {
               <small>Puede ser una URL completa o una ruta de la tienda.</small>
               <input value={bannerForm.link_url} onChange={(event) => setBannerForm((current) => ({ ...current, link_url: event.target.value }))} placeholder="/productos/tablets o https://www.adaragroup.com.ar/..." />
             </label>
-            <label>
-              <span>Botón</span>
-              <input value={bannerForm.button_label} onChange={(event) => setBannerForm((current) => ({ ...current, button_label: event.target.value }))} placeholder="Comprar ahora" />
-            </label>
-            <label className="tn-banner-check">
-              <input type="checkbox" checked={bannerForm.show_text} onChange={(event) => setBannerForm((current) => ({ ...current, show_text: event.target.checked }))} />
-              <span>Mostrar texto y botón encima</span>
-            </label>
-            <label>
-              <span>Ancho texto desktop: {bannerForm.text_width_desktop}%</span>
-              <input type="range" min="24" max="70" step="1" value={bannerForm.text_width_desktop} onChange={(event) => setBannerForm((current) => ({ ...current, text_width_desktop: Number(event.target.value) }))} />
-            </label>
-            <label>
-              <span>Ancho texto mobile: {bannerForm.text_width_mobile}%</span>
-              <input type="range" min="55" max="100" step="1" value={bannerForm.text_width_mobile} onChange={(event) => setBannerForm((current) => ({ ...current, text_width_mobile: Number(event.target.value) }))} />
-            </label>
+            {bannerForm.placement === "main_carousel" ? (
+              <>
+                <label>
+                  <span>Botón</span>
+                  <input value={bannerForm.button_label} onChange={(event) => setBannerForm((current) => ({ ...current, button_label: event.target.value }))} placeholder="Comprar ahora" />
+                </label>
+                <label className="tn-banner-check">
+                  <input type="checkbox" checked={bannerForm.show_text} onChange={(event) => setBannerForm((current) => ({ ...current, show_text: event.target.checked }))} />
+                  <span>Mostrar texto y botón encima</span>
+                </label>
+                <label>
+                  <span>Ancho texto desktop: {bannerForm.text_width_desktop}%</span>
+                  <input type="range" min="24" max="70" step="1" value={bannerForm.text_width_desktop} onChange={(event) => setBannerForm((current) => ({ ...current, text_width_desktop: Number(event.target.value) }))} />
+                </label>
+                <label>
+                  <span>Ancho texto mobile: {bannerForm.text_width_mobile}%</span>
+                  <input type="range" min="55" max="100" step="1" value={bannerForm.text_width_mobile} onChange={(event) => setBannerForm((current) => ({ ...current, text_width_mobile: Number(event.target.value) }))} />
+                </label>
+                <label>
+                  <span>Color texto</span>
+                  <input type="color" value={bannerForm.text_color} onChange={(event) => setBannerForm((current) => ({ ...current, text_color: event.target.value }))} />
+                </label>
+                <label>
+                  <span>Oscurecer imagen</span>
+                  <input type="range" min="0" max="0.75" step="0.01" value={bannerForm.overlay_opacity} onChange={(event) => setBannerForm((current) => ({ ...current, overlay_opacity: Number(event.target.value) }))} />
+                </label>
+              </>
+            ) : null}
             <label>
               <span>Orden</span>
               <input type="number" value={bannerForm.position} onChange={(event) => setBannerForm((current) => ({ ...current, position: Number(event.target.value || 0) }))} />
-            </label>
-            <label>
-              <span>Color texto</span>
-              <input type="color" value={bannerForm.text_color} onChange={(event) => setBannerForm((current) => ({ ...current, text_color: event.target.value }))} />
-            </label>
-            <label>
-              <span>Oscurecer imagen</span>
-              <input type="range" min="0" max="0.75" step="0.01" value={bannerForm.overlay_opacity} onChange={(event) => setBannerForm((current) => ({ ...current, overlay_opacity: Number(event.target.value) }))} />
             </label>
             <label>
               <span>Inicio</span>
@@ -1077,7 +1085,7 @@ export default function TiendaNubePage() {
 
           <div className={`tn-banner-preview is-${bannerPreviewVariant} is-${bannerForm.placement}`}>
             {(bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url) ? <img src={bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url} alt="" /> : <div><ImageIcon aria-hidden="true" />Sin imagen</div>}
-            {bannerForm.show_text ? (
+            {bannerForm.placement === "main_carousel" && bannerForm.show_text ? (
               <>
                 <span style={{ background: `rgba(0,0,0,${bannerForm.overlay_opacity})` }} />
                 <div style={{ color: bannerForm.text_color, width: `${bannerPreviewVariant === "mobile" ? bannerForm.text_width_mobile : bannerForm.text_width_desktop}%`, maxWidth: bannerPreviewVariant === "mobile" ? "calc(100% - 36px)" : "88%" }}>

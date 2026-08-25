@@ -200,10 +200,10 @@ const script = `
       banners.map(function (banner) {
         var image = escapeHtml(bannerImage(banner));
         var title = escapeHtml(banner.title);
-        var subtitle = escapeHtml(banner.subtitle);
-        var button = escapeHtml(banner.button_label);
+        var subtitle = "";
+        var button = "";
         var link = banner.link_url ? escapeHtml(banner.link_url) : "#";
-        var showText = banner.show_text !== false;
+        var showText = false;
         var textWidth = normalizeTextWidth(banner.text_width_desktop, 46, 24, 70);
         var mobileTextWidth = normalizeTextWidth(banner.text_width_mobile, 86, 55, 100);
         var text = /^#[0-9a-f]{6}$/i.test(String(banner.text_color || "")) ? banner.text_color : "#ffffff";
