@@ -12740,6 +12740,15 @@ body {
   margin-inline: auto;
 }
 
+.tienda-nube-page .tn-banner-preview.is-promo_strip {
+  aspect-ratio: 2172 / 724;
+}
+
+.tienda-nube-page .tn-banner-preview.is-promo_strip.is-mobile {
+  aspect-ratio: 1122 / 1402;
+  width: min(100%, 320px);
+}
+
 .tienda-nube-page .tn-banner-preview img,
 .tienda-nube-page .tn-banner-preview > div:first-child {
   width: 100%;

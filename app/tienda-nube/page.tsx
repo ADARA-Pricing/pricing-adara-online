@@ -100,10 +100,20 @@ const emptyBannerForm: BannerForm = {
   ends_at: "",
 };
 
-const bannerImageSpecs: Record<BannerImageVariant, { label: string; width: number; height: number; field: "image_url" | "mobile_image_url" }> = {
-  desktop: { label: "Desktop", width: 1580, height: 600, field: "image_url" },
-  mobile: { label: "Mobile", width: 820, height: 1200, field: "mobile_image_url" },
+const bannerImageSpecs: Record<BannerPlacement, Record<BannerImageVariant, { label: string; width: number; height: number; field: "image_url" | "mobile_image_url" }>> = {
+  main_carousel: {
+    desktop: { label: "Desktop", width: 1580, height: 600, field: "image_url" },
+    mobile: { label: "Mobile", width: 820, height: 1200, field: "mobile_image_url" },
+  },
+  promo_strip: {
+    desktop: { label: "Desktop", width: 2172, height: 724, field: "image_url" },
+    mobile: { label: "Mobile", width: 1122, height: 1402, field: "mobile_image_url" },
+  },
 };
+
+function bannerImageSpec(placement: BannerPlacement, variant: BannerImageVariant) {
+  return bannerImageSpecs[placement][variant];
+}
 
 function normalizeSku(value?: string | null) {
   return (value || "").trim().toUpperCase();
@@ -658,7 +668,7 @@ export default function TiendaNubePage() {
 
   async function uploadBannerImage(file: File | undefined, variant: BannerImageVariant) {
     if (!file) return;
-    const spec = bannerImageSpecs[variant];
+    const spec = bannerImageSpec(bannerForm.placement, variant);
     setUploadingBannerImage(variant);
     setMessage(null);
     setError(null);
@@ -986,7 +996,7 @@ export default function TiendaNubePage() {
             </label>
             <div className="tn-banner-upload-field">
               <span>Imagen desktop</span>
-              <small>Tamaño recomendado: 1580 x 600 px</small>
+              <small>Tamaño recomendado: {bannerImageSpec(bannerForm.placement, "desktop").width} x {bannerImageSpec(bannerForm.placement, "desktop").height} px</small>
               <label className="tn-banner-upload-box">
                 <Upload size={18} aria-hidden="true" />
                 {uploadingBannerImage === "desktop" ? "Subiendo..." : "Elegir imagen desktop"}
@@ -996,7 +1006,7 @@ export default function TiendaNubePage() {
             </div>
             <div className="tn-banner-upload-field">
               <span>Imagen mobile</span>
-              <small>Tamaño recomendado: 820 x 1200 px</small>
+              <small>Tamaño recomendado: {bannerImageSpec(bannerForm.placement, "mobile").width} x {bannerImageSpec(bannerForm.placement, "mobile").height} px</small>
               <label className="tn-banner-upload-box">
                 <Upload size={18} aria-hidden="true" />
                 {uploadingBannerImage === "mobile" ? "Subiendo..." : "Elegir imagen mobile"}
@@ -1065,7 +1075,7 @@ export default function TiendaNubePage() {
             </div>
           </div>
 
-          <div className={`tn-banner-preview is-${bannerPreviewVariant}`}>
+          <div className={`tn-banner-preview is-${bannerPreviewVariant} is-${bannerForm.placement}`}>
             {(bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url) ? <img src={bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url} alt="" /> : <div><ImageIcon aria-hidden="true" />Sin imagen</div>}
             {bannerForm.show_text ? (
               <>
