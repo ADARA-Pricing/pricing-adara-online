@@ -193,6 +193,9 @@ const script = `
       '#adara-promo-strip-dynamic .adara-promo-track::-webkit-scrollbar{display:none!important}',
       '#adara-promo-strip-dynamic .adara-promo-card{position:relative!important;display:block!important;width:100%!important;aspect-ratio:3/1!important;overflow:hidden!important;border-radius:8px!important;scroll-snap-align:center!important;background:#f3eee7!important;box-shadow:0 18px 44px rgba(15,23,42,.08)!important;text-decoration:none!important;color:var(--adara-text,#fff)!important}',
       '#adara-promo-strip-dynamic .adara-promo-card img{display:block!important;width:100%!important;height:100%!important;object-fit:contain!important;object-position:center center!important}',
+      '#adara-promo-strip-dynamic .adara-promo-dots{display:flex!important;justify-content:center!important;gap:8px!important;margin-top:14px!important}',
+      '#adara-promo-strip-dynamic .adara-promo-dot{width:9px!important;height:9px!important;border:0!important;border-radius:999px!important;background:rgba(15,23,42,.28)!important;padding:0!important;cursor:pointer!important}',
+      '#adara-promo-strip-dynamic .adara-promo-dot.active{background:#111827!important}',
       '#adara-promo-strip-dynamic .adara-overlay{position:absolute;inset:0;background:#000;opacity:var(--adara-overlay,.18);pointer-events:none}',
       '#adara-promo-strip-dynamic .adara-copy{position:absolute;left:5%;bottom:12%;width:min(680px,var(--adara-copy-width,42vw));max-width:82%;z-index:2;color:var(--adara-text,#fff);text-shadow:0 2px 14px rgba(0,0,0,.35)}',
       '#adara-promo-strip-dynamic .adara-copy h2{margin:0 0 8px;font-size:clamp(26px,3.4vw,50px);line-height:1.04;font-weight:800;letter-spacing:0}',
@@ -220,7 +223,11 @@ const script = `
           '</span>' : '') +
           '</a>';
       }).join(""),
-      '</div></div>'
+      '</div>',
+      banners.length > 1 ? '<div class="adara-promo-dots">' + banners.map(function (_, index) {
+        return '<button class="adara-promo-dot' + (index === 0 ? ' active' : '') + '" type="button" aria-label="Banner secundario ' + (index + 1) + '"></button>';
+      }).join("") + '</div>' : '',
+      '</div>'
     ].join("");
 
     if (existingPromo && existingPromo.parentNode) {
@@ -234,6 +241,42 @@ const script = `
     Array.prototype.forEach.call(document.querySelectorAll(".template-home .adara-hero-banners, .adara-hero-banners, [data-adara-after-institutional-carousel], .template-home .adara-promo-banners, .adara-promo-banners"), function (node) {
       if (node !== root && node.id !== "adara-promo-strip-dynamic" && node.parentNode) node.parentNode.removeChild(node);
     });
+
+    var index = 0;
+    var track = root.querySelector(".adara-promo-track");
+    var cards = Array.prototype.slice.call(root.querySelectorAll(".adara-promo-card"));
+    var dots = Array.prototype.slice.call(root.querySelectorAll(".adara-promo-dot"));
+    var scrollTimer = 0;
+    function go(next) {
+      if (!track || !cards.length) return;
+      index = (next + cards.length) % cards.length;
+      var left = cards[index] && typeof cards[index].offsetLeft === "number" ? cards[index].offsetLeft : index * track.clientWidth;
+      if (track.scrollTo) track.scrollTo({ left: left, behavior: "smooth" });
+      else track.scrollLeft = left;
+      dots.forEach(function (dot, dotIndex) { dot.classList.toggle("active", dotIndex === index); });
+    }
+    function syncFromScroll() {
+      if (!track || !cards.length) return;
+      var nearest = 0;
+      var distance = Infinity;
+      cards.forEach(function (card, cardIndex) {
+        var currentDistance = Math.abs(card.offsetLeft - track.scrollLeft);
+        if (currentDistance < distance) {
+          distance = currentDistance;
+          nearest = cardIndex;
+        }
+      });
+      index = nearest;
+      dots.forEach(function (dot, dotIndex) { dot.classList.toggle("active", dotIndex === index); });
+    }
+    dots.forEach(function (dot, dotIndex) { dot.addEventListener("click", function () { go(dotIndex); }); });
+    if (track && banners.length > 1) {
+      track.addEventListener("scroll", function () {
+        window.clearTimeout(scrollTimer);
+        scrollTimer = window.setTimeout(syncFromScroll, 120);
+      }, { passive: true });
+      window.setInterval(function () { go(index + 1); }, 6500);
+    }
   }
 
   fetch(origin + "/api/tiendanube/web-banners/public", { cache: "no-store" })
