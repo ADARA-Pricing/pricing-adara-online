@@ -107,7 +107,7 @@ const bannerImageSpecs: Record<BannerPlacement, Record<BannerImageVariant, { lab
   },
   promo_strip: {
     desktop: { label: "Desktop", width: 2172, height: 724, field: "image_url" },
-    mobile: { label: "Mobile", width: 1122, height: 1402, field: "mobile_image_url" },
+    mobile: { label: "Mobile", width: 1586, height: 992, field: "mobile_image_url" },
   },
 };
 
