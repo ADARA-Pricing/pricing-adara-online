@@ -28,6 +28,7 @@ type SortDirection = "asc" | "desc";
 type StatusFilter = "" | "ok" | "needs_price" | "missing" | "unlinked";
 type TiendaNubeTab = "prices" | "web";
 type BannerImageVariant = "desktop" | "mobile";
+type BannerPlacement = "main_carousel" | "promo_strip";
 
 type TnStatus = {
   connected: boolean;
@@ -62,6 +63,7 @@ type Row = {
 
 type BannerForm = {
   id?: string;
+  placement: BannerPlacement;
   position: number;
   title: string;
   subtitle: string;
@@ -80,6 +82,7 @@ type BannerForm = {
 };
 
 const emptyBannerForm: BannerForm = {
+  placement: "main_carousel",
   position: 0,
   title: "",
   subtitle: "",
@@ -185,6 +188,7 @@ function dateInputValue(value?: string | null) {
 function bannerToForm(banner: TiendanubeWebBanner): BannerForm {
   return {
     id: banner.id,
+    placement: banner.placement === "promo_strip" ? "promo_strip" : "main_carousel",
     position: Number(banner.position || 0),
     title: banner.title || "",
     subtitle: banner.subtitle || "",
@@ -240,6 +244,7 @@ export default function TiendaNubePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<TiendanubePublication[]>([]);
   const [webBanners, setWebBanners] = useState<TiendanubeWebBanner[]>([]);
+  const [webSection, setWebSection] = useState<BannerPlacement>("main_carousel");
   const [bannerForm, setBannerForm] = useState<BannerForm>(emptyBannerForm);
   const [meliPublications, setMeliPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [options, setOptions] = useState<MercadoLibreInstallmentFee[]>([]);
@@ -322,6 +327,22 @@ export default function TiendaNubePage() {
     if (tnError) setError(tnError);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const activeSectionBanners = useMemo(() => {
+    return webBanners.filter((banner) => (banner.placement === "promo_strip" ? "promo_strip" : "main_carousel") === webSection);
+  }, [webBanners, webSection]);
+
+  const webSectionMeta = webSection === "promo_strip"
+    ? {
+        title: "Banner bajo mensaje institucional",
+        description: "Se muestra debajo del mensaje institucional y reemplaza el bloque fijo de la tienda cuando hay banners activos.",
+        listTitle: "Banners bajo mensaje",
+      }
+    : {
+        title: "Carrusel principal",
+        description: "Se muestra arriba de categorías como primer bloque visual de la home.",
+        listTitle: "Banners del carrusel",
+      };
 
   const tnOption = useMemo(() => {
     const found = options.find((option) => option.code.toUpperCase() === "TN") ||
@@ -577,16 +598,35 @@ export default function TiendaNubePage() {
     }
   }
 
+  function selectWebSection(section: BannerPlacement) {
+    setWebSection(section);
+    setBannerForm((current) => {
+      if (current.id && current.placement !== section) {
+        const sectionBanners = webBanners.filter((banner) => (banner.placement === "promo_strip" ? "promo_strip" : "main_carousel") === section);
+        return {
+          ...emptyBannerForm,
+          placement: section,
+          position: sectionBanners.length ? Math.max(...sectionBanners.map((banner) => Number(banner.position || 0))) + 1 : 0,
+        };
+      }
+      return { ...current, placement: section };
+    });
+  }
+
   function editBanner(banner: TiendanubeWebBanner) {
-    setBannerForm(bannerToForm(banner));
+    const form = bannerToForm(banner);
+    setWebSection(form.placement);
+    setBannerForm(form);
     setActiveTab("web");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function clearBannerForm() {
+    const sectionBanners = webBanners.filter((banner) => (banner.placement === "promo_strip" ? "promo_strip" : "main_carousel") === webSection);
     setBannerForm({
       ...emptyBannerForm,
-      position: webBanners.length ? Math.max(...webBanners.map((banner) => Number(banner.position || 0))) + 1 : 0,
+      placement: webSection,
+      position: sectionBanners.length ? Math.max(...sectionBanners.map((banner) => Number(banner.position || 0))) + 1 : 0,
     });
   }
 
@@ -673,15 +713,16 @@ export default function TiendaNubePage() {
 
   async function moveBanner(fromIndex: number, direction: -1 | 1) {
     const toIndex = fromIndex + direction;
-    if (toIndex < 0 || toIndex >= webBanners.length) return;
+    if (toIndex < 0 || toIndex >= activeSectionBanners.length) return;
 
-    const nextBanners = [...webBanners];
+    const nextBanners = [...activeSectionBanners];
     const [moved] = nextBanners.splice(fromIndex, 1);
     nextBanners.splice(toIndex, 0, moved);
     const orderedIds = nextBanners.map((banner) => banner.id).filter(Boolean);
     if (orderedIds.length !== nextBanners.length) return;
 
-    setWebBanners(nextBanners.map((banner, position) => ({ ...banner, position })));
+    const nextById = new Map(nextBanners.map((banner, position) => [banner.id, { ...banner, position }]));
+    setWebBanners((current) => current.map((banner) => nextById.get(banner.id) || banner));
     setBusyKey(`banner-order-${moved.id}`);
     setMessage(null);
     setError(null);
@@ -693,7 +734,7 @@ export default function TiendaNubePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudo reordenar los banners.");
-      setWebBanners((data?.banners || nextBanners) as TiendanubeWebBanner[]);
+      setWebBanners((data?.banners || webBanners) as TiendanubeWebBanner[]);
       setMessage("Orden de banners actualizado.");
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : "No se pudo reordenar los banners.");
@@ -915,12 +956,21 @@ export default function TiendaNubePage() {
       </section>
       </>
       ) : (
+      <>
+      <section className="tn-web-subtabs" aria-label="Partes editables de la página web">
+        <button className={webSection === "main_carousel" ? "active" : ""} type="button" onClick={() => selectWebSection("main_carousel")}>
+          Carrusel principal
+        </button>
+        <button className={webSection === "promo_strip" ? "active" : ""} type="button" onClick={() => selectWebSection("promo_strip")}>
+          Banners bajo mensaje
+        </button>
+      </section>
       <section className="tn-web-grid">
         <article className="card tn-banner-editor">
           <div className="tn-section-head">
             <div>
-              <h2>{bannerForm.id ? "Editar banner" : "Nuevo banner"}</h2>
-              <p>Cambios visibles desde el script público de la tienda.</p>
+              <h2>{bannerForm.id ? `Editar banner · ${webSectionMeta.title}` : `Nuevo banner · ${webSectionMeta.title}`}</h2>
+              <p>{webSectionMeta.description}</p>
             </div>
             <button className="button ghost small-button" type="button" onClick={clearBannerForm}>Limpiar</button>
           </div>
@@ -1039,7 +1089,7 @@ export default function TiendaNubePage() {
           <div className="tn-section-head">
             <div>
               <h2>Banners cargados</h2>
-              <p>{webBanners.length} banner{webBanners.length === 1 ? "" : "s"} configurado{webBanners.length === 1 ? "" : "s"}</p>
+              <p>{webSectionMeta.listTitle}: {activeSectionBanners.length} banner{activeSectionBanners.length === 1 ? "" : "s"}</p>
             </div>
             <button className="button small-button" type="button" onClick={installWebScript} disabled={installingWebScript || !status?.connected}>
               <Globe2 size={14} aria-hidden="true" />
@@ -1050,7 +1100,7 @@ export default function TiendaNubePage() {
             <code>{`<script src="https://pricing-adara-online.vercel.app/api/tiendanube/web-banners/script.js"></script>`}</code>
           </div>
           <div className="tn-banner-list">
-            {webBanners.map((banner, index) => (
+            {activeSectionBanners.map((banner, index) => (
               <div className="tn-banner-item" key={banner.id}>
                 <img src={banner.image_url} alt="" />
                 <div>
@@ -1062,7 +1112,7 @@ export default function TiendaNubePage() {
                   <button className="button ghost small-button" type="button" onClick={() => moveBanner(index, -1)} disabled={index === 0 || busyKey === `banner-order-${banner.id}`} title="Subir banner">
                     <ArrowUp size={14} aria-hidden="true" />
                   </button>
-                  <button className="button ghost small-button" type="button" onClick={() => moveBanner(index, 1)} disabled={index === webBanners.length - 1 || busyKey === `banner-order-${banner.id}`} title="Bajar banner">
+                  <button className="button ghost small-button" type="button" onClick={() => moveBanner(index, 1)} disabled={index === activeSectionBanners.length - 1 || busyKey === `banner-order-${banner.id}`} title="Bajar banner">
                     <ArrowDown size={14} aria-hidden="true" />
                   </button>
                 </div>
@@ -1072,10 +1122,11 @@ export default function TiendaNubePage() {
                 </button>
               </div>
             ))}
-            {!webBanners.length && <div className="tn-empty">Todavía no hay banners cargados.</div>}
+            {!activeSectionBanners.length && <div className="tn-empty">Todavía no hay banners cargados en esta parte.</div>}
           </div>
         </article>
       </section>
+      </>
       )}
     </main>
   );

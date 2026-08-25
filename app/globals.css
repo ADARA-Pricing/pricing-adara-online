@@ -12534,6 +12534,31 @@ body {
   color: #0f172a;
 }
 
+.tienda-nube-page .tn-web-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 18px;
+}
+
+.tienda-nube-page .tn-web-subtabs button {
+  min-height: 38px;
+  border: 1px solid #cfe0f6;
+  border-radius: 8px;
+  padding: 0 14px;
+  color: #475569;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tienda-nube-page .tn-web-subtabs button.active {
+  border-color: #2563eb;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
 .tienda-nube-page .tn-web-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);

@@ -34,7 +34,7 @@ const script = `
     return banner.image_url;
   }
 
-  function render(banners) {
+  function renderMain(banners) {
     if (!Array.isArray(banners) || !banners.length) return;
     var existingCarousel = prehideCarousel || document.querySelector(".template-home .adara-main-carousel, .adara-main-carousel, [data-adara-carousel]");
     var root = document.createElement("section");
@@ -175,9 +175,67 @@ const script = `
     if (banners.length > 1) window.setInterval(function () { go(index + 1); }, 6500);
   }
 
+  function renderPromo(banners) {
+    if (!Array.isArray(banners) || !banners.length || document.getElementById("adara-promo-strip-dynamic")) return;
+    var existingPromo = document.querySelector(".template-home .adara-promo-banners, .adara-promo-banners");
+    var root = document.createElement("section");
+    root.id = "adara-promo-strip-dynamic";
+    root.className = "adara-promo-banners adara-promo-strip-dynamic";
+    root.innerHTML = [
+      '<style>',
+      '#adara-promo-strip-dynamic{width:100%!important;padding:30px 0 54px!important;background:#f5f6f8!important;overflow:hidden!important}',
+      '#adara-promo-strip-dynamic .adara-promo-shell{width:min(1360px,calc(100vw - 64px))!important;margin:0 auto!important}',
+      '#adara-promo-strip-dynamic .adara-promo-track{display:grid!important;grid-auto-flow:column!important;grid-auto-columns:100%!important;gap:18px!important;overflow-x:auto!important;overflow-y:hidden!important;scroll-snap-type:x mandatory!important;scroll-behavior:smooth!important;-webkit-overflow-scrolling:touch!important;scrollbar-width:none!important;padding-bottom:4px!important}',
+      '#adara-promo-strip-dynamic .adara-promo-track::-webkit-scrollbar{display:none!important}',
+      '#adara-promo-strip-dynamic .adara-promo-card{position:relative!important;display:block!important;width:100%!important;aspect-ratio:3/1!important;overflow:hidden!important;border-radius:8px!important;scroll-snap-align:center!important;background:#f3eee7!important;box-shadow:0 18px 44px rgba(15,23,42,.08)!important;text-decoration:none!important;color:var(--adara-text,#fff)!important}',
+      '#adara-promo-strip-dynamic .adara-promo-card img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important;object-position:center center!important}',
+      '#adara-promo-strip-dynamic .adara-overlay{position:absolute;inset:0;background:#000;opacity:var(--adara-overlay,.18);pointer-events:none}',
+      '#adara-promo-strip-dynamic .adara-copy{position:absolute;left:5%;bottom:12%;width:min(680px,var(--adara-copy-width,42vw));max-width:82%;z-index:2;color:var(--adara-text,#fff);text-shadow:0 2px 14px rgba(0,0,0,.35)}',
+      '#adara-promo-strip-dynamic .adara-copy h2{margin:0 0 8px;font-size:clamp(26px,3.4vw,50px);line-height:1.04;font-weight:800;letter-spacing:0}',
+      '#adara-promo-strip-dynamic .adara-copy p{margin:0 0 16px;font-size:clamp(14px,1.4vw,19px);line-height:1.35}',
+      '#adara-promo-strip-dynamic .adara-button{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:6px;background:#fff;color:#111;font-weight:700;text-shadow:none}',
+      '@media(max-width:720px){#adara-promo-strip-dynamic{padding:18px 0 28px!important}#adara-promo-strip-dynamic .adara-promo-shell{width:calc(100vw - 28px)!important}#adara-promo-strip-dynamic .adara-promo-card{aspect-ratio:820/1200!important}#adara-promo-strip-dynamic .adara-copy{left:18px;right:18px;bottom:24px;width:var(--adara-copy-width-mobile,86vw);max-width:calc(100% - 36px)}}',
+      '</style>',
+      '<div class="adara-promo-shell"><div class="adara-promo-track">',
+      banners.map(function (banner) {
+        var image = escapeHtml(bannerImage(banner));
+        var title = escapeHtml(banner.title);
+        var subtitle = escapeHtml(banner.subtitle);
+        var button = escapeHtml(banner.button_label);
+        var link = banner.link_url ? escapeHtml(banner.link_url) : "#";
+        var showText = banner.show_text !== false;
+        var textWidth = normalizeTextWidth(banner.text_width_desktop, 46, 24, 70);
+        var mobileTextWidth = normalizeTextWidth(banner.text_width_mobile, 86, 55, 100);
+        var text = /^#[0-9a-f]{6}$/i.test(String(banner.text_color || "")) ? banner.text_color : "#ffffff";
+        var overlay = normalizeOpacity(banner.overlay_opacity);
+        return '<a class="adara-promo-card" href="' + link + '" style="--adara-text:' + text + ';--adara-overlay:' + overlay + ';--adara-copy-width:' + textWidth + 'vw;--adara-copy-width-mobile:' + mobileTextWidth + 'vw">' +
+          '<img src="' + image + '" alt="' + title + '" loading="lazy">' +
+          (showText ? '<span class="adara-overlay"></span><span class="adara-copy"><h2>' + title + '</h2>' +
+          (subtitle ? '<p>' + subtitle + '</p>' : '') +
+          (button ? '<span class="adara-button">' + button + '</span>' : '') +
+          '</span>' : '') +
+          '</a>';
+      }).join(""),
+      '</div></div>'
+    ].join("");
+
+    if (existingPromo && existingPromo.parentNode) {
+      existingPromo.parentNode.replaceChild(root, existingPromo);
+    } else {
+      var anchor = document.querySelector(".template-home .section-categories-home");
+      var target = document.querySelector(".js-home-sections-container") || document.querySelector("main") || document.body;
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(root, anchor.nextSibling);
+      else target.appendChild(root);
+    }
+  }
+
   fetch(origin + "/api/tiendanube/web-banners/public", { cache: "no-store" })
     .then(function (response) { return response.json(); })
-    .then(function (data) { render(data.banners || []); })
+    .then(function (data) {
+      var banners = data.banners || [];
+      renderMain(banners.filter(function (banner) { return banner.placement !== "promo_strip"; }));
+      renderPromo(banners.filter(function (banner) { return banner.placement === "promo_strip"; }));
+    })
     .catch(function () {});
 })();
 `;

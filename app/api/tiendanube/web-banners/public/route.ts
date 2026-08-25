@@ -20,10 +20,11 @@ export async function GET() {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("tiendanube_web_banners")
-      .select("id, position, title, subtitle, image_url, mobile_image_url, link_url, button_label, show_text, text_width_desktop, text_width_mobile, text_color, overlay_opacity, starts_at, ends_at, updated_at")
+      .select("id, placement, position, title, subtitle, image_url, mobile_image_url, link_url, button_label, show_text, text_width_desktop, text_width_mobile, text_color, overlay_opacity, starts_at, ends_at, updated_at")
       .eq("active", true)
       .or(`starts_at.is.null,starts_at.lte.${now}`)
       .or(`ends_at.is.null,ends_at.gte.${now}`)
+      .order("placement", { ascending: true })
       .order("position", { ascending: true })
       .order("created_at", { ascending: true });
 

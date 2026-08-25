@@ -18,6 +18,11 @@ function cleanUrl(value: unknown) {
   throw new Error("Las URLs deben empezar con http://, https:// o /.");
 }
 
+function cleanPlacement(value: unknown) {
+  const placement = cleanText(value) || "main_carousel";
+  return placement === "promo_strip" ? "promo_strip" : "main_carousel";
+}
+
 function cleanColor(value: unknown) {
   const text = cleanText(value) || "#ffffff";
   if (!/^#[0-9a-f]{6}$/i.test(text)) throw new Error("El color debe tener formato #RRGGBB.");
@@ -49,6 +54,7 @@ async function listBanners() {
   const { data, error } = await supabase
     .from("tiendanube_web_banners")
     .select("*")
+    .order("placement", { ascending: true })
     .order("position", { ascending: true })
     .order("created_at", { ascending: true });
 
@@ -77,6 +83,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
     const payload = {
+      placement: cleanPlacement(body.placement),
       position: Number.isFinite(Number(body.position)) ? Number(body.position) : 0,
       title,
       subtitle: cleanOptionalText(body.subtitle),
@@ -123,6 +130,7 @@ export async function PUT(request: NextRequest) {
 
     const supabase = createAdminClient();
     const payload = {
+      placement: cleanPlacement(body.placement),
       position: Number.isFinite(Number(body.position)) ? Number(body.position) : 0,
       title,
       subtitle: cleanOptionalText(body.subtitle),
