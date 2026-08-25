@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, Check, ExternalLink, Globe2, Image as ImageIcon, Monitor, Plus, RefreshCw, Save, Search, Smartphone, Store, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Check, CircleAlert, CircleCheck, CircleX, ExternalLink, Globe2, Image as ImageIcon, Monitor, Plus, RefreshCw, Save, Search, Smartphone, Store, Trash2, Upload } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -141,6 +141,20 @@ function statusBadgeClass(status: Row["status"]) {
   if (status === "needs_price") return "tn-status-warning";
   if (status === "missing") return "tn-status-missing";
   return "tn-status-unlinked";
+}
+
+function rowStatusClass(status: Row["status"]) {
+  if (status === "ok") return "tn-row-ok";
+  if (status === "needs_price") return "tn-row-warning";
+  if (status === "missing") return "tn-row-missing";
+  return "tn-row-critical";
+}
+
+function StatusIcon({ status }: { status: Row["status"] }) {
+  if (status === "ok") return <CircleCheck size={14} aria-hidden="true" />;
+  if (status === "needs_price") return <CircleAlert size={14} aria-hidden="true" />;
+  if (status === "missing") return <AlertTriangle size={14} aria-hidden="true" />;
+  return <CircleX size={14} aria-hidden="true" />;
 }
 
 function shortDate(value?: string | null) {
@@ -789,7 +803,8 @@ export default function TiendaNubePage() {
 
   const SortButton = ({ id, children }: { id: SortKey; children: React.ReactNode }) => (
     <button type="button" className="tn-sort-button" onClick={() => changeSort(id)}>
-      {children}{sortKey === id ? (sortDirection === "asc" ? " ↑" : " ↓") : ""}
+      {children}
+      {sortKey === id ? (sortDirection === "asc" ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />) : <ArrowUpDown size={12} className="idle-sort-icon" aria-hidden="true" />}
     </button>
   );
 
@@ -898,8 +913,14 @@ export default function TiendaNubePage() {
           <div>
             <h2>Publicaciones Tienda Nube</h2>
             <p>{loading ? "Cargando..." : `${filteredRows.length} de ${rows.length} filas · canal ${tnOption.code}`}</p>
+            <div className="tn-status-legend" aria-label="Estados de publicaciones">
+              <span className="ok">OK</span>
+              <span className="warning">Revisar precio</span>
+              <span className="missing">Falta en TN</span>
+              <span className="critical">Sin producto local</span>
+            </div>
           </div>
-          <span className="badge">Últ. sync {shortDate(publications[0]?.tn_last_sync_at)}</span>
+          <span className="badge tn-sync-badge">Últ. sync {shortDate(publications[0]?.tn_last_sync_at)}</span>
         </div>
         <div className="tn-table-wrap">
           <table className="rentabilidad-table tn-table">
@@ -910,14 +931,15 @@ export default function TiendaNubePage() {
                 <th className="numeric-header"><SortButton id="price">TN actual</SortButton></th>
                 <th className="numeric-header"><SortButton id="suggested">Sugerido TN</SortButton></th>
                 <th className="numeric-header"><SortButton id="diff">Diferencia</SortButton></th>
-                <th className="numeric-header"><SortButton id="margin">Margen / objetivo</SortButton></th>
+                <th className="numeric-header"><SortButton id="margin">Margen actual</SortButton></th>
+                <th className="numeric-header">Objetivo</th>
                 <th className="numeric-header"><SortButton id="stock">Stock</SortButton></th>
-                <th></th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {filteredRows.map((row) => (
-                <tr key={row.key}>
+                <tr key={row.key} className={`tn-row-card ${rowStatusClass(row.status)}`}>
                   <td>
                     <div className="rentabilidad-product-cell tn-product-cell">
                       <ProductThumb src={row.imageUrl} label={row.name || row.sku} />
@@ -928,9 +950,9 @@ export default function TiendaNubePage() {
                       </div>
                     </div>
                   </td>
-                  <td><span className={`tn-status ${statusBadgeClass(row.status)}`}>{row.statusLabel}</span></td>
-                  <td className="numeric-cell">{moneyWithCents(row.currentPrice)}</td>
-                  <td className="numeric-cell"><strong>{moneyWithCents(row.suggestedPrice)}</strong></td>
+                  <td><span className={`tn-status ${statusBadgeClass(row.status)}`}><StatusIcon status={row.status} />{row.statusLabel}</span></td>
+                  <td className="numeric-cell tn-money-cell"><strong>{moneyWithCents(row.currentPrice)}</strong></td>
+                  <td className="numeric-cell tn-money-cell tn-suggested-cell"><strong>{moneyWithCents(row.suggestedPrice)}</strong></td>
                   <td className={`numeric-cell ${row.diff !== null && row.diff < 0 ? "negative-money" : ""}`}>
                     <strong>{moneyWithCents(row.diff)}</strong>
                     <small>{row.diffRate !== null ? percent(row.diffRate) : "-"}</small>
@@ -938,9 +960,10 @@ export default function TiendaNubePage() {
                   <td className={`numeric-cell ${row.margin !== null && row.margin < 0 ? "negative-money" : "positive-money"}`}>
                     <strong>{row.margin !== null ? percent(row.margin) : "-"}</strong>
                     <small>{moneyWithCents(row.netProfit)}</small>
+                  </td>
+                  <td className="numeric-cell">
                     {row.product && row.suggestedPrice ? (
                       <label className="tn-target-margin-control">
-                        <span>Objetivo</span>
                         <input
                           type="number"
                           min="-50"
@@ -954,7 +977,7 @@ export default function TiendaNubePage() {
                       </label>
                     ) : null}
                   </td>
-                  <td className="numeric-cell">{row.stock}</td>
+                  <td className="numeric-cell"><span className={`tn-stock-value ${row.stock === 0 ? "empty" : ""}`}>{row.stock}</span></td>
                   <td>
                     <div className="tn-actions">
                       {row.publication?.permalink && (
@@ -987,7 +1010,7 @@ export default function TiendaNubePage() {
               ))}
               {!filteredRows.length && (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className="tn-empty">No hay filas para los filtros actuales.</div>
                   </td>
                 </tr>
