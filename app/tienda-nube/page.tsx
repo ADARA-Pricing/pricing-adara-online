@@ -57,12 +57,15 @@ type Row = {
   meliOnePayProfit: number | null;
   currentPrice: number | null;
   suggestedPrice: number | null;
+  baseSuggestedPrice: number | null;
   desiredMargin: number | null;
   diff: number | null;
   diffRate: number | null;
+  baseDiffRate: number | null;
   margin: number | null;
   netProfit: number | null;
   status: "ok" | "needs_price" | "missing" | "unlinked";
+  filterStatus: "ok" | "needs_price" | "missing" | "unlinked";
   statusLabel: string;
 };
 
@@ -444,6 +447,17 @@ export default function TiendaNubePage() {
       const rowKey = `product-${sku}`;
       const configuredMargin = Number(setting?.desired_margin_rate ?? 5);
       const desiredMargin = targetMarginValue(targetMargins[rowKey], configuredMargin);
+      const baseSuggested = calculatePriceSummary(product, tnOption, categoryFee, taxes, null, {
+        desiredMarginRate: configuredMargin,
+        desiredNetProfit: null,
+        structureAmount: setting?.structure_amount ?? null,
+        manualShippingAmount: setting?.manual_shipping_amount ?? null,
+        salesCommissionRate: setting?.sales_commission_rate ?? null,
+        saleAppliesVat: setting?.sale_applies_vat ?? null,
+        costVatRate: setting?.cost_vat_rate ?? null,
+        roundTo: 100,
+        roundingMode: "nearest",
+      });
       const suggested = calculatePriceSummary(product, tnOption, categoryFee, taxes, null, {
         desiredMarginRate: desiredMargin,
         desiredNetProfit: null,
@@ -466,6 +480,7 @@ export default function TiendaNubePage() {
             costVatRate: setting?.cost_vat_rate ?? null,
           })
         : null;
+      const baseSuggestedPrice = baseSuggested.valid ? Number(baseSuggested.roundedPrice || 0) : null;
       const meliOnePaySummary = meliOnePayPrice
         ? calculatePriceSummary(product, mercadoLibreClassicOption(), categoryFee, taxes, meliOnePay, {
             salePrice: meliOnePayPrice,
@@ -479,8 +494,12 @@ export default function TiendaNubePage() {
       const suggestedPrice = suggested.valid ? Number(suggested.roundedPrice || 0) : null;
       const diff = currentPrice && suggestedPrice ? currentPrice - suggestedPrice : null;
       const diffRate = diff !== null && suggestedPrice ? (diff / suggestedPrice) * 100 : null;
+      const baseDiff = currentPrice && baseSuggestedPrice ? currentPrice - baseSuggestedPrice : null;
+      const baseDiffRate = baseDiff !== null && baseSuggestedPrice ? (baseDiff / baseSuggestedPrice) * 100 : null;
       const needsPrice = diffRate !== null && Math.abs(diffRate) >= 1;
+      const baseNeedsPrice = baseDiffRate !== null && Math.abs(baseDiffRate) >= 1;
       const status: Row["status"] = publication ? (needsPrice ? "needs_price" : "ok") : "missing";
+      const filterStatus: Row["filterStatus"] = publication ? (baseNeedsPrice ? "needs_price" : "ok") : "missing";
 
       return [{
         key: rowKey,
@@ -496,12 +515,15 @@ export default function TiendaNubePage() {
         meliOnePayProfit: meliOnePaySummary?.valid ? Number(meliOnePaySummary.netProfit || 0) : null,
         currentPrice,
         suggestedPrice,
+        baseSuggestedPrice,
         desiredMargin,
         diff,
         diffRate,
+        baseDiffRate,
         margin: current?.valid ? Number(current.marginOnNetSale || 0) : null,
         netProfit: current?.valid ? Number(current.netProfit || 0) : null,
         status,
+        filterStatus,
         statusLabel: status === "ok" ? "OK" : status === "needs_price" ? "Revisar precio" : "Falta en TN",
       }];
     });
@@ -532,12 +554,15 @@ export default function TiendaNubePage() {
           meliOnePayProfit: null,
           currentPrice: numberValue(publication.promotional_price || publication.price) || null,
           suggestedPrice: null,
+          baseSuggestedPrice: null,
           desiredMargin: null,
           diff: null,
           diffRate: null,
+          baseDiffRate: null,
           margin: null,
           netProfit: null,
           status: "unlinked" as const,
+          filterStatus: "unlinked" as const,
           statusLabel: sku ? "Sin producto local" : "Sin SKU TN",
         };
       });
@@ -550,7 +575,7 @@ export default function TiendaNubePage() {
     return rows
       .filter((row) => {
         if (categoryFilter && row.category !== categoryFilter) return false;
-        if (statusFilter && row.status !== statusFilter) return false;
+        if (statusFilter && row.filterStatus !== statusFilter) return false;
         if (onlyWithStock && row.stock <= 0) return false;
         if (!q) return true;
         return `${row.sku} ${row.name} ${row.publication?.tiendanube_product_id || ""} ${row.publication?.tiendanube_variant_id || ""}`.toLowerCase().includes(q);
@@ -561,11 +586,11 @@ export default function TiendaNubePage() {
           if (sortKey === "sku") return row.sku;
           if (sortKey === "name") return row.name;
           if (sortKey === "price") return row.currentPrice ?? -1;
-          if (sortKey === "suggested") return row.suggestedPrice ?? -1;
-          if (sortKey === "diff") return Math.abs(row.diffRate ?? 0);
+          if (sortKey === "suggested") return row.baseSuggestedPrice ?? -1;
+          if (sortKey === "diff") return Math.abs(row.baseDiffRate ?? 0);
           if (sortKey === "margin") return row.margin ?? -999;
           if (sortKey === "stock") return row.stock;
-          return row.statusLabel;
+          return row.filterStatus;
         };
         const av = value(a);
         const bv = value(b);
@@ -575,10 +600,10 @@ export default function TiendaNubePage() {
   }, [categoryFilter, onlyWithStock, query, rows, sortDirection, sortKey, statusFilter]);
 
   const metrics = useMemo(() => {
-    const missing = rows.filter((row) => row.status === "missing").length;
-    const needsPrice = rows.filter((row) => row.status === "needs_price").length;
-    const ok = rows.filter((row) => row.status === "ok").length;
-    const unlinked = rows.filter((row) => row.status === "unlinked").length;
+    const missing = rows.filter((row) => row.filterStatus === "missing").length;
+    const needsPrice = rows.filter((row) => row.filterStatus === "needs_price").length;
+    const ok = rows.filter((row) => row.filterStatus === "ok").length;
+    const unlinked = rows.filter((row) => row.filterStatus === "unlinked").length;
     return { missing, needsPrice, ok, unlinked };
   }, [rows]);
 
@@ -971,7 +996,7 @@ export default function TiendaNubePage() {
             </thead>
             <tbody>
               {filteredRows.map((row) => (
-                <tr key={row.key} className={`tn-row-card ${rowStatusClass(row.status)}`}>
+                <tr key={row.key} className={`tn-row-card ${rowStatusClass(row.filterStatus)}`}>
                   <td>
                     <div className="rentabilidad-product-cell tn-product-cell">
                       <ProductThumb src={row.imageUrl} label={row.name || row.sku} />
