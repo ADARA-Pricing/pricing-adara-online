@@ -12586,6 +12586,15 @@ body {
   color: #1d4ed8;
 }
 
+.tienda-nube-page .tn-ml-cell strong {
+  color: #0f172a;
+}
+
+.tienda-nube-page .tn-ml-cell small + small {
+  color: #64748b;
+  font-weight: 700;
+}
+
 .tienda-nube-page .tn-status {
   display: inline-flex;
   align-items: center;

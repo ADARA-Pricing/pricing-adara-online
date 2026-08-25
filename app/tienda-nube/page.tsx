@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Check, CircleAlert, CircleCheck, CircleX, ExternalLink, Globe2, Image as ImageIcon, Monitor, Plus, RefreshCw, Save, Search, Smartphone, Store, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Check, ExternalLink, Globe2, Image as ImageIcon, Monitor, Plus, RefreshCw, Save, Search, Smartphone, Store, Trash2, Upload } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
   calculatePriceSummary,
   defaultTaxSettings,
+  mercadoLibreClassicOption,
   moneyWithCents,
   normalizeOption,
   percent,
@@ -51,6 +52,9 @@ type Row = {
   category: string | null;
   imageUrl: string | null;
   stock: number;
+  meliOnePayPrice: number | null;
+  meliOnePayMargin: number | null;
+  meliOnePayProfit: number | null;
   currentPrice: number | null;
   suggestedPrice: number | null;
   desiredMargin: number | null;
@@ -136,25 +140,11 @@ function marginInputValue(value?: number | null) {
   return String(Number(value.toFixed(2)));
 }
 
-function statusBadgeClass(status: Row["status"]) {
-  if (status === "ok") return "tn-status-ok";
-  if (status === "needs_price") return "tn-status-warning";
-  if (status === "missing") return "tn-status-missing";
-  return "tn-status-unlinked";
-}
-
 function rowStatusClass(status: Row["status"]) {
   if (status === "ok") return "tn-row-ok";
   if (status === "needs_price") return "tn-row-warning";
   if (status === "missing") return "tn-row-missing";
   return "tn-row-critical";
-}
-
-function StatusIcon({ status }: { status: Row["status"] }) {
-  if (status === "ok") return <CircleCheck size={14} aria-hidden="true" />;
-  if (status === "needs_price") return <CircleAlert size={14} aria-hidden="true" />;
-  if (status === "missing") return <AlertTriangle size={14} aria-hidden="true" />;
-  return <CircleX size={14} aria-hidden="true" />;
 }
 
 function shortDate(value?: string | null) {
@@ -181,6 +171,29 @@ function latestSyncedPublications(publications: MercadoLibreShippingCost[]) {
   return synced
     .filter((item) => latest - item.time <= syncWindowMs)
     .map((item) => item.publication);
+}
+
+function publicationInstallmentCount(publication?: MercadoLibreShippingCost | null) {
+  if (!publication) return null;
+  const text = `${publication.meli_installments_text || ""} ${publication.notes || ""} ${publication.meli_listing_type_id || ""}`.toLowerCase();
+  if (text.includes("sin cuotas") || text.includes("1 pago") || text.includes("clasica") || text.includes("clásica")) return 1;
+  if (Number(publication.meli_financing_fee_rate || 0) === 0) return 1;
+  const match = text.match(/(\d{1,2})\s*(x|cuotas?|installments?)/i);
+  if (match?.[1]) return Number(match[1]);
+  if (text.includes("gold_special")) return 1;
+  return null;
+}
+
+function activeMeliSalePrice(publication?: MercadoLibreShippingCost | null) {
+  if (!publication) return null;
+  const promoActive = publication.meli_promo_price && /started|active/i.test(publication.meli_promo_status || "");
+  return Number((promoActive ? publication.meli_promo_price : publication.meli_price) || 0) || null;
+}
+
+function onePayMeliPublication(publications: MercadoLibreShippingCost[]) {
+  const active = publications.filter((item) => item.meli_status === "active");
+  const candidates = active.length ? active : publications;
+  return candidates.find((item) => publicationInstallmentCount(item) === 1) || null;
 }
 
 function productImage(publications: MercadoLibreShippingCost[]) {
@@ -422,9 +435,12 @@ export default function TiendaNubePage() {
       const stockFromMl = stockSourcePublications.length
         ? Math.max(...stockSourcePublications.map((item) => numberValue(item.meli_stock)))
         : 0;
+      const meliOnePay = onePayMeliPublication(stockSourcePublications);
+      const meliOnePayPrice = activeMeliSalePrice(meliOnePay);
       if (publication?.id) linkedPublicationKeys.add(publication.id);
       const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase()) || null;
       const setting = margins.find((item) => item.product_id === product.id && item.channel_code.toUpperCase() === "TN");
+      const meliSetting = margins.find((item) => item.product_id === product.id && item.channel_code.toUpperCase() === "MC");
       const rowKey = `product-${sku}`;
       const configuredMargin = Number(setting?.desired_margin_rate ?? 5);
       const desiredMargin = targetMarginValue(targetMargins[rowKey], configuredMargin);
@@ -450,6 +466,16 @@ export default function TiendaNubePage() {
             costVatRate: setting?.cost_vat_rate ?? null,
           })
         : null;
+      const meliOnePaySummary = meliOnePayPrice
+        ? calculatePriceSummary(product, mercadoLibreClassicOption(), categoryFee, taxes, meliOnePay, {
+            salePrice: meliOnePayPrice,
+            structureAmount: meliSetting?.structure_amount ?? null,
+            manualShippingAmount: meliSetting?.manual_shipping_amount ?? null,
+            salesCommissionRate: meliSetting?.sales_commission_rate ?? null,
+            saleAppliesVat: meliSetting?.sale_applies_vat ?? null,
+            costVatRate: meliSetting?.cost_vat_rate ?? null,
+          })
+        : null;
       const suggestedPrice = suggested.valid ? Number(suggested.roundedPrice || 0) : null;
       const diff = currentPrice && suggestedPrice ? currentPrice - suggestedPrice : null;
       const diffRate = diff !== null && suggestedPrice ? (diff / suggestedPrice) * 100 : null;
@@ -465,6 +491,9 @@ export default function TiendaNubePage() {
         category: product.category || null,
         imageUrl: publication?.image_url || productImage(skuMeliPublications),
         stock: stockSourcePublications.length ? stockFromMl : numberValue(product.stock),
+        meliOnePayPrice,
+        meliOnePayMargin: meliOnePaySummary?.valid ? Number(meliOnePaySummary.marginOnNetSale || 0) : null,
+        meliOnePayProfit: meliOnePaySummary?.valid ? Number(meliOnePaySummary.netProfit || 0) : null,
         currentPrice,
         suggestedPrice,
         desiredMargin,
@@ -498,6 +527,9 @@ export default function TiendaNubePage() {
           category: product?.category || null,
           imageUrl: publication.image_url || productImage(skuMeliPublications),
           stock: stockSourcePublications.length ? stockFromMl : numberValue(publication.stock),
+          meliOnePayPrice: null,
+          meliOnePayMargin: null,
+          meliOnePayProfit: null,
           currentPrice: numberValue(publication.promotional_price || publication.price) || null,
           suggestedPrice: null,
           desiredMargin: null,
@@ -927,7 +959,7 @@ export default function TiendaNubePage() {
             <thead>
               <tr>
                 <th><SortButton id="name">Producto</SortButton></th>
-                <th><SortButton id="status">Estado</SortButton></th>
+                <th className="numeric-header">ML 1 pago</th>
                 <th className="numeric-header"><SortButton id="price">TN actual</SortButton></th>
                 <th className="numeric-header"><SortButton id="suggested">Sugerido TN</SortButton></th>
                 <th className="numeric-header"><SortButton id="diff">Diferencia</SortButton></th>
@@ -950,7 +982,11 @@ export default function TiendaNubePage() {
                       </div>
                     </div>
                   </td>
-                  <td><span className={`tn-status ${statusBadgeClass(row.status)}`}><StatusIcon status={row.status} />{row.statusLabel}</span></td>
+                  <td className={`numeric-cell tn-ml-cell ${row.meliOnePayMargin !== null && row.meliOnePayMargin < 0 ? "negative-money" : "positive-money"}`}>
+                    <strong>{moneyWithCents(row.meliOnePayPrice)}</strong>
+                    <small>{row.meliOnePayMargin !== null ? percent(row.meliOnePayMargin) : "-"}</small>
+                    <small>{moneyWithCents(row.meliOnePayProfit)}</small>
+                  </td>
                   <td className="numeric-cell tn-money-cell"><strong>{moneyWithCents(row.currentPrice)}</strong></td>
                   <td className="numeric-cell tn-money-cell tn-suggested-cell"><strong>{moneyWithCents(row.suggestedPrice)}</strong></td>
                   <td className={`numeric-cell ${row.diff !== null && row.diff < 0 ? "negative-money" : ""}`}>
