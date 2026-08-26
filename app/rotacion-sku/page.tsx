@@ -9,9 +9,9 @@ import { createClient } from "@/lib/supabase";
 import { moneyWithCents } from "@/lib/pricing";
 import type { MercadoLibreOrderItem, MercadoLibreShippingCost, Product } from "@/lib/types";
 
-type SortKey = "productName" | "sku" | "units7" | "revenue7" | "units30" | "revenue30" | "units60" | "stock" | "stockDays" | "lastSale" | "activePublications" | "catalogCount";
+type SortKey = "productName" | "sku" | "units7" | "revenue7" | "units30" | "revenue30" | "units60" | "stock" | "unitCost" | "stockValue" | "stockDays" | "dailyUnits" | "lastSale" | "activePublications" | "catalogCount";
 type SortDirection = "asc" | "desc";
-type FilterableColumn = "productName" | "activePublications" | "units7" | "revenue7" | "units30" | "revenue30" | "units60" | "stock" | "stockDays";
+type FilterableColumn = "productName" | "activePublications" | "units7" | "revenue7" | "units30" | "revenue30" | "units60" | "stock" | "unitCost" | "stockValue" | "stockDays";
 type NumberFilterOperator = "gt" | "lt" | "between";
 type ColumnFilter =
   | { kind: "text"; value: string }
@@ -23,6 +23,8 @@ type RotationRow = {
   category?: string | null;
   thumbnail: string | null;
   stock: number;
+  unitCost: number;
+  stockValue: number;
   activePublications: number;
   units7: number;
   units30: number;
@@ -30,7 +32,10 @@ type RotationRow = {
   revenue7: number;
   revenue30: number;
   avgPrice30: number | null;
+  dailyUnits: number;
   stockDays: number | null;
+  actionLabel: string;
+  actionTone: "danger" | "warning" | "good" | "quiet";
   lastSale?: string | null;
   catalogCount: number;
   itemIds: string[];
@@ -79,6 +84,19 @@ function statusClass(days: number | null, stock: number) {
   if (days < 10) return "danger";
   if (days < 25) return "warning";
   return "good";
+}
+
+function rotationAction(row: Pick<RotationRow, "stock" | "stockValue" | "stockDays" | "units7" | "units30" | "dailyUnits">): Pick<RotationRow, "actionLabel" | "actionTone"> {
+  if (row.stock <= 0) return { actionLabel: "Sin stock", actionTone: "danger" };
+  if (row.stockDays !== null && row.stockDays < 15 && (row.units7 >= 2 || row.dailyUnits >= 0.35)) {
+    return { actionLabel: "Reponer pronto", actionTone: "danger" };
+  }
+  if (row.stockValue >= 100000 && (row.units30 === 0 || row.stockDays === null || row.stockDays > 60)) {
+    return { actionLabel: "Capital quieto", actionTone: "warning" };
+  }
+  if (row.units30 === 0 && row.stock > 0) return { actionLabel: "Sin rotacion", actionTone: "quiet" };
+  if (row.stockDays !== null && row.stockDays > 60) return { actionLabel: "Rotacion lenta", actionTone: "warning" };
+  return { actionLabel: "OK", actionTone: "good" };
 }
 
 function productImage(publications: MercadoLibreShippingCost[]) {
@@ -263,6 +281,8 @@ export default function RotacionSkuPage() {
       const stockSourcePublications = latestSkuPublications.length ? latestSkuPublications : skuImagePublications;
       const stockFromMl = stockSourcePublications.length ? Math.max(...stockSourcePublications.map((item) => numberValue(item.meli_stock))) : 0;
       const stock = stockSourcePublications.length ? stockFromMl : numberValue(product.stock);
+      const unitCost = numberValue(product.cost_without_vat);
+      const stockValue = stock * unitCost;
 
       const byDays = (days: number) => skuSales.filter((sale) => daysBetween(sale.order_date) <= days);
       const lastSale = skuSales[0]?.order_date || null;
@@ -276,6 +296,7 @@ export default function RotacionSkuPage() {
       const revenue30 = sales30.reduce((total, sale) => total + numberValue(sale.total_amount), 0);
       const dailyUnits = Math.max(units7 / 7, units30 / 30, units60 / 60);
       const stockDays = dailyUnits > 0 ? stock / dailyUnits : null;
+      const action = rotationAction({ stock, stockValue, stockDays, units7, units30, dailyUnits });
 
       return {
         sku,
@@ -283,6 +304,8 @@ export default function RotacionSkuPage() {
         category: product.category,
         thumbnail: productImage(skuImagePublications),
         stock,
+        unitCost,
+        stockValue,
         activePublications: activePublications.length,
         units7,
         units30,
@@ -290,7 +313,10 @@ export default function RotacionSkuPage() {
         revenue7,
         revenue30,
         avgPrice30: units30 > 0 ? revenue30 / units30 : null,
+        dailyUnits,
         stockDays,
+        actionLabel: action.actionLabel,
+        actionTone: action.actionTone,
         lastSale,
         catalogCount: latestSkuPublications.filter((item) => item.meli_catalog_listing).length,
         itemIds: [...new Set(latestSkuPublications.map((item) => item.meli_item_id).filter(Boolean) as string[])],
@@ -338,6 +364,9 @@ export default function RotacionSkuPage() {
         if (needle && !`${row.sku} ${row.productName} ${row.itemIds.join(" ")}`.toLowerCase().includes(needle)) return false;
         if (categoryFilter && row.category !== categoryFilter) return false;
         if (rotationFilter === "no_sales" && row.units30 > 0) return false;
+        if (rotationFilter === "slow" && !(row.stock > 0 && (row.units30 <= 2 || row.stockDays === null || row.stockDays > 60))) return false;
+        if (rotationFilter === "capital_idle" && !(row.stockValue >= 100000 && (row.units30 === 0 || row.stockDays === null || row.stockDays > 60))) return false;
+        if (rotationFilter === "break_risk" && !(row.stockDays !== null && row.stockDays < 15 && (row.units7 >= 2 || row.dailyUnits >= 0.35))) return false;
         if (rotationFilter === "low_stock" && !(row.stockDays !== null && row.stockDays < 25)) return false;
         if (rotationFilter === "normal" && !(row.stockDays !== null && row.stockDays >= 25)) return false;
         if (onlyWithSales && row.units30 <= 0) return false;
@@ -365,7 +394,10 @@ export default function RotacionSkuPage() {
     const revenue30 = rows.reduce((total, row) => total + row.revenue30, 0);
     const activeSkus = rows.filter((row) => row.units30 > 0).length;
     const lowStock = rows.filter((row) => row.stockDays !== null && row.stockDays < 25).length;
-    return { units30, revenue30, activeSkus, lowStock };
+    const stockValue = rows.reduce((total, row) => total + row.stockValue, 0);
+    const slowRotation = rows.filter((row) => row.stock > 0 && (row.units30 <= 2 || row.stockDays === null || row.stockDays > 60)).length;
+    const breakRisk = rows.filter((row) => row.stockDays !== null && row.stockDays < 15 && (row.units7 >= 2 || row.dailyUnits >= 0.35)).length;
+    return { units30, revenue30, activeSkus, lowStock, stockValue, slowRotation, breakRisk };
   }, [rows]);
 
   const categories = useMemo(() => {
@@ -383,6 +415,9 @@ export default function RotacionSkuPage() {
     revenue30: "Venta 30 dias",
     units60: "60 dias",
     stock: "Stock",
+    unitCost: "Costo unitario",
+    stockValue: "Capital stock",
+    dailyUnits: "Venta diaria",
     stockDays: "Dias stock",
     lastSale: "Ultima venta",
   };
@@ -395,6 +430,8 @@ export default function RotacionSkuPage() {
     revenue30: "Venta 30d",
     units60: "60 dias",
     stock: "Stock",
+    unitCost: "Costo unitario",
+    stockValue: "Capital stock",
     stockDays: "Dias stock",
   };
   const quickFilterCount = [query.trim(), categoryFilter, rotationFilter, onlyWithSales ? "sales" : "", onlyLowStock ? "stock" : ""].filter(Boolean).length;
@@ -404,6 +441,9 @@ export default function RotacionSkuPage() {
     low_stock: "Stock bajo",
     normal: "Stock normal",
     no_sales: "Sin ventas 30d",
+    slow: "Rotacion lenta",
+    capital_idle: "Capital quieto",
+    break_risk: "Quiebre cercano",
   };
   const activeQuickFilterEntries = [
     query.trim() ? { key: "query", label: `Busqueda "${query.trim()}"`, clear: () => setQuery("") } : null,
@@ -464,7 +504,7 @@ export default function RotacionSkuPage() {
 
   function formatColumnFilterValue(column: FilterableColumn, filter: ColumnFilter) {
     if (filter.kind === "text") return `${columnFilterLabels[column]} contiene "${filter.value.trim()}"`;
-    const unit = column === "revenue7" || column === "revenue30" ? "$" : "";
+    const unit = column === "revenue7" || column === "revenue30" || column === "unitCost" || column === "stockValue" ? "$" : "";
     const min = filter.min.trim();
     const max = filter.max.trim();
     if (filter.operator === "gt") return `${columnFilterLabels[column]} > ${unit}${min}`;
@@ -628,6 +668,21 @@ export default function RotacionSkuPage() {
           <strong className="kpi-value">{totals.lowStock}</strong>
           <small className="kpi-meta">Menos de 25 dias</small>
         </article>
+        <article className="kpi-card rotation-kpi-warning">
+          <span className="kpi-label">Rotacion lenta</span>
+          <strong className="kpi-value">{totals.slowRotation}</strong>
+          <small className="kpi-meta">Stock con baja salida</small>
+        </article>
+        <article className="kpi-card">
+          <span className="kpi-label">Capital stock</span>
+          <strong className="kpi-value">{moneyWithCents(totals.stockValue)}</strong>
+          <small className="kpi-meta">Costo sin IVA inmovilizado</small>
+        </article>
+        <article className="kpi-card rotation-kpi-warning">
+          <span className="kpi-label">Quiebre cercano</span>
+          <strong className="kpi-value">{totals.breakRisk}</strong>
+          <small className="kpi-meta">Venden rapido y quedan pocos dias</small>
+        </article>
       </section>
 
       <section className="card rotation-card">
@@ -642,6 +697,9 @@ export default function RotacionSkuPage() {
           </select>
           <select value={rotationFilter} onChange={(event) => setRotationFilter(event.target.value)}>
             <option value="">Todos los estados</option>
+            <option value="slow">Rotacion lenta</option>
+            <option value="capital_idle">Capital quieto</option>
+            <option value="break_risk">Quiebre cercano</option>
             <option value="low_stock">Stock bajo</option>
             <option value="normal">Stock normal</option>
             <option value="no_sales">Sin ventas 30d</option>
@@ -676,6 +734,8 @@ export default function RotacionSkuPage() {
               {renderAdvancedFilterField("revenue30")}
               {renderAdvancedFilterField("units60")}
               {renderAdvancedFilterField("stock")}
+              {renderAdvancedFilterField("unitCost")}
+              {renderAdvancedFilterField("stockValue")}
               {renderAdvancedFilterField("stockDays")}
             </div>
             <div className="rotation-advanced-actions">
@@ -723,7 +783,10 @@ export default function RotacionSkuPage() {
                 <col className="rotation-col-money" />
                 <col className="rotation-col-units" />
                 <col className="rotation-col-stock" />
+                <col className="rotation-col-money" />
+                <col className="rotation-col-money" />
                 <col className="rotation-col-days" />
+                <col className="rotation-col-action" />
                 <col className="rotation-col-date" />
               </colgroup>
               <thead>
@@ -734,7 +797,10 @@ export default function RotacionSkuPage() {
                   <th className="rotation-group-30" colSpan={2}>Últimos 30 días</th>
                   <th className="numeric-header" rowSpan={2}><SortButton column="units60">60 días</SortButton></th>
                   <th className="numeric-header" rowSpan={2}><SortButton column="stock">Stock</SortButton></th>
+                  <th className="numeric-header" rowSpan={2}><SortButton column="unitCost">Costo</SortButton></th>
+                  <th className="numeric-header" rowSpan={2}><SortButton column="stockValue">Capital</SortButton></th>
                   <th className="numeric-header" rowSpan={2}><SortButton column="stockDays">Días stock</SortButton></th>
+                  <th rowSpan={2}>Accion</th>
                   <th className="date-header" rowSpan={2}><SortButton column="lastSale">Última venta</SortButton></th>
                 </tr>
                 <tr>
@@ -769,15 +835,18 @@ export default function RotacionSkuPage() {
                     </td>
                     <td className="numeric">{row.units60}</td>
                     <td className="numeric">{row.stock}</td>
+                    <td className="numeric">{moneyWithCents(row.unitCost)}</td>
+                    <td className="numeric">{moneyWithCents(row.stockValue)}</td>
                     <td>
                       <span className={`stock-pill ${statusClass(row.stockDays, row.stock)}`}>{stockLabel(row.stockDays)}</span>
                     </td>
+                    <td><span className={`rotation-action-pill ${row.actionTone}`}>{row.actionLabel}</span></td>
                     <td className="date-cell">{shortDate(row.lastSale)}</td>
                   </tr>
                 ))}
                 {!filteredRows.length && (
                   <tr>
-                    <td colSpan={10}>
+                    <td colSpan={13}>
                       <div className="empty-state">No hay SKU para los filtros actuales.</div>
                     </td>
                   </tr>
@@ -791,7 +860,7 @@ export default function RotacionSkuPage() {
       <style jsx>{`
         .rotation-summary {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
           gap: 12px;
           margin: 18px 0;
         }
@@ -1050,15 +1119,16 @@ export default function RotacionSkuPage() {
         .rotation-table {
           width: 100%;
           border-collapse: collapse;
-          min-width: 1180px;
+          min-width: 1420px;
           table-layout: fixed;
         }
-        .rotation-col-product { width: 34%; }
-        .rotation-col-publications { width: 9%; }
+        .rotation-col-product { width: 28%; }
+        .rotation-col-publications { width: 8%; }
         .rotation-col-units { width: 6.5%; }
-        .rotation-col-money { width: 10%; }
+        .rotation-col-money { width: 8.5%; }
         .rotation-col-stock { width: 6%; }
         .rotation-col-days { width: 7%; }
+        .rotation-col-action { width: 9%; }
         .rotation-col-date { width: 7%; }
         .rotation-table th {
           position: relative;
@@ -1141,6 +1211,33 @@ export default function RotacionSkuPage() {
           color: #4c6280;
           font-size: 12px;
           margin-top: 3px;
+        }
+        .rotation-action-pill {
+          border-radius: 999px;
+          display: inline-flex !important;
+          font-size: 0.72rem !important;
+          font-weight: 800;
+          justify-content: center;
+          margin-top: 0 !important;
+          max-width: 120px;
+          padding: 5px 8px;
+          white-space: nowrap;
+        }
+        .rotation-action-pill.danger {
+          background: #fee2e2;
+          color: #b91c1c !important;
+        }
+        .rotation-action-pill.warning {
+          background: #fef3c7;
+          color: #92400e !important;
+        }
+        .rotation-action-pill.good {
+          background: #dcfce7;
+          color: #166534 !important;
+        }
+        .rotation-action-pill.quiet {
+          background: #e5e7eb;
+          color: #374151 !important;
         }
         :global(.rotation-page .rotation-sort-trigger) {
           all: unset;
