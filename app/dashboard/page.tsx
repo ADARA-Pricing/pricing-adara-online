@@ -833,7 +833,7 @@ export default function DashboardPage() {
           itemId: publication.meli_item_id,
           title: "Margen alto y sin ventas recientes",
           detail: "Hay espacio para promo o ajuste de precio.",
-          href: "/promociones-meli",
+          href: "/rotacion-sku?estado=slow",
           margin: currentMargin,
           stock,
           units7: rotation.units7,
@@ -853,7 +853,7 @@ export default function DashboardPage() {
           itemId: publication.meli_item_id,
           title: "Riesgo de quedarse sin stock",
           detail: `Stock estimado para ${Math.max(1, Math.round(stockDays))} dias.`,
-          href: "/rotacion-sku",
+          href: "/rotacion-sku?estado=break_risk",
           margin: currentMargin,
           stock,
           units7: rotation.units7,
@@ -869,7 +869,7 @@ export default function DashboardPage() {
           itemId: publication.meli_item_id,
           title: "Stock sin rotacion",
           detail: "Sin ventas en 30 dias con stock disponible.",
-          href: "/rotacion-sku",
+          href: "/rotacion-sku?estado=capital_idle",
           margin: currentMargin,
           stock,
           units7: rotation.units7,
@@ -1031,13 +1031,20 @@ export default function DashboardPage() {
       </section>
 
       <section className="dashboard-pillar-grid">
-        {account.pillars.map((pillar) => (
-          <article className={`dashboard-pillar-card ${scoreTone(pillar.score)}`} key={pillar.key}>
-            <span>{pillar.label}</span>
-            <strong>{pillar.score}</strong>
-            <small>{pillar.detail}</small>
-          </article>
-        ))}
+        {account.pillars.map((pillar) => {
+          const className = `dashboard-pillar-card ${scoreTone(pillar.score)}`;
+          const content = (
+            <>
+              <span>{pillar.label}</span>
+              <strong>{pillar.score}</strong>
+              <small>{pillar.detail}</small>
+            </>
+          );
+          if (pillar.key === "rotacion") {
+            return <Link className={className} href="/rotacion-sku?estado=slow" key={pillar.key}>{content}</Link>;
+          }
+          return <article className={className} key={pillar.key}>{content}</article>;
+        })}
       </section>
 
       <section className="opportunity-summary-grid dashboard-action-summary">
@@ -1046,7 +1053,7 @@ export default function DashboardPage() {
           <strong className="kpi-value">{account.actions.length}</strong>
           <small className="kpi-meta">Acciones priorizadas</small>
         </button>
-        {(["paused_stock", "missing_local_product", "low_margin", "activate_promo", "missing_promo"] as ActionType[]).map((type) => (
+        {(["paused_stock", "stock_risk", "stock_idle", "missing_local_product", "low_margin", "activate_promo", "missing_promo"] as ActionType[]).map((type) => (
           <button className={`kpi-card opportunity-summary ${typeFilter === type ? "active" : ""}`} type="button" onClick={() => setTypeFilter(type)} key={type}>
             <span className="kpi-label">{typeLabel(type)}</span>
             <strong className="kpi-value">{account.typeCounts[type] || 0}</strong>
@@ -1147,11 +1154,11 @@ export default function DashboardPage() {
       </section>
 
       <section className="dashboard-next-cases">
-        <article className="card dashboard-next-card">
+        <Link className="card dashboard-next-card" href="/rotacion-sku?estado=break_risk">
           <PackageX aria-hidden="true" />
           <strong>Stock</strong>
           <span>Pausadas con stock, stock quieto y riesgo de quiebre.</span>
-        </article>
+        </Link>
         <article className="card dashboard-next-card">
           <BadgePercent aria-hidden="true" />
           <strong>Promos</strong>
@@ -1162,11 +1169,11 @@ export default function DashboardPage() {
           <strong>Rentabilidad</strong>
           <span>Margen bajo, margen peligroso y ventas que escalan poco margen.</span>
         </article>
-        <article className="card dashboard-next-card">
+        <Link className="card dashboard-next-card" href="/rotacion-sku?estado=slow">
           <TrendingUp aria-hidden="true" />
           <strong>Rotacion</strong>
-          <span>Margen alto sin ventas y productos para empujar.</span>
-        </article>
+          <span>Rotacion lenta, capital quieto y quiebres cercanos.</span>
+        </Link>
         <article className="card dashboard-next-card">
           <BarChart3 aria-hidden="true" />
           <strong>Datos</strong>

@@ -127,6 +127,7 @@ export default function RotacionSkuPage() {
   const router = useRouter();
   const supabase = createClient();
   const autoSalesSyncStarted = useRef(false);
+  const urlFilterApplied = useRef(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [imagePublications, setImagePublications] = useState<MercadoLibreShippingCost[]>([]);
@@ -208,6 +209,26 @@ export default function RotacionSkuPage() {
     checkSession();
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (urlFilterApplied.current || typeof window === "undefined") return;
+    urlFilterApplied.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const estado = params.get("estado") || "";
+    const allowedStatuses = new Set(["slow", "capital_idle", "break_risk", "low_stock", "normal", "no_sales"]);
+    if (allowedStatuses.has(estado)) {
+      setRotationFilter(estado);
+      if (estado === "break_risk" || estado === "low_stock") {
+        setSortKey("stockDays");
+        setSortDirection("asc");
+      } else if (estado === "capital_idle" || estado === "slow") {
+        setSortKey("stockValue");
+        setSortDirection("desc");
+      }
+    }
+    const sku = params.get("sku");
+    if (sku) setQuery(sku);
   }, []);
 
   async function syncSales() {

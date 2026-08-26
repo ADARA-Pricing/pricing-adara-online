@@ -277,8 +277,10 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
+  color: inherit;
   padding: 14px;
   border-left: 4px solid #2563eb;
+  text-decoration: none;
 }
 
 .dashboard-pillar-card span,
@@ -393,7 +395,9 @@ th { color: var(--muted); font-weight: 600; background: #fafafa; }
   display: grid;
   gap: 7px;
   border-radius: 8px;
+  color: inherit;
   padding: 14px;
+  text-decoration: none;
 }
 
 .dashboard-next-card svg {
