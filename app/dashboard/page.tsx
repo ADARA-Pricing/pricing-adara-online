@@ -68,6 +68,11 @@ type RotationStats = {
   lastSale?: string | null;
 };
 
+type SyncProgress = {
+  percent: number;
+  label: string;
+};
+
 const ML_FIXED_FEE_PRICE_LIMIT = 30000;
 
 function nowIso() {
@@ -272,6 +277,7 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -362,7 +368,19 @@ export default function DashboardPage() {
     setSyncing(true);
     setError(null);
     setSyncInfo(null);
+    setSyncProgress({ percent: 3, label: "Preparando sincronizacion completa..." });
+    let progressCap = 18;
+    const progressTimer = window.setInterval(() => {
+      setSyncProgress((current) => {
+        if (!current) return current;
+        const next = Math.min(progressCap, current.percent + Math.max(1, Math.round((progressCap - current.percent) * 0.18)));
+        return { ...current, percent: next };
+      });
+    }, 900);
+
     try {
+      progressCap = 68;
+      setSyncProgress({ percent: 8, label: "Actualizando publicaciones, stock, precios, envios, cuotas y promos..." });
       const shippingResponse = await fetch("/api/mercadolibre/sync-shipping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -371,6 +389,8 @@ export default function DashboardPage() {
       const shippingData = await shippingResponse.json();
       if (!shippingResponse.ok) throw new Error(shippingData?.error || "No se pudo sincronizar MercadoLibre.");
 
+      progressCap = 88;
+      setSyncProgress({ percent: 70, label: "Actualizando ventas y rentabilidad real..." });
       const salesResponse = await fetch("/api/mercadolibre/sync-sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -379,16 +399,21 @@ export default function DashboardPage() {
       const salesData = await salesResponse.json();
       if (!salesResponse.ok) throw new Error(salesData?.error || "No se pudieron sincronizar ventas.");
 
+      progressCap = 96;
+      setSyncProgress({ percent: 90, label: "Recargando dashboard con datos actualizados..." });
       setSyncInfo(
         `Sync completa: ${shippingData.updated || 0} publicaciones actualizadas, ${shippingData.changed || 0} costos de envio cambiados, ` +
         `${shippingData.promotion_opportunities || 0} promos guardadas, ${shippingData.installment_fee_updates || 0} costos de cuotas actualizados, ` +
         `${shippingData.category_fee_updates || 0} costos de canal actualizados. Ventas: ${salesData.saved || 0} items guardados.`,
       );
       await loadData();
+      setSyncProgress({ percent: 100, label: "Sincronizacion completa." });
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "No se pudo sincronizar la cuenta.");
     } finally {
+      window.clearInterval(progressTimer);
       setSyncing(false);
+      window.setTimeout(() => setSyncProgress(null), 1800);
     }
   }
 
@@ -824,6 +849,18 @@ export default function DashboardPage() {
 
       {error && <div className="message error">{error}</div>}
       {syncInfo && <div className="message success">{syncInfo}</div>}
+      {syncProgress && (
+        <section className="card dashboard-sync-progress" aria-live="polite">
+          <div className="dashboard-sync-progress-head">
+            <strong>{syncProgress.label}</strong>
+            <span>{syncProgress.percent}%</span>
+          </div>
+          <div className="dashboard-sync-progress-track">
+            <span style={{ width: `${syncProgress.percent}%` }} />
+          </div>
+          <small>La sincronizacion completa puede tardar varios minutos si hay muchas publicaciones.</small>
+        </section>
+      )}
 
       <section className="dashboard-account-score-grid">
         <article className={`card dashboard-score-card ${scoreTone(account.score)}`}>
