@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase";
 import { moneyWithCents, percent } from "@/lib/pricing";
 import type { MercadoLibreOrderItem, MercadoLibreShippingCost, Product } from "@/lib/types";
 
-type Period = 7 | 30 | 60;
+type Period = "today" | 7 | 30 | 60;
 type SortKey = "sku" | "productName" | "units" | "revenue" | "netProfit" | "margin" | "stock" | "lastSale" | "activePublications";
 type SortDirection = "asc" | "desc";
 type ProfitabilityStatusFilter = "" | "with_sales" | "no_sales" | "low_stock" | "normal" | "negative_margin" | "without_profit";
@@ -19,10 +19,13 @@ type ColumnFilter =
   | { kind: "number"; operator: NumberFilterOperator; min: string; max: string };
 
 type ProfitabilityRow = {
+  key: string;
   sku: string;
   productName: string;
   category?: string | null;
   thumbnail: string | null;
+  orderId?: string | null;
+  meliItemId?: string | null;
   stock: number;
   activePublications: number;
   units: number;
@@ -49,6 +52,19 @@ function daysBetween(from: string) {
 function shortDate(value?: string | null) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit" }).format(new Date(value));
+}
+
+function shortDateTime(value?: string | null) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function isToday(value?: string | null) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
 }
 
 function formatUnits(value: number) {
@@ -103,7 +119,7 @@ export default function RentabilidadMeliPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [sales, setSales] = useState<MercadoLibreOrderItem[]>([]);
-  const [period, setPeriod] = useState<Period>(30);
+  const [period, setPeriod] = useState<Period>("today");
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProfitabilityStatusFilter>("");
@@ -203,11 +219,49 @@ export default function RentabilidadMeliPage() {
       publicationBySku.set(sku, [...(publicationBySku.get(sku) || []), publication]);
     });
 
-    const salesBySku = new Map<string, MercadoLibreOrderItem[]>();
-    sales
-      .filter((sale) => daysBetween(sale.order_date) <= period)
+    const periodDays = period === "today" ? 1 : period;
+    const periodSales = sales
+      .filter((sale) => period === "today" ? isToday(sale.order_date) : daysBetween(sale.order_date) <= period)
       .filter((sale) => sale.status !== "cancelled")
-      .forEach((sale) => {
+      .sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime());
+
+    if (period === "today") {
+      return periodSales.map((sale) => {
+        const saleSku = (sale.sku || "").toUpperCase();
+        const product = (sale.product_id ? productById.get(sale.product_id) : null) || productBySku.get(saleSku) || null;
+        const sku = saleSku || product?.sku?.toUpperCase() || "-";
+        const skuPublications = publicationBySku.get(sku) || [];
+        const stockFromMl = skuPublications.length ? Math.max(...skuPublications.map((publication) => numberValue(publication.meli_stock))) : 0;
+        const units = numberValue(sale.quantity);
+        const revenue = numberValue(sale.total_amount);
+        const netProfit = numberValue(sale.normalized_total_net_profit);
+        const netSale = numberValue(sale.normalized_net_sale_price) * units;
+
+        return {
+          key: `sale-${sale.order_id}-${sale.meli_item_id}-${sale.variation_id || ""}-${sale.id || sale.order_date}`,
+          sku,
+          productName: sale.title || product?.name || "Venta MercadoLibre",
+          category: product?.category || null,
+          thumbnail: productImage(skuPublications),
+          orderId: sale.order_id,
+          meliItemId: sale.meli_item_id,
+          stock: skuPublications.length ? stockFromMl : numberValue(product?.stock),
+          activePublications: skuPublications.length,
+          units,
+          revenue,
+          netProfit,
+          netSale,
+          margin: netSale > 0 ? (netProfit / netSale) * 100 : null,
+          avgPrice: units > 0 ? revenue / units : null,
+          stockDays: null,
+          lastSale: sale.order_date,
+          errors: sale.normalized_profit_error ? 1 : 0,
+        };
+      });
+    }
+
+    const salesBySku = new Map<string, MercadoLibreOrderItem[]>();
+    periodSales.forEach((sale) => {
         const skuKeys = new Set<string>();
         const saleSku = (sale.sku || "").toUpperCase();
         if (saleSku) skuKeys.add(saleSku);
@@ -228,12 +282,13 @@ export default function RentabilidadMeliPage() {
         (total, sale) => total + numberValue(sale.normalized_net_sale_price) * numberValue(sale.quantity),
         0,
       );
-      const dailyUnits = units > 0 ? units / period : 0;
+      const dailyUnits = units > 0 ? units / periodDays : 0;
       const stockDays = dailyUnits > 0 ? (skuPublications.length ? stockFromMl : numberValue(product.stock)) / dailyUnits : null;
       const errors = skuSales.filter((sale) => sale.normalized_profit_error).length;
       const lastSale = skuSales[0]?.order_date || null;
 
       return {
+        key: `sku-${sku}`,
         sku,
         productName: product.name,
         category: product.category,
@@ -293,7 +348,7 @@ export default function RentabilidadMeliPage() {
     const multiplier = sortDirection === "asc" ? 1 : -1;
     return rows
       .filter((row) => {
-        if (needle && !`${row.sku} ${row.productName} ${row.category || ""}`.toLowerCase().includes(needle)) return false;
+        if (needle && !`${row.sku} ${row.productName} ${row.category || ""} ${row.orderId || ""} ${row.meliItemId || ""}`.toLowerCase().includes(needle)) return false;
         if (categoryFilter && row.category !== categoryFilter) return false;
         if (statusFilter === "with_sales" && row.units <= 0) return false;
         if (statusFilter === "no_sales" && row.units > 0) return false;
@@ -516,9 +571,9 @@ export default function RentabilidadMeliPage() {
 
       <section className="rotation-summary">
         <article className="kpi-card">
-          <span className="kpi-label">Productos vendidos</span>
+          <span className="kpi-label">{period === "today" ? "Ventas de hoy" : "Productos vendidos"}</span>
           <strong className="kpi-value">{formatUnits(totals.products)}</strong>
-          <small className="kpi-meta">Últimos {period} días</small>
+          <small className="kpi-meta">{period === "today" ? "Ventas de hoy" : `Últimos ${period} días`}</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Unidades</span>
@@ -578,11 +633,11 @@ export default function RentabilidadMeliPage() {
           </button>
         </div>
         <div className="rotation-period-row">
-          <select value={period} onChange={(event) => setPeriod(Number(event.target.value) as Period)} aria-label="Periodo de ventas">
-            <option value={7}>Ultimos 7 dias</option>
-            <option value={30}>Ultimos 30 dias</option>
-            <option value={60}>Ultimos 60 dias</option>
-          </select>
+          {(["today", 7, 30, 60] as Period[]).map((option) => (
+            <button className={period === option ? "active" : ""} type="button" onClick={() => setPeriod(option)} key={option}>
+              {option === "today" ? "Hoy" : `${option} dias`}
+            </button>
+          ))}
         </div>
         {advancedFiltersOpen && (
           <div className="rotation-advanced-panel">
@@ -605,8 +660,8 @@ export default function RentabilidadMeliPage() {
 
         <div className="rotation-table-status">
           <div className="rotation-active-context">
-            <span>{filteredRows.length} de {rows.length} productos</span>
-            <span>Periodo {period} dias</span>
+            <span>{filteredRows.length} de {rows.length} {period === "today" ? "ventas" : "productos"}</span>
+            <span>{period === "today" ? "Periodo hoy" : `Periodo ${period} dias`}</span>
             {activeQuickFilterEntries.map((filter) => (
               <button className="rotation-active-filter" type="button" key={filter.key} onClick={filter.clear}>
                 {filter.label} <span aria-hidden="true">x</span>
@@ -647,19 +702,23 @@ export default function RentabilidadMeliPage() {
                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
                 <th className="numeric-header"><SortButton column="netProfit">Neto normalizado</SortButton></th>
                 <th className="numeric-header"><SortButton column="margin">Margen</SortButton></th>
-                <th className="date-header"><SortButton column="lastSale">Última venta</SortButton></th>
+                <th className="date-header"><SortButton column="lastSale">{period === "today" ? "Hora" : "Última venta"}</SortButton></th>
                 <th className="numeric-header"><SortButton column="activePublications">MLA</SortButton></th>
               </tr>
             </thead>
             <tbody>
               {filteredRows.map((row) => (
-                <tr key={row.sku}>
+                <tr key={row.key}>
                   <td>
                     <div className="rotation-product-cell">
                       <RentabilityThumbnail src={row.thumbnail} label={productInitial(row.productName, row.sku)} />
                       <div className="rotation-product-text">
                         <strong>{row.productName}</strong>
-                        <span>{row.sku}{row.category ? ` · ${row.category}` : ""}</span>
+                        <span>
+                          {row.sku}{row.category ? ` · ${row.category}` : ""}
+                          {period === "today" && row.orderId ? ` · Orden ${row.orderId}` : ""}
+                          {period === "today" && row.meliItemId ? ` · ${row.meliItemId}` : ""}
+                        </span>
                       </div>
                     </div>
                   </td>
@@ -674,7 +733,7 @@ export default function RentabilidadMeliPage() {
                     {percent(row.margin)}
                     {row.errors > 0 && <span>{row.errors} sin calculo</span>}
                   </td>
-                  <td className="date-cell">{shortDate(row.lastSale)}</td>
+                  <td className="date-cell">{period === "today" ? shortDateTime(row.lastSale) : shortDate(row.lastSale)}</td>
                   <td className="numeric">{formatUnits(row.activePublications)}</td>
                 </tr>
               ))}
@@ -713,6 +772,7 @@ export default function RentabilidadMeliPage() {
           background: #fff;
           box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
           gap: 3px;
+          min-width: 0;
         }
         .rotation-summary .kpi-label,
         .rotation-summary .kpi-meta {
@@ -725,11 +785,14 @@ export default function RentabilidadMeliPage() {
         .rotation-summary .kpi-value {
           display: block;
           color: #020817;
-          font-size: 26px;
+          font-size: clamp(18px, 1.55vw, 26px);
           font-weight: 800;
           line-height: 1.08;
           letter-spacing: 0;
           font-variant-numeric: tabular-nums;
+          max-width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
           white-space: nowrap;
         }
         .rotation-sync-info {
@@ -768,19 +831,25 @@ export default function RentabilidadMeliPage() {
         }
         .rotation-period-row {
           display: flex;
+          gap: 8px;
           justify-content: flex-end;
           margin: 0 0 10px;
         }
-        .rotation-period-row select {
-          min-width: 180px;
+        .rotation-period-row button {
           min-height: 36px;
           border: 1px solid #cfe0f6;
-          border-radius: 8px;
+          border-radius: 999px;
           background: #fff;
-          padding: 0 12px;
+          cursor: pointer;
+          padding: 0 14px;
           color: #0f172a;
           font-size: 13px;
           font-weight: 700;
+        }
+        .rotation-period-row button.active {
+          border-color: #2563eb;
+          background: #eff6ff;
+          color: #1d4ed8;
         }
         .rotation-filter-chip {
           display: inline-flex;
