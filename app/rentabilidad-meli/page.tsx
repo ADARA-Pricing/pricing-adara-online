@@ -9,7 +9,7 @@ import { moneyWithCents, percent } from "@/lib/pricing";
 import type { MercadoLibreOrderItem, MercadoLibreShippingCost, Product } from "@/lib/types";
 
 type Period = "today" | 7 | 30 | 60;
-type SortKey = "sku" | "productName" | "units" | "revenue" | "netProfit" | "margin" | "normalizedMargin" | "stock" | "lastSale" | "activePublications";
+type SortKey = "sku" | "productName" | "units" | "revenue" | "netProfit" | "margin" | "normalizedMargin" | "marginOnCost" | "stock" | "lastSale" | "activePublications";
 type SortDirection = "asc" | "desc";
 type ProfitabilityStatusFilter = "" | "with_sales" | "no_sales" | "low_stock" | "normal" | "negative_margin" | "without_profit";
 type FilterableColumn = "productName" | "activePublications" | "units" | "revenue" | "netProfit" | "margin" | "stock" | "stockDays";
@@ -34,7 +34,10 @@ type ProfitabilityRow = {
   netSale: number;
   margin: number | null;
   normalizedNetSale: number;
+  normalizedProfit: number;
   normalizedMargin: number | null;
+  costBasis: number;
+  marginOnCost: number | null;
   avgPrice: number | null;
   stockDays: number | null;
   lastSale?: string | null;
@@ -112,6 +115,7 @@ const sortLabels: Record<SortKey, string> = {
   netProfit: "Ganancia real",
   margin: "Margen real",
   normalizedMargin: "Margen normalizado",
+  marginOnCost: "Margen s/costo",
   stock: "Stock",
   lastSale: "Última venta",
   activePublications: "MLA",
@@ -133,7 +137,10 @@ const salesSelectColumns = [
   "real_net_sale_price",
   "real_total_net_profit",
   "normalized_net_sale_price",
+  "normalized_net_profit",
   "normalized_total_net_profit",
+  "normalized_cost_for_profit",
+  "normalized_margin_on_cost",
   "normalized_profit_error",
 ].join(",");
 
@@ -280,7 +287,9 @@ export default function RentabilidadMeliPage() {
         const revenue = numberValue(sale.total_amount);
         const netProfit = numberValue(sale.real_total_net_profit ?? sale.normalized_total_net_profit);
         const netSale = numberValue(sale.real_net_sale_price ?? sale.normalized_net_sale_price) * units;
+        const normalizedProfit = numberValue(sale.normalized_total_net_profit ?? sale.real_total_net_profit);
         const normalizedNetSale = numberValue(sale.normalized_net_sale_price) * units;
+        const costBasis = numberValue(sale.normalized_cost_for_profit) * units;
 
         return {
           key: `sale-${sale.order_id}-${sale.meli_item_id}-${sale.variation_id || ""}-${sale.id || sale.order_date}`,
@@ -298,7 +307,10 @@ export default function RentabilidadMeliPage() {
           netSale,
           margin: netSale > 0 ? (netProfit / netSale) * 100 : null,
           normalizedNetSale,
-          normalizedMargin: normalizedNetSale > 0 ? (netProfit / normalizedNetSale) * 100 : null,
+          normalizedProfit,
+          normalizedMargin: normalizedNetSale > 0 ? (normalizedProfit / normalizedNetSale) * 100 : null,
+          costBasis,
+          marginOnCost: costBasis > 0 ? (netProfit / costBasis) * 100 : null,
           avgPrice: units > 0 ? revenue / units : null,
           stockDays: null,
           lastSale: sale.order_date,
@@ -330,8 +342,13 @@ export default function RentabilidadMeliPage() {
         (total, sale) => total + numberValue(sale.real_net_sale_price ?? sale.normalized_net_sale_price) * numberValue(sale.quantity),
         0,
       );
+      const normalizedProfit = skuSales.reduce((total, sale) => total + numberValue(sale.normalized_total_net_profit ?? sale.real_total_net_profit), 0);
       const normalizedNetSale = skuSales.reduce(
         (total, sale) => total + numberValue(sale.normalized_net_sale_price) * numberValue(sale.quantity),
+        0,
+      );
+      const costBasis = skuSales.reduce(
+        (total, sale) => total + numberValue(sale.normalized_cost_for_profit) * numberValue(sale.quantity),
         0,
       );
       const dailyUnits = units > 0 ? units / periodDays : 0;
@@ -353,7 +370,10 @@ export default function RentabilidadMeliPage() {
         netSale,
         margin: netSale > 0 ? (netProfit / netSale) * 100 : null,
         normalizedNetSale,
-        normalizedMargin: normalizedNetSale > 0 ? (netProfit / normalizedNetSale) * 100 : null,
+        normalizedProfit,
+        normalizedMargin: normalizedNetSale > 0 ? (normalizedProfit / normalizedNetSale) * 100 : null,
+        costBasis,
+        marginOnCost: costBasis > 0 ? (netProfit / costBasis) * 100 : null,
         avgPrice: units > 0 ? revenue / units : null,
         stockDays,
         lastSale,
@@ -431,13 +451,16 @@ export default function RentabilidadMeliPage() {
     const revenue = filteredRows.reduce((total, row) => total + row.revenue, 0);
     const netProfit = filteredRows.reduce((total, row) => total + row.netProfit, 0);
     const netSale = filteredRows.reduce((total, row) => total + row.netSale, 0);
+    const normalizedProfit = filteredRows.reduce((total, row) => total + row.normalizedProfit, 0);
     const normalizedNetSale = filteredRows.reduce((total, row) => total + row.normalizedNetSale, 0);
+    const costBasis = filteredRows.reduce((total, row) => total + row.costBasis, 0);
     return {
       units,
       revenue,
       netProfit,
       margin: netSale > 0 ? (netProfit / netSale) * 100 : null,
-      normalizedMargin: normalizedNetSale > 0 ? (netProfit / normalizedNetSale) * 100 : null,
+      normalizedMargin: normalizedNetSale > 0 ? (normalizedProfit / normalizedNetSale) * 100 : null,
+      marginOnCost: costBasis > 0 ? (netProfit / costBasis) * 100 : null,
       products: filteredRows.length,
     };
   }, [filteredRows]);
@@ -651,6 +674,11 @@ export default function RentabilidadMeliPage() {
           <strong className="kpi-value">{percent(totals.normalizedMargin)}</strong>
           <small className="kpi-meta">Base comparable 1 pago</small>
         </article>
+        <article className="kpi-card">
+          <span className="kpi-label">Margen sobre costo</span>
+          <strong className="kpi-value">{percent(totals.marginOnCost)}</strong>
+          <small className="kpi-meta">Ganancia / costo usado</small>
+        </article>
       </section>
 
       <section className="card rotation-card">
@@ -751,6 +779,7 @@ export default function RentabilidadMeliPage() {
               <col className="rentability-col-money" />
               <col className="rentability-col-small" />
               <col className="rentability-col-small" />
+              <col className="rentability-col-small" />
               <col className="rentability-col-date" />
               <col className="rentability-col-small" />
             </colgroup>
@@ -765,6 +794,7 @@ export default function RentabilidadMeliPage() {
                 <th className="numeric-header"><SortButton column="netProfit">Ganancia real</SortButton></th>
                 <th className="numeric-header"><SortButton column="margin">Margen real</SortButton></th>
                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+                <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
                 <th className="date-header"><SortButton column="lastSale">{period === "today" ? "Hora" : "Última venta"}</SortButton></th>
                 <th className="numeric-header"><SortButton column="activePublications">MLA</SortButton></th>
               </tr>
@@ -797,13 +827,14 @@ export default function RentabilidadMeliPage() {
                     {row.errors > 0 && <span>{row.errors} sin calculo</span>}
                   </td>
                   <td className={`numeric ${marginClass(row.normalizedMargin)}`}>{percent(row.normalizedMargin)}</td>
+                  <td className={`numeric ${marginClass(row.marginOnCost)}`}>{percent(row.marginOnCost)}</td>
                   <td className="date-cell">{period === "today" ? shortDateTime(row.lastSale) : shortDate(row.lastSale)}</td>
                   <td className="numeric">{formatUnits(row.activePublications)}</td>
                 </tr>
               ))}
               {!filteredRows.length && (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     <div className="empty-state">No hay ventas para los filtros actuales.</div>
                   </td>
                 </tr>
@@ -1091,7 +1122,7 @@ export default function RentabilidadMeliPage() {
         }
         .rotation-table {
           width: 100%;
-          min-width: 1230px;
+          min-width: 1330px;
           border-collapse: separate;
           border-spacing: 0;
           table-layout: fixed;
