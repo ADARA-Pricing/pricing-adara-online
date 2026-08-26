@@ -406,6 +406,13 @@ export default function DashboardPage() {
     setSyncInfo(null);
     setSyncProgress({ percent: 3, label: "Preparando sincronizacion completa..." });
     let progressCap = 18;
+    const updateProgress = (percent: number, label: string) => {
+      const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+      setSyncProgress((current) => ({
+        percent: Math.max(current?.percent || 0, safePercent),
+        label,
+      }));
+    };
     const progressTimer = window.setInterval(() => {
       setSyncProgress((current) => {
         if (!current) return current;
@@ -446,10 +453,7 @@ export default function DashboardPage() {
         while (offset < total && offset < 1000) {
           const percentDone = shippingPercent(offset, total);
           progressCap = Math.max(progressCap, percentDone + 2);
-          setSyncProgress({
-            percent: percentDone,
-            label: `Actualizando publicaciones ${status.label}: ${offset + 1}-${Math.min(offset + pageLimit, Math.max(total, offset + pageLimit))} de ${Math.min(total, 1000)}...`,
-          });
+          updateProgress(percentDone, `Actualizando publicaciones ${status.label}: ${offset + 1}-${Math.min(offset + pageLimit, Math.max(total, offset + pageLimit))} de ${Math.min(total, 1000)}...`);
           const shippingResponse = await fetch("/api/mercadolibre/sync-shipping", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -476,17 +480,14 @@ export default function DashboardPage() {
           offset += pageLimit;
           const nextPercent = shippingPercent(Math.min(offset, total), total);
           progressCap = Math.max(progressCap, nextPercent + 2);
-          setSyncProgress({
-            percent: nextPercent,
-            label: `Publicaciones ${status.label}: ${Math.min(offset, total, 1000)} de ${Math.min(total, 1000)} procesadas.`,
-          });
+          updateProgress(nextPercent, `Publicaciones ${status.label}: ${Math.min(offset, total, 1000)} de ${Math.min(total, 1000)} procesadas.`);
 
           if (Number(shippingData?.total_items || 0) === 0) break;
         }
       }
 
       progressCap = 92;
-      setSyncProgress({ percent: 84, label: "Actualizando ventas y rentabilidad real..." });
+      updateProgress(84, "Actualizando ventas y rentabilidad real...");
       const salesResponse = await fetch("/api/mercadolibre/sync-sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -496,14 +497,14 @@ export default function DashboardPage() {
       if (!salesResponse.ok) throw new Error(salesData?.error || "No se pudieron sincronizar ventas.");
 
       progressCap = 98;
-      setSyncProgress({ percent: 94, label: "Recargando dashboard con datos actualizados..." });
+      updateProgress(94, "Recargando dashboard con datos actualizados...");
       setSyncInfo(
         `Sync completa: ${shippingTotals.updated} publicaciones actualizadas, ${shippingTotals.changed} costos de envio cambiados, ` +
         `${shippingTotals.promotionOpportunities} promos guardadas, ${shippingTotals.installmentFeeUpdates} costos de cuotas actualizados, ` +
         `${shippingTotals.categoryFeeUpdates} costos de canal actualizados. Ventas: ${salesData.saved || 0} items guardados.`,
       );
       await loadData();
-      setSyncProgress({ percent: 100, label: "Sincronizacion completa." });
+      updateProgress(100, "Sincronizacion completa.");
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "No se pudo sincronizar la cuenta.");
     } finally {
