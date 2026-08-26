@@ -366,7 +366,7 @@ export default function DashboardPage() {
       const shippingResponse = await fetch("/api/mercadolibre/sync-shipping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "shipping" }),
+        body: JSON.stringify({ scope: "all" }),
       });
       const shippingData = await shippingResponse.json();
       if (!shippingResponse.ok) throw new Error(shippingData?.error || "No se pudo sincronizar MercadoLibre.");
@@ -379,7 +379,11 @@ export default function DashboardPage() {
       const salesData = await salesResponse.json();
       if (!salesResponse.ok) throw new Error(salesData?.error || "No se pudieron sincronizar ventas.");
 
-      setSyncInfo(`ML: ${shippingData.updated || 0} publicaciones actualizadas. Ventas: ${salesData.saved || 0} items guardados.`);
+      setSyncInfo(
+        `Sync completa: ${shippingData.updated || 0} publicaciones actualizadas, ${shippingData.changed || 0} costos de envio cambiados, ` +
+        `${shippingData.promotion_opportunities || 0} promos guardadas, ${shippingData.installment_fee_updates || 0} costos de cuotas actualizados, ` +
+        `${shippingData.category_fee_updates || 0} costos de canal actualizados. Ventas: ${salesData.saved || 0} items guardados.`,
+      );
       await loadData();
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "No se pudo sincronizar la cuenta.");
@@ -813,7 +817,7 @@ export default function DashboardPage() {
         actions={
           <button className="button" type="button" onClick={syncAccount} disabled={loading || syncing}>
             <RefreshCcw aria-hidden="true" />
-            {syncing ? "Sincronizando..." : "Sincronizar cuenta"}
+            {syncing ? "Sincronizando..." : "Sync completa"}
           </button>
         }
       />
