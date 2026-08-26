@@ -421,7 +421,7 @@ export default function DashboardPage() {
         { value: "paused", label: "pausadas" },
         { value: "under_review", label: "en revision" },
       ];
-      const pageLimit = 50;
+      const pageLimit = 10;
       let resetPromotions = true;
       let syncedPages = 0;
       const shippingTotals = {

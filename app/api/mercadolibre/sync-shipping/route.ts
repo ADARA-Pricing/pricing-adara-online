@@ -1415,15 +1415,16 @@ export async function POST(request: NextRequest) {
         const maxOffset = Math.min(1000, pageOffset + pageLimit);
 
         do {
+          const requestLimit = Math.min(limit, maxOffset - offset);
           const data = await meliFetch(
-            `/users/${account.meli_user_id}/items/search?status=${status}&limit=${limit}&offset=${offset}`,
+            `/users/${account.meli_user_id}/items/search?status=${status}&limit=${requestLimit}&offset=${offset}`,
             account,
           );
           const results = data?.results || [];
           total = Number(data?.paging?.total || results.length || 0);
           totalsByStatus[status] = total;
           results.forEach((id: string) => foundItemIds.add(id));
-          offset += limit;
+          offset += requestLimit;
         } while (offset < total && offset < maxOffset);
       }
 
