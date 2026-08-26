@@ -1379,7 +1379,7 @@ export async function POST(request: NextRequest) {
       productsBySku.set(normalizeSku(product.sku), product);
     });
 
-    const statusesToSync = ["active", "paused"];
+    const statusesToSync = ["active", "paused", "under_review"];
     const limit = 50;
     const totalsByStatus: Record<string, number> = {};
     let itemIds: string[] = [];

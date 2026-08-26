@@ -558,6 +558,24 @@ export default function DashboardPage() {
       const stock = Number(publication.meli_stock ?? product.stock ?? 0);
       if (stock <= 0) return;
       const rotation = rotationBySku.get(product.sku.toUpperCase());
+      const syncAge = daysSince(publication.meli_last_sync_at || publication.updated_at || publication.created_at);
+      if (syncAge === null || syncAge > 1) {
+        actions.push({
+          key: `data-paused-sync-${publication.id || publication.meli_item_id}`,
+          type: "data_issue",
+          priority: "alta",
+          sku: product.sku,
+          productName: product.name,
+          itemId: publication.meli_item_id,
+          title: "Publicacion no activa con stock viejo",
+          detail: `Estado ML: ${publication.meli_status || "desconocido"}. Ultima sync: ${formatDateTime(publication.meli_last_sync_at || publication.updated_at || publication.created_at)}.`,
+          href: "/configuracion/mercadolibre",
+          stock,
+          units7: rotation?.units7 || 0,
+          units30: rotation?.units30 || 0,
+        });
+        return;
+      }
       actions.push({
         key: `paused-${publication.id || publication.meli_item_id}`,
         type: "paused_stock",
