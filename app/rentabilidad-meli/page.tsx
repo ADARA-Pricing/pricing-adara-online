@@ -777,9 +777,9 @@ export default function RentabilidadMeliPage() {
               <col className="rentability-col-small" />
               <col className="rentability-col-money" />
               <col className="rentability-col-money" />
-              <col className="rentability-col-small" />
-              <col className="rentability-col-small" />
-              <col className="rentability-col-small" />
+              <col className="rentability-col-rate" />
+              <col className="rentability-col-rate-wide" />
+              <col className="rentability-col-rate" />
               <col className="rentability-col-date" />
               <col className="rentability-col-small" />
             </colgroup>
@@ -1122,7 +1122,7 @@ export default function RentabilidadMeliPage() {
         }
         .rotation-table {
           width: 100%;
-          min-width: 1330px;
+          min-width: 1480px;
           border-collapse: separate;
           border-spacing: 0;
           table-layout: fixed;
@@ -1130,6 +1130,8 @@ export default function RentabilidadMeliPage() {
         .rentability-col-product { width: 390px; }
         .rentability-col-small { width: 104px; }
         .rentability-col-money { width: 172px; }
+        .rentability-col-rate { width: 128px; }
+        .rentability-col-rate-wide { width: 164px; }
         .rentability-col-date { width: 124px; }
         .rotation-table thead {
           background: #f8fafc;
@@ -1145,7 +1147,7 @@ export default function RentabilidadMeliPage() {
           text-align: left;
           text-transform: uppercase;
           letter-spacing: 0;
-          white-space: nowrap;
+          white-space: normal;
         }
         .rotation-table th.numeric-header,
         .rotation-table th.date-header {
@@ -1170,6 +1172,11 @@ export default function RentabilidadMeliPage() {
           text-align: right;
           font-variant-numeric: tabular-nums;
           white-space: nowrap;
+        }
+        :global(.rotation-page .rotation-table th .rotation-sort-trigger) {
+          max-width: 100%;
+          white-space: normal !important;
+          word-break: keep-all;
         }
         .rotation-table td span {
           display: block;
