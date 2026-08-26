@@ -881,7 +881,7 @@ export default function RotacionSkuPage() {
       <style jsx>{`
         .rotation-summary {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
           gap: 12px;
           margin: 18px 0;
         }
@@ -897,6 +897,7 @@ export default function RotacionSkuPage() {
           background: #fff;
           box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
           gap: 3px;
+          min-width: 0;
         }
         .rotation-summary .kpi-label,
         .rotation-summary .kpi-meta {
@@ -909,11 +910,15 @@ export default function RotacionSkuPage() {
         .rotation-summary .kpi-value {
           display: block;
           color: #020817;
-          font-size: 26px;
+          font-size: clamp(18px, 1.55vw, 26px);
           font-weight: 800;
           line-height: 1.08;
           letter-spacing: 0;
           font-variant-numeric: tabular-nums;
+          max-width: 100%;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
           white-space: nowrap;
         }
         .rotation-sync-info {
