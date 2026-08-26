@@ -78,8 +78,18 @@ function stockDaysLabel(days: number | null) {
   return `${Math.round(days)} dias`;
 }
 
-function productImage(publications: MercadoLibreShippingCost[]) {
-  return publications.find((publication) => Boolean(publication.meli_thumbnail))?.meli_thumbnail || null;
+function isActiveMeliPublication(publication: MercadoLibreShippingCost) {
+  return publication.active !== false && publication.meli_status === "active";
+}
+
+function productImage(publications: MercadoLibreShippingCost[], meliItemId?: string | null) {
+  const exactPublication = meliItemId ? publications.find((publication) => publication.meli_item_id === meliItemId && Boolean(publication.meli_thumbnail)) : null;
+  if (exactPublication?.meli_thumbnail) return exactPublication.meli_thumbnail;
+  return (
+    publications.find((publication) => isActiveMeliPublication(publication) && Boolean(publication.meli_thumbnail))?.meli_thumbnail ||
+    publications.find((publication) => Boolean(publication.meli_thumbnail))?.meli_thumbnail ||
+    null
+  );
 }
 
 function productInitial(name: string, sku: string) {
@@ -169,7 +179,7 @@ export default function RentabilidadMeliPage() {
 
     const [productsResponse, publicationsResponse, salesResponse] = await Promise.all([
       supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
-      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).eq("meli_status", "active"),
+      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
       fetchSalesSince(since.toISOString()),
     ]);
 
@@ -231,7 +241,8 @@ export default function RentabilidadMeliPage() {
         const product = (sale.product_id ? productById.get(sale.product_id) : null) || productBySku.get(saleSku) || null;
         const sku = saleSku || product?.sku?.toUpperCase() || "-";
         const skuPublications = publicationBySku.get(sku) || [];
-        const stockFromMl = skuPublications.length ? Math.max(...skuPublications.map((publication) => numberValue(publication.meli_stock))) : 0;
+        const activeSkuPublications = skuPublications.filter(isActiveMeliPublication);
+        const stockFromMl = activeSkuPublications.length ? Math.max(...activeSkuPublications.map((publication) => numberValue(publication.meli_stock))) : 0;
         const units = numberValue(sale.quantity);
         const revenue = numberValue(sale.total_amount);
         const netProfit = numberValue(sale.normalized_total_net_profit);
@@ -242,11 +253,11 @@ export default function RentabilidadMeliPage() {
           sku,
           productName: sale.title || product?.name || "Venta MercadoLibre",
           category: product?.category || null,
-          thumbnail: productImage(skuPublications),
+          thumbnail: productImage(skuPublications, sale.meli_item_id),
           orderId: sale.order_id,
           meliItemId: sale.meli_item_id,
-          stock: skuPublications.length ? stockFromMl : numberValue(product?.stock),
-          activePublications: skuPublications.length,
+          stock: activeSkuPublications.length ? stockFromMl : numberValue(product?.stock),
+          activePublications: activeSkuPublications.length,
           units,
           revenue,
           netProfit,
@@ -274,7 +285,8 @@ export default function RentabilidadMeliPage() {
       const sku = product.sku.toUpperCase();
       const skuSales = salesBySku.get(sku) || [];
       const skuPublications = publicationBySku.get(sku) || [];
-      const stockFromMl = skuPublications.length ? Math.max(...skuPublications.map((publication) => numberValue(publication.meli_stock))) : 0;
+      const activeSkuPublications = skuPublications.filter(isActiveMeliPublication);
+      const stockFromMl = activeSkuPublications.length ? Math.max(...activeSkuPublications.map((publication) => numberValue(publication.meli_stock))) : 0;
       const revenue = skuSales.reduce((total, sale) => total + numberValue(sale.total_amount), 0);
       const units = skuSales.reduce((total, sale) => total + numberValue(sale.quantity), 0);
       const netProfit = skuSales.reduce((total, sale) => total + numberValue(sale.normalized_total_net_profit), 0);
@@ -283,7 +295,7 @@ export default function RentabilidadMeliPage() {
         0,
       );
       const dailyUnits = units > 0 ? units / periodDays : 0;
-      const stockDays = dailyUnits > 0 ? (skuPublications.length ? stockFromMl : numberValue(product.stock)) / dailyUnits : null;
+      const stockDays = dailyUnits > 0 ? (activeSkuPublications.length ? stockFromMl : numberValue(product.stock)) / dailyUnits : null;
       const errors = skuSales.filter((sale) => sale.normalized_profit_error).length;
       const lastSale = skuSales[0]?.order_date || null;
 
@@ -293,8 +305,8 @@ export default function RentabilidadMeliPage() {
         productName: product.name,
         category: product.category,
         thumbnail: productImage(skuPublications),
-        stock: skuPublications.length ? stockFromMl : numberValue(product.stock),
-        activePublications: skuPublications.length,
+        stock: activeSkuPublications.length ? stockFromMl : numberValue(product.stock),
+        activePublications: activeSkuPublications.length,
         units,
         revenue,
         netProfit,
