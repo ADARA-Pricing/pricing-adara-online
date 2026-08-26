@@ -415,15 +415,64 @@ export default function DashboardPage() {
     }, 900);
 
     try {
-      progressCap = 68;
-      setSyncProgress({ percent: 8, label: "Actualizando publicaciones, stock, precios, envios, cuotas y promos..." });
-      const shippingResponse = await fetch("/api/mercadolibre/sync-shipping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "all" }),
-      });
-      const shippingData = await readJsonResponse(shippingResponse, "MercadoLibre devolvio una respuesta inesperada");
-      if (!shippingResponse.ok) throw new Error(shippingData?.error || "No se pudo sincronizar MercadoLibre.");
+      progressCap = 72;
+      const statuses = [
+        { value: "active", label: "activas" },
+        { value: "paused", label: "pausadas" },
+        { value: "under_review", label: "en revision" },
+      ];
+      const pageLimit = 50;
+      let resetPromotions = true;
+      let syncedPages = 0;
+      const shippingTotals = {
+        updated: 0,
+        changed: 0,
+        promotionOpportunities: 0,
+        installmentFeeUpdates: 0,
+        categoryFeeUpdates: 0,
+        matched: 0,
+        totalItems: 0,
+      };
+
+      for (const status of statuses) {
+        let offset = 0;
+        let total = pageLimit;
+
+        while (offset < total && offset < 1000) {
+          const percentDone = Math.min(68, 8 + syncedPages * 4);
+          setSyncProgress({
+            percent: percentDone,
+            label: `Actualizando publicaciones ${status.label}: ${offset + 1}-${Math.min(offset + pageLimit, total)}...`,
+          });
+          const shippingResponse = await fetch("/api/mercadolibre/sync-shipping", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              scope: "all",
+              statuses: [status.value],
+              offset,
+              pageLimit,
+              resetPromotions,
+            }),
+          });
+          const shippingData = await readJsonResponse(shippingResponse, "MercadoLibre devolvio una respuesta inesperada");
+          if (!shippingResponse.ok) throw new Error(shippingData?.error || "No se pudo sincronizar MercadoLibre.");
+
+          total = Number(shippingData?.totals_by_status?.[status.value] || shippingData?.total_items || 0);
+          shippingTotals.updated += Number(shippingData?.updated || 0);
+          shippingTotals.changed += Number(shippingData?.changed || 0);
+          shippingTotals.promotionOpportunities += Number(shippingData?.promotion_opportunities || 0);
+          shippingTotals.installmentFeeUpdates += Number(shippingData?.installment_fee_updates || 0);
+          shippingTotals.categoryFeeUpdates += Number(shippingData?.category_fee_updates || 0);
+          shippingTotals.matched += Number(shippingData?.matched || 0);
+          shippingTotals.totalItems += Number(shippingData?.total_items || 0);
+          resetPromotions = false;
+          syncedPages += 1;
+          offset += pageLimit;
+
+          if (Number(shippingData?.total_items || 0) === 0) break;
+        }
+      }
 
       progressCap = 88;
       setSyncProgress({ percent: 70, label: "Actualizando ventas y rentabilidad real..." });
@@ -438,9 +487,9 @@ export default function DashboardPage() {
       progressCap = 96;
       setSyncProgress({ percent: 90, label: "Recargando dashboard con datos actualizados..." });
       setSyncInfo(
-        `Sync completa: ${shippingData.updated || 0} publicaciones actualizadas, ${shippingData.changed || 0} costos de envio cambiados, ` +
-        `${shippingData.promotion_opportunities || 0} promos guardadas, ${shippingData.installment_fee_updates || 0} costos de cuotas actualizados, ` +
-        `${shippingData.category_fee_updates || 0} costos de canal actualizados. Ventas: ${salesData.saved || 0} items guardados.`,
+        `Sync completa: ${shippingTotals.updated} publicaciones actualizadas, ${shippingTotals.changed} costos de envio cambiados, ` +
+        `${shippingTotals.promotionOpportunities} promos guardadas, ${shippingTotals.installmentFeeUpdates} costos de cuotas actualizados, ` +
+        `${shippingTotals.categoryFeeUpdates} costos de canal actualizados. Ventas: ${salesData.saved || 0} items guardados.`,
       );
       await loadData();
       setSyncProgress({ percent: 100, label: "Sincronizacion completa." });

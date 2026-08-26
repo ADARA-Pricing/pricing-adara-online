@@ -185,6 +185,19 @@ function normalizeSkuList(value: unknown) {
   return [...new Set(value.map((sku) => normalizeSku(String(sku || ""))).filter(Boolean))];
 }
 
+function normalizeStatusList(value: unknown) {
+  const allowed = new Set(["active", "paused", "under_review"]);
+  if (!Array.isArray(value)) return ["active", "paused", "under_review"];
+  const statuses = [...new Set(value.map((status) => String(status || "").trim()).filter((status) => allowed.has(status)))];
+  return statuses.length ? statuses : ["active", "paused", "under_review"];
+}
+
+function boundedNumber(value: unknown, fallback: number, min: number, max: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(Math.floor(parsed), max));
+}
+
 async function getItemIdsBySkus(account: { meli_user_id: number }, skus: string[]) {
   const itemIds = new Set<string>();
   const searches: Record<string, number> = {};
@@ -1351,6 +1364,10 @@ export async function POST(request: NextRequest) {
     const targetSkus = normalizeSkuList(body?.skus);
     const promotionsOnly = body?.scope === "promotions";
     const shippingOnly = body?.scope === "shipping";
+    const statusesToSync = normalizeStatusList(body?.statuses);
+    const pageOffset = boundedNumber(body?.offset, 0, 0, 1000);
+    const pageLimit = boundedNumber(body?.pageLimit, 1000, 1, 1000);
+    const resetPromotions = body?.resetPromotions !== false;
     const account = await getConnectedMeliAccount();
     if (!account) {
       return NextResponse.json({ error: "Primero conectá MercadoLibre." }, { status: 400 });
@@ -1379,7 +1396,6 @@ export async function POST(request: NextRequest) {
       productsBySku.set(normalizeSku(product.sku), product);
     });
 
-    const statusesToSync = ["active", "paused", "under_review"];
     const limit = 50;
     const totalsByStatus: Record<string, number> = {};
     let itemIds: string[] = [];
@@ -1394,8 +1410,9 @@ export async function POST(request: NextRequest) {
       const foundItemIds = new Set<string>();
 
       for (const status of statusesToSync) {
-        let offset = 0;
+        let offset = pageOffset;
         let total = 0;
+        const maxOffset = Math.min(1000, pageOffset + pageLimit);
 
         do {
           const data = await meliFetch(
@@ -1407,7 +1424,7 @@ export async function POST(request: NextRequest) {
           totalsByStatus[status] = total;
           results.forEach((id: string) => foundItemIds.add(id));
           offset += limit;
-        } while (offset < total && offset < 1000);
+        } while (offset < total && offset < maxOffset);
       }
 
       itemIds = [...foundItemIds];
@@ -1566,7 +1583,7 @@ export async function POST(request: NextRequest) {
       if (idsToRefresh.length) {
         await supabase.from("mercadolibre_promotion_opportunities").delete().in("meli_item_id", idsToRefresh);
       }
-    } else if (!shippingOnly) {
+    } else if (!shippingOnly && resetPromotions) {
       await supabase.from("mercadolibre_promotion_opportunities").delete().neq("promotion_id", "__never__");
     }
     if (!shippingOnly) {
