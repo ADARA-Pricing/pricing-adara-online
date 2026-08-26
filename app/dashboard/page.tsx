@@ -36,6 +36,7 @@ type ActionType =
   | "low_margin_high_rotation"
   | "stock_risk"
   | "stock_idle"
+  | "missing_local_product"
   | "data_issue";
 
 type Priority = "critica" | "alta" | "media" | "baja";
@@ -71,6 +72,14 @@ type RotationStats = {
 type SyncProgress = {
   percent: number;
   label: string;
+};
+
+type MercadoLibreSyncLog = {
+  sku?: string | null;
+  meli_item_id?: string | null;
+  status?: string | null;
+  message?: string | null;
+  created_at?: string | null;
 };
 
 const ML_FIXED_FEE_PRICE_LIMIT = 30000;
@@ -222,6 +231,22 @@ function promotionFixedFeeAmount(opportunity: MercadoLibrePromotionOpportunity) 
   );
 }
 
+function stockFromLogMessage(message?: string | null) {
+  const match = `${message || ""}`.match(/Stock ML:\s*(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
+
+async function readJsonResponse(response: Response, fallbackMessage: string) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    const cleanText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    throw new Error(`${fallbackMessage}${response.status ? ` (${response.status})` : ""}: ${cleanText.slice(0, 180) || "respuesta no JSON"}`);
+  }
+}
+
 function priorityLabel(priority: Priority) {
   if (priority === "critica") return "Critica";
   if (priority === "alta") return "Alta";
@@ -240,6 +265,7 @@ function typeLabel(type: ActionType) {
     low_margin_high_rotation: "Vende con poco margen",
     stock_risk: "Riesgo de stock",
     stock_idle: "Stock quieto",
+    missing_local_product: "En ML sin producto",
     data_issue: "Dato a revisar",
   };
   return labels[type];
@@ -248,7 +274,7 @@ function typeLabel(type: ActionType) {
 function actionTone(type: ActionType) {
   if (type === "paused_stock" || type === "low_margin") return "review";
   if (type === "future_promo") return "future";
-  if (type === "data_issue") return "data_issue";
+  if (type === "data_issue" || type === "missing_local_product") return "data_issue";
   if (type === "missing_promo") return "missing_promo";
   return "activate";
 }
@@ -270,6 +296,7 @@ export default function DashboardPage() {
   const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
   const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
+  const [syncLogs, setSyncLogs] = useState<MercadoLibreSyncLog[]>([]);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | ActionType>("all");
   const [priorityFilter, setPriorityFilter] = useState<"all" | Priority>("all");
@@ -334,6 +361,7 @@ export default function DashboardPage() {
       categoryFeesResponse,
       taxesResponse,
       marginsResponse,
+      syncLogsResponse,
     ] = await Promise.all([
       supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
       supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
@@ -343,6 +371,12 @@ export default function DashboardPage() {
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
       supabase.from("tax_settings").select("*").eq("key", "default").single(),
       supabase.from("product_channel_margins").select("*"),
+      supabase
+        .from("mercadolibre_shipping_sync_logs")
+        .select("sku,meli_item_id,status,message,created_at")
+        .eq("status", "sku_not_found")
+        .order("created_at", { ascending: false })
+        .limit(2000),
     ]);
 
     setLoading(false);
@@ -362,6 +396,8 @@ export default function DashboardPage() {
     else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
     if (marginsResponse.error) setError(marginsResponse.error.message);
     else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
+    if (syncLogsResponse.error) setError(syncLogsResponse.error.message);
+    else setSyncLogs((syncLogsResponse.data || []) as MercadoLibreSyncLog[]);
   }
 
   async function syncAccount() {
@@ -386,7 +422,7 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scope: "all" }),
       });
-      const shippingData = await shippingResponse.json();
+      const shippingData = await readJsonResponse(shippingResponse, "MercadoLibre devolvio una respuesta inesperada");
       if (!shippingResponse.ok) throw new Error(shippingData?.error || "No se pudo sincronizar MercadoLibre.");
 
       progressCap = 88;
@@ -396,7 +432,7 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ days: 60, chunkDays: 7 }),
       });
-      const salesData = await salesResponse.json();
+      const salesData = await readJsonResponse(salesResponse, "Ventas ML devolvio una respuesta inesperada");
       if (!salesResponse.ok) throw new Error(salesData?.error || "No se pudieron sincronizar ventas.");
 
       progressCap = 96;
@@ -539,6 +575,8 @@ export default function DashboardPage() {
 
     const actions: AccountAction[] = [];
     const activePromoKeys = new Set<string>();
+    const localSkuSet = new Set(products.map((product) => product.sku.toUpperCase()));
+    const missingLocalProductLogs = new Map<string, MercadoLibreSyncLog>();
 
     activePublications.forEach((publication) => {
       const product = productsById.get(publication.product_id);
@@ -550,6 +588,33 @@ export default function DashboardPage() {
       const product = publication ? productsById.get(publication.product_id) : null;
       if (!publication || !product) return;
       activePromoKeys.add(`${product.sku}|${publicationInstallments(publication) || 1}`);
+    });
+
+    syncLogs.forEach((log) => {
+      const sku = (log.sku || "").toUpperCase();
+      const itemId = log.meli_item_id || "";
+      const stock = stockFromLogMessage(log.message);
+      if (!sku || !itemId || !stock || stock <= 0) return;
+      if (localSkuSet.has(sku)) return;
+      if ((daysSince(log.created_at) ?? 99) > 2) return;
+      const key = `${sku}|${itemId}`;
+      if (!missingLocalProductLogs.has(key)) missingLocalProductLogs.set(key, log);
+    });
+
+    missingLocalProductLogs.forEach((log) => {
+      const stock = stockFromLogMessage(log.message);
+      actions.push({
+        key: `missing-local-${log.sku}-${log.meli_item_id}`,
+        type: "missing_local_product",
+        priority: "critica",
+        sku: log.sku || "SIN SKU",
+        productName: "Publicacion ML sin producto local",
+        itemId: log.meli_item_id,
+        title: "Publicacion con stock fuera de la app",
+        detail: log.message || "MercadoLibre la informo en la sync, pero no existe el SKU en productos.",
+        href: "/productos",
+        stock,
+      });
     });
 
     pausedPublications.forEach((publication) => {
@@ -792,14 +857,14 @@ export default function DashboardPage() {
       return acc;
     }, {} as Record<ActionType, number>);
     const pillarPenalties = {
-      stock: Math.min(40, (typeCounts.paused_stock || 0) * 10 + (typeCounts.stock_risk || 0) * 5 + (typeCounts.stock_idle || 0) * 3),
+      stock: Math.min(40, (typeCounts.paused_stock || 0) * 10 + (typeCounts.missing_local_product || 0) * 8 + (typeCounts.stock_risk || 0) * 5 + (typeCounts.stock_idle || 0) * 3),
       promos: Math.min(45, (typeCounts.missing_promo || 0) * 3 + (typeCounts.activate_promo || 0) * 2 + (typeCounts.future_promo || 0)),
       rentabilidad: Math.min(50, (typeCounts.low_margin || 0) * 12 + (typeCounts.low_margin_high_rotation || 0) * 7),
       rotacion: Math.min(35, (typeCounts.high_margin_low_rotation || 0) * 6 + (typeCounts.stock_idle || 0) * 3),
-      datos: Math.min(35, (typeCounts.data_issue || 0) * 4),
+      datos: Math.min(35, (typeCounts.data_issue || 0) * 4 + (typeCounts.missing_local_product || 0) * 2),
     };
     const pillars = [
-      { key: "stock", label: "Stock", score: Math.max(0, 100 - pillarPenalties.stock), detail: `${(typeCounts.paused_stock || 0) + (typeCounts.stock_risk || 0) + (typeCounts.stock_idle || 0)} alertas` },
+      { key: "stock", label: "Stock", score: Math.max(0, 100 - pillarPenalties.stock), detail: `${(typeCounts.paused_stock || 0) + (typeCounts.missing_local_product || 0) + (typeCounts.stock_risk || 0) + (typeCounts.stock_idle || 0)} alertas` },
       { key: "promos", label: "Promos", score: Math.max(0, 100 - pillarPenalties.promos), detail: `${(typeCounts.missing_promo || 0) + (typeCounts.activate_promo || 0)} oportunidades` },
       { key: "rentabilidad", label: "Rentabilidad", score: Math.max(0, 100 - pillarPenalties.rentabilidad), detail: `${(typeCounts.low_margin || 0) + (typeCounts.low_margin_high_rotation || 0)} riesgos` },
       { key: "rotacion", label: "Rotacion", score: Math.max(0, 100 - pillarPenalties.rotacion), detail: `${(typeCounts.high_margin_low_rotation || 0) + (typeCounts.stock_idle || 0)} lentos` },
@@ -809,15 +874,16 @@ export default function DashboardPage() {
     const priorityOrder: Record<Priority, number> = { critica: 1, alta: 2, media: 3, baja: 4 };
     const typeOrder: Record<ActionType, number> = {
       paused_stock: 1,
-      low_margin: 2,
-      low_margin_high_rotation: 3,
-      activate_promo: 4,
-      high_margin_low_rotation: 5,
-      stock_risk: 6,
-      stock_idle: 7,
-      missing_promo: 8,
-      future_promo: 9,
-      data_issue: 10,
+      missing_local_product: 2,
+      low_margin: 3,
+      low_margin_high_rotation: 4,
+      activate_promo: 5,
+      high_margin_low_rotation: 6,
+      stock_risk: 7,
+      stock_idle: 8,
+      missing_promo: 9,
+      future_promo: 10,
+      data_issue: 11,
     };
 
     return {
@@ -836,7 +902,7 @@ export default function DashboardPage() {
       sales30: [...rotationBySku.values()].reduce((total, item) => total + item.units30, 0),
       revenue30: [...rotationBySku.values()].reduce((total, item) => total + item.revenue30, 0),
     };
-  }, [products, productsById, publications, opportunities, sales, pricingOptions, categoryFees, taxes, marginSettings]);
+  }, [products, productsById, publications, opportunities, sales, pricingOptions, categoryFees, taxes, marginSettings, syncLogs]);
 
   const filteredActions = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -919,7 +985,7 @@ export default function DashboardPage() {
           <strong className="kpi-value">{account.actions.length}</strong>
           <small className="kpi-meta">Acciones priorizadas</small>
         </button>
-        {(["paused_stock", "low_margin", "activate_promo", "missing_promo", "high_margin_low_rotation"] as ActionType[]).map((type) => (
+        {(["paused_stock", "missing_local_product", "low_margin", "activate_promo", "missing_promo"] as ActionType[]).map((type) => (
           <button className={`kpi-card opportunity-summary ${typeFilter === type ? "active" : ""}`} type="button" onClick={() => setTypeFilter(type)} key={type}>
             <span className="kpi-label">{typeLabel(type)}</span>
             <strong className="kpi-value">{account.typeCounts[type] || 0}</strong>
@@ -943,6 +1009,7 @@ export default function DashboardPage() {
         <select className="form-control" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}>
           <option value="all">Todos los tipos</option>
           <option value="paused_stock">Pausadas con stock</option>
+          <option value="missing_local_product">En ML sin producto</option>
           <option value="low_margin">Margen bajo</option>
           <option value="activate_promo">Promos para activar</option>
           <option value="missing_promo">Sin promo</option>
