@@ -287,7 +287,6 @@ export default function RentabilidadMeliPage() {
         const revenue = numberValue(sale.total_amount);
         const netProfit = numberValue(sale.real_total_net_profit ?? sale.normalized_total_net_profit);
         const netSale = numberValue(sale.real_net_sale_price ?? sale.normalized_net_sale_price) * units;
-        const normalizedProfit = numberValue(sale.normalized_total_net_profit ?? sale.real_total_net_profit);
         const normalizedNetSale = numberValue(sale.normalized_net_sale_price) * units;
         const costBasis = numberValue(sale.normalized_cost_for_profit) * units;
 
@@ -307,8 +306,8 @@ export default function RentabilidadMeliPage() {
           netSale,
           margin: netSale > 0 ? (netProfit / netSale) * 100 : null,
           normalizedNetSale,
-          normalizedProfit,
-          normalizedMargin: normalizedNetSale > 0 ? (normalizedProfit / normalizedNetSale) * 100 : null,
+          normalizedProfit: netProfit,
+          normalizedMargin: normalizedNetSale > 0 ? (netProfit / normalizedNetSale) * 100 : null,
           costBasis,
           marginOnCost: costBasis > 0 ? (netProfit / costBasis) * 100 : null,
           avgPrice: units > 0 ? revenue / units : null,
@@ -342,7 +341,6 @@ export default function RentabilidadMeliPage() {
         (total, sale) => total + numberValue(sale.real_net_sale_price ?? sale.normalized_net_sale_price) * numberValue(sale.quantity),
         0,
       );
-      const normalizedProfit = skuSales.reduce((total, sale) => total + numberValue(sale.normalized_total_net_profit ?? sale.real_total_net_profit), 0);
       const normalizedNetSale = skuSales.reduce(
         (total, sale) => total + numberValue(sale.normalized_net_sale_price) * numberValue(sale.quantity),
         0,
@@ -370,8 +368,8 @@ export default function RentabilidadMeliPage() {
         netSale,
         margin: netSale > 0 ? (netProfit / netSale) * 100 : null,
         normalizedNetSale,
-        normalizedProfit,
-        normalizedMargin: normalizedNetSale > 0 ? (normalizedProfit / normalizedNetSale) * 100 : null,
+        normalizedProfit: netProfit,
+        normalizedMargin: normalizedNetSale > 0 ? (netProfit / normalizedNetSale) * 100 : null,
         costBasis,
         marginOnCost: costBasis > 0 ? (netProfit / costBasis) * 100 : null,
         avgPrice: units > 0 ? revenue / units : null,
@@ -451,7 +449,6 @@ export default function RentabilidadMeliPage() {
     const revenue = filteredRows.reduce((total, row) => total + row.revenue, 0);
     const netProfit = filteredRows.reduce((total, row) => total + row.netProfit, 0);
     const netSale = filteredRows.reduce((total, row) => total + row.netSale, 0);
-    const normalizedProfit = filteredRows.reduce((total, row) => total + row.normalizedProfit, 0);
     const normalizedNetSale = filteredRows.reduce((total, row) => total + row.normalizedNetSale, 0);
     const costBasis = filteredRows.reduce((total, row) => total + row.costBasis, 0);
     return {
@@ -459,7 +456,7 @@ export default function RentabilidadMeliPage() {
       revenue,
       netProfit,
       margin: netSale > 0 ? (netProfit / netSale) * 100 : null,
-      normalizedMargin: normalizedNetSale > 0 ? (normalizedProfit / normalizedNetSale) * 100 : null,
+      normalizedMargin: normalizedNetSale > 0 ? (netProfit / normalizedNetSale) * 100 : null,
       marginOnCost: costBasis > 0 ? (netProfit / costBasis) * 100 : null,
       products: filteredRows.length,
     };
