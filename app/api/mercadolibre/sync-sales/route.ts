@@ -137,20 +137,47 @@ type SalesPublication = Pick<
   | "meli_installments_text"
 >;
 
+function publicationSalePrice(publication: SalesPublication) {
+  const promoActive = publication.meli_promo_price && /started|active/i.test(publication.meli_promo_status || "");
+  return Number((promoActive ? publication.meli_promo_price : publication.meli_price) || 0);
+}
+
+function isOnePayPublication(publication: SalesPublication) {
+  const text = `${publication.meli_installments_text || ""}`.toLowerCase();
+  return Number(publication.meli_financing_fee_rate || 0) === 0 || text.includes("1 pago") || text.includes("clásica") || text.includes("clasica");
+}
+
+function onePayReferencePrice(sku: string, unitPrice: number, publication: SalesPublication | null, publicationsBySku: Map<string, SalesPublication[]>) {
+  const skuPublications = publicationsBySku.get(sku) || [];
+  const onePayPrices = skuPublications
+    .filter(isOnePayPublication)
+    .map(publicationSalePrice)
+    .filter((price) => price > 0);
+  if (onePayPrices.length) return Math.min(...onePayPrices);
+
+  const financingRate = Number(publication?.meli_financing_fee_rate || 0);
+  if (unitPrice > 0 && financingRate > 0) return unitPrice / (1 + financingRate / 100);
+  return unitPrice;
+}
+
 function normalizedProfitability({
   product,
   publication,
+  publicationsBySku,
   categoryFee,
   taxes,
   marginSetting,
+  sku,
   unitPrice,
   quantity,
 }: {
   product: Product | null;
   publication: SalesPublication | null;
+  publicationsBySku: Map<string, SalesPublication[]>;
   categoryFee: MercadoLibreCategoryFee | null;
   taxes: TaxSettings;
   marginSetting: ProductChannelMargin | null;
+  sku: string;
   unitPrice: number;
   quantity: number;
 }) {
@@ -202,14 +229,21 @@ function normalizedProfitability({
   };
   const actualNetProfit = Number(actualResult.netProfit || 0);
   const actualNetSalePrice = Number(actualResult.netSalePrice || 0);
+  const referencePrice = onePayReferencePrice(sku, unitPrice, publication, publicationsBySku);
+  const referenceNetSalePrice = referencePrice / (1 + Number((marginSetting?.sale_applies_vat ?? true) ? product.vat_rate || 21 : 0) / 100);
 
   return {
     normalized_option_code: "MC",
-    normalized_unit_price: unitPrice,
-    normalized_net_sale_price: actualResult.valid ? actualNetSalePrice : null,
+    real_unit_price: unitPrice,
+    real_net_sale_price: actualResult.valid ? actualNetSalePrice : null,
+    real_net_profit: actualResult.valid ? actualNetProfit : null,
+    real_total_net_profit: actualResult.valid ? actualNetProfit * quantity : null,
+    real_margin_on_net_sale: actualResult.valid ? Number(actualResult.marginOnNetSale || 0) : null,
+    normalized_unit_price: referencePrice,
+    normalized_net_sale_price: actualResult.valid ? referenceNetSalePrice : null,
     normalized_net_profit: actualResult.valid ? actualNetProfit : null,
     normalized_total_net_profit: actualResult.valid ? actualNetProfit * quantity : null,
-    normalized_margin_on_net_sale: actualResult.valid ? Number(actualResult.marginOnNetSale || 0) : null,
+    normalized_margin_on_net_sale: actualResult.valid && referenceNetSalePrice > 0 ? (actualNetProfit / referenceNetSalePrice) * 100 : null,
     normalized_margin_on_cost: actualResult.valid ? Number(actualResult.marginOnCost || 0) : null,
     normalized_cost_for_profit: actualResult.valid ? Number(actualResult.costForProfit || 0) : null,
     normalized_product_cost_without_vat: actualResult.valid ? Number(product.cost_without_vat || 0) : null,
@@ -311,6 +345,12 @@ export async function POST(request: Request) {
     const productBySku = mapBySku(products);
     const productById = new Map(products.filter((product) => product.id).map((product) => [String(product.id), product]));
     const publicationByItemId = new Map(publications.filter((item) => item.meli_item_id).map((item) => [String(item.meli_item_id), item]));
+    const publicationsBySku = new Map<string, SalesPublication[]>();
+    publications.forEach((publication) => {
+      const sku = normalizeSku(publication.sku || productById.get(String(publication.product_id))?.sku || "");
+      if (!sku) return;
+      publicationsBySku.set(sku, [...(publicationsBySku.get(sku) || []), publication]);
+    });
     const marginByProductAndChannel = new Map(margins.map((item) => [marginKey(item.product_id, item.channel_code), item]));
     const historiesByProductId = new Map<string, ProductCostHistory[]>();
     const historiesBySku = new Map<string, ProductCostHistory[]>();
@@ -363,9 +403,11 @@ export async function POST(request: Request) {
             const profitability = normalizedProfitability({
               product,
               publication: publication || null,
+              publicationsBySku,
               categoryFee: product ? categoryFeeForProduct(product, categoryFees) : null,
               taxes,
               marginSetting: product ? marginByProductAndChannel.get(marginKey(product.id, "MC")) || null : null,
+              sku,
               unitPrice,
               quantity,
             });

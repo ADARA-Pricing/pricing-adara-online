@@ -186,6 +186,11 @@ export type MercadoLibreOrderItem = {
   gross_price?: number | null;
   actual_installments?: number | null;
   payment_method_id?: string | null;
+  real_unit_price?: number | null;
+  real_net_sale_price?: number | null;
+  real_net_profit?: number | null;
+  real_total_net_profit?: number | null;
+  real_margin_on_net_sale?: number | null;
   normalized_option_code?: string | null;
   normalized_unit_price?: number | null;
   normalized_net_sale_price?: number | null;
