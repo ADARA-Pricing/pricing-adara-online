@@ -283,6 +283,16 @@ function hasDetailedOrderData(order: MeliOrder) {
   );
 }
 
+async function upsertOrderItemsInBatches(supabase: ReturnType<typeof createAdminClient>, rows: Record<string, unknown>[], batchSize = 100) {
+  for (let index = 0; index < rows.length; index += batchSize) {
+    const batch = rows.slice(index, index + batchSize);
+    const { error } = await supabase
+      .from("mercadolibre_order_items")
+      .upsert(batch, { onConflict: "order_id,meli_item_id,variation_id,sku" });
+    if (error) throw new Error(error.message);
+  }
+}
+
 async function detailedOrder(order: MeliOrder, account: Awaited<ReturnType<typeof getConnectedMeliAccount>>) {
   const orderId = asString(order.id);
   if (!orderId || hasDetailedOrderData(order)) return order;
@@ -446,10 +456,7 @@ export async function POST(request: Request) {
 
     const rows = [...rowsByKey.values()];
     if (rows.length) {
-      const { error } = await supabase
-        .from("mercadolibre_order_items")
-        .upsert(rows, { onConflict: "order_id,meli_item_id,variation_id,sku" });
-      if (error) throw new Error(error.message);
+      await upsertOrderItemsInBatches(supabase, rows);
     }
 
     return NextResponse.json({ ok: true, scanned, saved: rows.length, from, to, windows: windows.length, chunkDays });

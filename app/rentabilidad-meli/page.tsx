@@ -117,6 +117,36 @@ const sortLabels: Record<SortKey, string> = {
   activePublications: "MLA",
 };
 
+const salesSelectColumns = [
+  "id",
+  "order_id",
+  "order_date",
+  "status",
+  "meli_item_id",
+  "variation_id",
+  "sku",
+  "product_id",
+  "title",
+  "quantity",
+  "unit_price",
+  "total_amount",
+  "real_net_sale_price",
+  "real_total_net_profit",
+  "normalized_net_sale_price",
+  "normalized_total_net_profit",
+  "normalized_profit_error",
+].join(",");
+
+const publicationSelectColumns = [
+  "product_id",
+  "sku",
+  "active",
+  "meli_item_id",
+  "meli_status",
+  "meli_stock",
+  "meli_thumbnail",
+].join(",");
+
 function RentabilityThumbnail({ src, label }: { src: string | null; label: string }) {
   const [failed, setFailed] = useState(false);
   return (
@@ -153,20 +183,20 @@ export default function RentabilidadMeliPage() {
   }
 
   async function fetchSalesSince(sinceIso: string) {
-    const pageSize = 1000;
+    const pageSize = 500;
     const result: MercadoLibreOrderItem[] = [];
 
-    for (let from = 0; from < 30000; from += pageSize) {
+    for (let from = 0; from < 20000; from += pageSize) {
       const to = from + pageSize - 1;
       const response = await supabase
         .from("mercadolibre_order_items")
-        .select("*")
+        .select(salesSelectColumns)
         .gte("order_date", sinceIso)
         .order("order_date", { ascending: false })
         .range(from, to);
 
       if (response.error) return response;
-      const page = (response.data || []) as MercadoLibreOrderItem[];
+      const page = (response.data || []) as unknown as MercadoLibreOrderItem[];
       result.push(...page);
       if (page.length < pageSize) break;
     }
@@ -182,7 +212,7 @@ export default function RentabilidadMeliPage() {
 
     const [productsResponse, publicationsResponse, salesResponse] = await Promise.all([
       supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
-      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
+      supabase.from("mercadolibre_shipping_costs").select(publicationSelectColumns).eq("active", true),
       fetchSalesSince(since.toISOString()),
     ]);
 
@@ -190,7 +220,7 @@ export default function RentabilidadMeliPage() {
     if (productsResponse.error) setError(productsResponse.error.message);
     else setProducts((productsResponse.data || []) as Product[]);
     if (publicationsResponse.error) setError(publicationsResponse.error.message);
-    else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
+    else setPublications((publicationsResponse.data || []) as unknown as MercadoLibreShippingCost[]);
     if (salesResponse.error) setError(salesResponse.error.message);
     else setSales((salesResponse.data || []) as MercadoLibreOrderItem[]);
   }
@@ -208,7 +238,7 @@ export default function RentabilidadMeliPage() {
       const response = await fetch("/api/mercadolibre/sync-sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 60, chunkDays: 7 }),
+        body: JSON.stringify({ days: 60, chunkDays: 3 }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudieron sincronizar ventas.");
