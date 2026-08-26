@@ -21,7 +21,6 @@ import {
   SlidersHorizontal,
   Store,
   Tags,
-  Target,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
@@ -38,7 +37,6 @@ function SidebarIcon({ icon: Icon, active = false, sub = false }: { icon: Lucide
 
 const mainItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/oportunidades", label: "Oportunidades", icon: Target },
   { href: "/rotacion-sku", label: "Rotacion SKU", icon: RefreshCcw },
   { href: "/rentabilidad-meli", label: "Rentabilidad ML", icon: CircleDollarSign },
   { href: "/productos", label: "Productos", icon: Package },
