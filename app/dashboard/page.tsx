@@ -415,7 +415,6 @@ export default function DashboardPage() {
     }, 900);
 
     try {
-      progressCap = 72;
       const statuses = [
         { value: "active", label: "activas" },
         { value: "paused", label: "pausadas" },
@@ -423,7 +422,6 @@ export default function DashboardPage() {
       ];
       const pageLimit = 10;
       let resetPromotions = true;
-      let syncedPages = 0;
       const shippingTotals = {
         updated: 0,
         changed: 0,
@@ -434,15 +432,23 @@ export default function DashboardPage() {
         totalItems: 0,
       };
 
-      for (const status of statuses) {
+      for (const [statusIndex, status] of statuses.entries()) {
         let offset = 0;
         let total = pageLimit;
 
+        const shippingPercent = (processed: number, totalItems: number) => {
+          const statusWeight = 77 / statuses.length;
+          const cappedTotal = Math.max(1, Math.min(totalItems || pageLimit, 1000));
+          const statusRatio = Math.max(0, Math.min(processed / cappedTotal, 1));
+          return Math.min(82, Math.round(5 + statusIndex * statusWeight + statusRatio * statusWeight));
+        };
+
         while (offset < total && offset < 1000) {
-          const percentDone = Math.min(68, 8 + syncedPages * 4);
+          const percentDone = shippingPercent(offset, total);
+          progressCap = Math.max(progressCap, percentDone + 2);
           setSyncProgress({
             percent: percentDone,
-            label: `Actualizando publicaciones ${status.label}: ${offset + 1}-${Math.min(offset + pageLimit, total)}...`,
+            label: `Actualizando publicaciones ${status.label}: ${offset + 1}-${Math.min(offset + pageLimit, Math.max(total, offset + pageLimit))} de ${Math.min(total, 1000)}...`,
           });
           const shippingResponse = await fetch("/api/mercadolibre/sync-shipping", {
             method: "POST",
@@ -467,15 +473,20 @@ export default function DashboardPage() {
           shippingTotals.matched += Number(shippingData?.matched || 0);
           shippingTotals.totalItems += Number(shippingData?.total_items || 0);
           resetPromotions = false;
-          syncedPages += 1;
           offset += pageLimit;
+          const nextPercent = shippingPercent(Math.min(offset, total), total);
+          progressCap = Math.max(progressCap, nextPercent + 2);
+          setSyncProgress({
+            percent: nextPercent,
+            label: `Publicaciones ${status.label}: ${Math.min(offset, total, 1000)} de ${Math.min(total, 1000)} procesadas.`,
+          });
 
           if (Number(shippingData?.total_items || 0) === 0) break;
         }
       }
 
-      progressCap = 88;
-      setSyncProgress({ percent: 70, label: "Actualizando ventas y rentabilidad real..." });
+      progressCap = 92;
+      setSyncProgress({ percent: 84, label: "Actualizando ventas y rentabilidad real..." });
       const salesResponse = await fetch("/api/mercadolibre/sync-sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -484,8 +495,8 @@ export default function DashboardPage() {
       const salesData = await readJsonResponse(salesResponse, "Ventas ML devolvio una respuesta inesperada");
       if (!salesResponse.ok) throw new Error(salesData?.error || "No se pudieron sincronizar ventas.");
 
-      progressCap = 96;
-      setSyncProgress({ percent: 90, label: "Recargando dashboard con datos actualizados..." });
+      progressCap = 98;
+      setSyncProgress({ percent: 94, label: "Recargando dashboard con datos actualizados..." });
       setSyncInfo(
         `Sync completa: ${shippingTotals.updated} publicaciones actualizadas, ${shippingTotals.changed} costos de envio cambiados, ` +
         `${shippingTotals.promotionOpportunities} promos guardadas, ${shippingTotals.installmentFeeUpdates} costos de cuotas actualizados, ` +
