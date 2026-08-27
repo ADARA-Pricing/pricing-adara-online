@@ -50,6 +50,7 @@ type Row = {
   sku: string;
   name: string;
   category: string | null;
+  productStatus: Product["status"] | null;
   imageUrl: string | null;
   stock: number;
   meliOnePayPrice: number | null;
@@ -455,7 +456,6 @@ export default function TiendaNubePage() {
     const productRows = products.flatMap((product) => {
       const sku = normalizeSku(product.sku);
       const publication = (publicationsBySku.get(sku) || [])[0] || null;
-      if (product.status !== "active" && !publication) return [];
       const skuMeliPublications = meliPublicationsBySku.get(sku) || [];
       const latestMeliPublications = latestSyncedPublications(skuMeliPublications);
       const activeMeliPublications = latestMeliPublications.filter((item) => item.meli_status === "active");
@@ -463,8 +463,10 @@ export default function TiendaNubePage() {
       const stockFromMl = stockSourcePublications.length
         ? Math.max(...stockSourcePublications.map((item) => numberValue(item.meli_stock)))
         : 0;
+      const availableFromMl = activeMeliPublications.length > 0 && stockFromMl > 0;
       const meliOnePay = onePayMeliPublication(stockSourcePublications);
       const meliOnePayPrice = activeMeliSalePrice(meliOnePay);
+      if (product.status !== "active" && !publication && !availableFromMl) return [];
       if (publication?.id) linkedPublicationKeys.add(publication.id);
       const categoryFee = categoryFees.find((item) => item.category?.toLowerCase() === (product.category || "").toLowerCase()) || null;
       const setting = margins.find((item) => item.product_id === product.id && item.channel_code.toUpperCase() === "TN");
@@ -533,6 +535,7 @@ export default function TiendaNubePage() {
         sku,
         name: product.name,
         category: product.category || null,
+        productStatus: product.status,
         imageUrl: publication?.image_url || productImage(skuMeliPublications),
         stock: stockSourcePublications.length ? stockFromMl : numberValue(product.stock),
         meliOnePayPrice,
@@ -572,6 +575,7 @@ export default function TiendaNubePage() {
           sku: sku || "-",
           name: publication.title || "Publicación sin nombre",
           category: product?.category || null,
+          productStatus: product?.status || null,
           imageUrl: publication.image_url || productImage(skuMeliPublications),
           stock: stockSourcePublications.length ? stockFromMl : numberValue(publication.stock),
           meliOnePayPrice: null,
@@ -1027,7 +1031,10 @@ export default function TiendaNubePage() {
                       <ProductThumb src={row.imageUrl} label={row.name || row.sku} />
                       <div>
                         <strong>{row.name}</strong>
-                        <span>{row.sku} · {row.category || "Sin categoría"}</span>
+                        <span>
+                          {row.sku} · {row.category || "Sin categoría"}
+                          {row.productStatus === "paused" ? " · Pausado local" : ""}
+                        </span>
                         {row.publication && <small>TN {row.publication.tiendanube_product_id} / Var {row.publication.tiendanube_variant_id}</small>}
                       </div>
                     </div>
