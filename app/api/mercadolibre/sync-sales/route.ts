@@ -388,12 +388,13 @@ export async function POST(request: Request) {
       if (sku) historiesBySku.set(sku, [...(historiesBySku.get(sku) || []), history]);
     });
 
-    const rowsByKey = new Map<string, Record<string, unknown>>();
     const limit = 50;
     let scanned = 0;
-    const windows = dateWindows(from, to, chunkDays);
+    let saved = 0;
+    const windows = dateWindows(from, to, chunkDays).reverse();
 
     for (const window of windows) {
+      const windowRowsByKey = new Map<string, Record<string, unknown>>();
       let offset = 0;
 
       while (offset < 1000) {
@@ -442,7 +443,7 @@ export async function POST(request: Request) {
               actualInstallments,
             });
 
-            rowsByKey.set(key, {
+            windowRowsByKey.set(key, {
               order_id: orderId,
               order_date: order.date_created,
               status: order.status || null,
@@ -472,14 +473,15 @@ export async function POST(request: Request) {
         offset += limit;
         if (!orders.length || offset >= pagingTotal) break;
       }
+
+      const windowRows = [...windowRowsByKey.values()];
+      if (windowRows.length) {
+        await upsertOrderItemsInBatches(supabase, windowRows);
+        saved += windowRows.length;
+      }
     }
 
-    const rows = [...rowsByKey.values()];
-    if (rows.length) {
-      await upsertOrderItemsInBatches(supabase, rows);
-    }
-
-    return NextResponse.json({ ok: true, scanned, saved: rows.length, from, to, windows: windows.length, chunkDays });
+    return NextResponse.json({ ok: true, scanned, saved, from, to, windows: windows.length, chunkDays });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudieron sincronizar ventas.";
     return NextResponse.json({ error: message }, { status: 500 });
