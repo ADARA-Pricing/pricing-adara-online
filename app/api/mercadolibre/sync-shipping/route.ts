@@ -1599,7 +1599,7 @@ export async function POST(request: NextRequest) {
       const currentRowsByItem = new Map<string, CurrentShippingCostRow[]>();
       const currentRowsByProduct = new Map<string, CurrentShippingCostRow[]>();
       const updateRows: any[] = [];
-      const insertRows: any[] = [];
+      const insertRowsByProductItem = new Map<string, any>();
 
       for (const ids of chunk([...matchedItemIds], 100)) {
         const { data: currentRows, error: currentRowsError } = await supabase
@@ -1721,7 +1721,7 @@ export async function POST(request: NextRequest) {
 
           if (!current) {
             const shippingSnapshot = await safeShippingSnapshotForPromotionInsert(item, product);
-            insertRows.push({
+            insertRowsByProductItem.set(`${product.id}|${item.id}`, {
               product_id: product.id,
               sku: product.sku,
               fixed_fee_amount: shippingSnapshot.fixedFeeAmount,
@@ -1766,10 +1766,11 @@ export async function POST(request: NextRequest) {
         if (updateError) throw new Error(updateError.message);
       });
 
+      const insertRows = [...insertRowsByProductItem.values()];
       for (const batch of chunk(insertRows, 100)) {
         const { error: insertError } = await supabase
           .from("mercadolibre_shipping_costs")
-          .insert(batch);
+          .upsert(batch, { onConflict: "product_id,meli_item_id" });
         if (insertError) throw new Error(insertError.message);
       }
 
