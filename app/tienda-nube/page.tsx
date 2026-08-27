@@ -203,6 +203,22 @@ function productImage(publications: MercadoLibreShippingCost[]) {
   return publications.find((publication) => Boolean(publication.meli_thumbnail))?.meli_thumbnail || null;
 }
 
+async function fetchJsonSafe<T extends Record<string, unknown>>(url: string, label: string): Promise<T | { error: string }> {
+  try {
+    const response = await fetch(url);
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!response.ok) {
+      const message = data?.error || data?.message || `${label} devolvio HTTP ${response.status}`;
+      return { error: String(message) };
+    }
+    return data as T;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "respuesta invalida";
+    return { error: `${label}: ${message}` };
+  }
+}
+
 function fallbackTiendaNubeOption(): MercadoLibreInstallmentFee {
   return {
     code: "TN",
@@ -328,46 +344,55 @@ export default function TiendaNubePage() {
   async function loadData() {
     setLoading(true);
     setError(null);
-    const [
-      statusResponse,
-      productsResponse,
-      publicationsResponse,
-      meliPublicationsResponse,
-      optionsResponse,
-      categoryFeesResponse,
-      marginsResponse,
-      taxesResponse,
-      bannersResponse,
-    ] = await Promise.all([
-      fetch("/api/tiendanube/status").then((response) => response.json()),
-      supabase.from("products").select("*").in("status", ["active", "paused"]).order("sku", { ascending: true }),
-      supabase.from("tiendanube_publications").select("*").eq("active", true).order("sku", { ascending: true }),
-      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
-      supabase.from("mercadolibre_installment_fees").select("*").eq("active", true),
-      supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
-      supabase.from("product_channel_margins").select("*"),
-      supabase.from("tax_settings").select("*").eq("key", "default").maybeSingle(),
-      fetch("/api/tiendanube/web-banners").then((response) => response.json()),
-    ]);
+    try {
+      const [
+        statusResponse,
+        productsResponse,
+        publicationsResponse,
+        meliPublicationsResponse,
+        optionsResponse,
+        categoryFeesResponse,
+        marginsResponse,
+        taxesResponse,
+        bannersResponse,
+      ] = await Promise.all([
+        fetchJsonSafe<TnStatus>("/api/tiendanube/status", "Estado Tienda Nube"),
+        supabase.from("products").select("*").in("status", ["active", "paused"]).order("sku", { ascending: true }),
+        supabase.from("tiendanube_publications").select("*").eq("active", true).order("sku", { ascending: true }),
+        supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
+        supabase.from("mercadolibre_installment_fees").select("*").eq("active", true),
+        supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
+        supabase.from("product_channel_margins").select("*"),
+        supabase.from("tax_settings").select("*").eq("key", "default").maybeSingle(),
+        fetchJsonSafe<{ banners?: TiendanubeWebBanner[] }>("/api/tiendanube/web-banners", "Banners Tienda Nube"),
+      ]);
 
-    setLoading(false);
-    if (statusResponse?.error) setError(statusResponse.error);
-    else setStatus(statusResponse as TnStatus);
-    if (productsResponse.error) setError(productsResponse.error.message);
-    else setProducts((productsResponse.data || []) as Product[]);
-    if (publicationsResponse.error) setError(publicationsResponse.error.message);
-    else setPublications((publicationsResponse.data || []) as TiendanubePublication[]);
-    if (meliPublicationsResponse.error) setError(meliPublicationsResponse.error.message);
-    else setMeliPublications((meliPublicationsResponse.data || []) as MercadoLibreShippingCost[]);
-    if (optionsResponse.error) setError(optionsResponse.error.message);
-    else setOptions((optionsResponse.data || []) as MercadoLibreInstallmentFee[]);
-    if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
-    else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
-    if (marginsResponse.error) setError(marginsResponse.error.message);
-    else setMargins((marginsResponse.data || []) as ProductChannelMargin[]);
-    if (!taxesResponse.error && taxesResponse.data) setTaxes(taxesResponse.data as TaxSettings);
-    if (bannersResponse?.error) setError(bannersResponse.error);
-    else setWebBanners((bannersResponse?.banners || []) as TiendanubeWebBanner[]);
+      if ("error" in statusResponse && statusResponse.error) setError(statusResponse.error);
+      else setStatus(statusResponse as TnStatus);
+      if (productsResponse.error) setError(productsResponse.error.message);
+      else setProducts((productsResponse.data || []) as Product[]);
+      if (publicationsResponse.error) setError(publicationsResponse.error.message);
+      else setPublications((publicationsResponse.data || []) as TiendanubePublication[]);
+      if (meliPublicationsResponse.error) setError(meliPublicationsResponse.error.message);
+      else setMeliPublications((meliPublicationsResponse.data || []) as MercadoLibreShippingCost[]);
+      if (optionsResponse.error) setError(optionsResponse.error.message);
+      else setOptions((optionsResponse.data || []) as MercadoLibreInstallmentFee[]);
+      if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
+      else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
+      if (marginsResponse.error) setError(marginsResponse.error.message);
+      else setMargins((marginsResponse.data || []) as ProductChannelMargin[]);
+      if (!taxesResponse.error && taxesResponse.data) setTaxes(taxesResponse.data as TaxSettings);
+      if ("error" in bannersResponse && bannersResponse.error) {
+        setError(bannersResponse.error);
+      } else {
+        const bannersData = bannersResponse as { banners?: TiendanubeWebBanner[] };
+        setWebBanners((bannersData.banners || []) as TiendanubeWebBanner[]);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "No se pudo cargar Tienda Nube.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
