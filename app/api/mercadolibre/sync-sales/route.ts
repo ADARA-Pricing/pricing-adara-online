@@ -343,7 +343,7 @@ export async function POST(request: Request) {
       { data: marginsData, error: marginsError },
       { data: costHistoryData, error: costHistoryError },
     ] = await Promise.all([
-      supabase.from("products").select("*").eq("status", "active"),
+      supabase.from("products").select("*").in("status", ["active", "paused"]),
       supabase
         .from("mercadolibre_shipping_costs")
         .select("product_id, sku, meli_item_id, meli_title, fixed_fee_amount, shipping_cost_amount, free_shipping, meli_price, meli_promo_price, meli_promo_status, meli_status, meli_financing_fee_rate, meli_installments_text")
