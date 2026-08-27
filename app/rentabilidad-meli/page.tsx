@@ -464,6 +464,7 @@ export default function RentabilidadMeliPage() {
       units,
       revenue,
       netProfit,
+      grossProfitRate: revenue > 0 ? (netProfit / revenue) * 100 : null,
       margin: netSale > 0 ? (netProfit / netSale) * 100 : null,
       normalizedMargin: normalizedNetSale > 0 ? (netProfit / normalizedNetSale) * 100 : null,
       marginOnCost: costBasis > 0 ? (netProfit / costBasis) * 100 : null,
@@ -680,6 +681,11 @@ export default function RentabilidadMeliPage() {
           <span className="kpi-label">Ganancia real</span>
           <strong className="kpi-value">{moneyWithCents(totals.netProfit)}</strong>
           <small className="kpi-meta">{period === "today" ? "Ganancia del dia" : `Últimos ${period} días`}</small>
+        </article>
+        <article className="kpi-card">
+          <span className="kpi-label">Ganancia / facturacion</span>
+          <strong className="kpi-value">{percent(totals.grossProfitRate)}</strong>
+          <small className="kpi-meta">Sobre venta bruta ML</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Margen real</span>
