@@ -183,6 +183,7 @@ export default function RentabilidadMeliPage() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
+  const [loadingInfo, setLoadingInfo] = useState<string | null>("Cargando rentabilidad ML...");
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -213,23 +214,30 @@ export default function RentabilidadMeliPage() {
 
   async function loadData() {
     setLoading(true);
+    setLoadingInfo("Cargando productos, publicaciones y ventas...");
     setError(null);
     const since = new Date();
     since.setDate(since.getDate() - 65);
 
-    const [productsResponse, publicationsResponse, salesResponse] = await Promise.all([
-      supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
-      supabase.from("mercadolibre_shipping_costs").select(publicationSelectColumns).eq("active", true),
-      fetchSalesSince(since.toISOString()),
-    ]);
+    try {
+      const [productsResponse, publicationsResponse, salesResponse] = await Promise.all([
+        supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
+        supabase.from("mercadolibre_shipping_costs").select(publicationSelectColumns).eq("active", true),
+        fetchSalesSince(since.toISOString()),
+      ]);
 
-    setLoading(false);
-    if (productsResponse.error) setError(productsResponse.error.message);
-    else setProducts((productsResponse.data || []) as Product[]);
-    if (publicationsResponse.error) setError(publicationsResponse.error.message);
-    else setPublications((publicationsResponse.data || []) as unknown as MercadoLibreShippingCost[]);
-    if (salesResponse.error) setError(salesResponse.error.message);
-    else setSales((salesResponse.data || []) as MercadoLibreOrderItem[]);
+      if (productsResponse.error) setError(productsResponse.error.message);
+      else setProducts((productsResponse.data || []) as Product[]);
+      if (publicationsResponse.error) setError(publicationsResponse.error.message);
+      else setPublications((publicationsResponse.data || []) as unknown as MercadoLibreShippingCost[]);
+      if (salesResponse.error) setError(salesResponse.error.message);
+      else setSales((salesResponse.data || []) as MercadoLibreOrderItem[]);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar los datos de rentabilidad ML.");
+    } finally {
+      setLoading(false);
+      setLoadingInfo(null);
+    }
   }
 
   useEffect(() => {
@@ -240,6 +248,7 @@ export default function RentabilidadMeliPage() {
 
   async function syncSales() {
     setSyncing(true);
+    setSyncInfo("Sincronizando ventas de MercadoLibre...");
     setError(null);
     try {
       const response = await fetch("/api/mercadolibre/sync-sales", {
@@ -642,8 +651,14 @@ export default function RentabilidadMeliPage() {
         )}
       />
 
+      {loading && <div className="rotation-sync-info"><span><RefreshCw aria-hidden="true" />{loadingInfo || "Cargando datos..."}</span></div>}
       {error && <div className="alert error">{error}</div>}
-      {syncInfo && <div className="rotation-sync-info"><span>{syncInfo}</span></div>}
+      {syncInfo && <div className="rotation-sync-info"><span>{syncing && <RefreshCw aria-hidden="true" />}{syncInfo}</span></div>}
+      {!loading && !error && (
+        <div className="rotation-sync-info muted">
+          <span>{sales.length} ventas cargadas para analizar rentabilidad.</span>
+        </div>
+      )}
 
       <section className="rotation-summary">
         <article className="kpi-card">
@@ -832,7 +847,13 @@ export default function RentabilidadMeliPage() {
               {!filteredRows.length && (
                 <tr>
                   <td colSpan={10}>
-                    <div className="empty-state">No hay ventas para los filtros actuales.</div>
+                    <div className="empty-state">
+                      {loading
+                        ? "Cargando ventas..."
+                        : period === "today"
+                          ? "No hay ventas de hoy para los filtros actuales. Proba 7 dias o sincroniza ventas."
+                          : "No hay ventas para los filtros actuales."}
+                    </div>
                   </td>
                 </tr>
               )}
@@ -903,6 +924,14 @@ export default function RentabilidadMeliPage() {
           border-radius: 999px;
           background: #f8fbff;
           padding: 7px 10px;
+        }
+        .rotation-sync-info svg {
+          width: 14px;
+          height: 14px;
+          animation: spin 0.9s linear infinite;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
         .rotation-card {
           padding: 18px;
