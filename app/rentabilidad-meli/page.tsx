@@ -874,7 +874,7 @@ export default function RentabilidadMeliPage() {
         }
         .rotation-summary {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 12px;
           margin: 18px 0;
         }
@@ -909,9 +909,8 @@ export default function RentabilidadMeliPage() {
           letter-spacing: 0;
           font-variant-numeric: tabular-nums;
           max-width: 100%;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          overflow-wrap: anywhere;
+          white-space: normal;
         }
         .rotation-sync-info {
           display: flex;
