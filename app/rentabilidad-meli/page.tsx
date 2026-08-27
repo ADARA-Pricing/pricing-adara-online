@@ -677,6 +677,11 @@ export default function RentabilidadMeliPage() {
           <small className="kpi-meta">ML</small>
         </article>
         <article className="kpi-card">
+          <span className="kpi-label">Ganancia real</span>
+          <strong className="kpi-value">{moneyWithCents(totals.netProfit)}</strong>
+          <small className="kpi-meta">{period === "today" ? "Ganancia del dia" : `Últimos ${period} días`}</small>
+        </article>
+        <article className="kpi-card">
           <span className="kpi-label">Margen real</span>
           <strong className="kpi-value">{percent(totals.margin)}</strong>
           <small className="kpi-meta">Sobre ventas reales</small>
@@ -869,7 +874,7 @@ export default function RentabilidadMeliPage() {
         }
         .rotation-summary {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
           gap: 12px;
           margin: 18px 0;
         }
