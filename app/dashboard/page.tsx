@@ -247,6 +247,10 @@ async function readJsonResponse(response: Response, fallbackMessage: string) {
   }
 }
 
+function isJwtClockError(message?: string | null) {
+  return /jwt issued at future/i.test(message || "");
+}
+
 function priorityLabel(priority: Priority) {
   if (priority === "critica") return "Critica";
   if (priority === "alta") return "Alta";
@@ -346,58 +350,83 @@ export default function DashboardPage() {
     return { data: result, error: null };
   }
 
-  async function loadData() {
+  async function loadData(retriedSession = false) {
     setLoading(true);
     setError(null);
     const since = new Date();
     since.setDate(since.getDate() - 65);
 
-    const [
-      productsResponse,
-      publicationsResponse,
-      opportunitiesResponse,
-      salesResponse,
-      installmentsResponse,
-      categoryFeesResponse,
-      taxesResponse,
-      marginsResponse,
-      syncLogsResponse,
-    ] = await Promise.all([
-      supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
-      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
-      fetchOpportunities(),
-      fetchSalesSince(since.toISOString()),
-      supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
-      supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
-      supabase.from("tax_settings").select("*").eq("key", "default").single(),
-      supabase.from("product_channel_margins").select("*"),
-      supabase
-        .from("mercadolibre_shipping_sync_logs")
-        .select("sku,meli_item_id,status,message,created_at")
-        .eq("status", "sku_not_found")
-        .order("created_at", { ascending: false })
-        .limit(2000),
-    ]);
+    try {
+      const [
+        productsResponse,
+        publicationsResponse,
+        opportunitiesResponse,
+        salesResponse,
+        installmentsResponse,
+        categoryFeesResponse,
+        taxesResponse,
+        marginsResponse,
+        syncLogsResponse,
+      ] = await Promise.all([
+        supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
+        supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
+        fetchOpportunities(),
+        fetchSalesSince(since.toISOString()),
+        supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
+        supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
+        supabase.from("tax_settings").select("*").eq("key", "default").single(),
+        supabase.from("product_channel_margins").select("*"),
+        supabase
+          .from("mercadolibre_shipping_sync_logs")
+          .select("sku,meli_item_id,status,message,created_at")
+          .eq("status", "sku_not_found")
+          .order("created_at", { ascending: false })
+          .limit(2000),
+      ]);
 
-    setLoading(false);
-    if (productsResponse.error) setError(productsResponse.error.message);
-    else setProducts((productsResponse.data || []) as Product[]);
-    if (publicationsResponse.error) setError(publicationsResponse.error.message);
-    else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
-    if (opportunitiesResponse.error) setError(opportunitiesResponse.error.message);
-    else setOpportunities((opportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]);
-    if (salesResponse.error) setError(salesResponse.error.message);
-    else setSales((salesResponse.data || []) as MercadoLibreOrderItem[]);
-    if (installmentsResponse.error) setError(installmentsResponse.error.message);
-    else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
-    if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
-    else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
-    if (taxesResponse.error) setError(taxesResponse.error.message);
-    else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
-    if (marginsResponse.error) setError(marginsResponse.error.message);
-    else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
-    if (syncLogsResponse.error) setError(syncLogsResponse.error.message);
-    else setSyncLogs((syncLogsResponse.data || []) as MercadoLibreSyncLog[]);
+      const responseErrors = [
+        productsResponse.error,
+        publicationsResponse.error,
+        opportunitiesResponse.error,
+        salesResponse.error,
+        installmentsResponse.error,
+        categoryFeesResponse.error,
+        taxesResponse.error,
+        marginsResponse.error,
+        syncLogsResponse.error,
+      ].filter(Boolean);
+
+      if (!retriedSession && responseErrors.some((item) => isJwtClockError(item?.message))) {
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        if (!refreshError) {
+          await loadData(true);
+          return;
+        }
+      }
+
+      if (productsResponse.error) setError(productsResponse.error.message);
+      else setProducts((productsResponse.data || []) as Product[]);
+      if (publicationsResponse.error) setError(publicationsResponse.error.message);
+      else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
+      if (opportunitiesResponse.error) setError(opportunitiesResponse.error.message);
+      else setOpportunities((opportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]);
+      if (salesResponse.error) setError(salesResponse.error.message);
+      else setSales((salesResponse.data || []) as MercadoLibreOrderItem[]);
+      if (installmentsResponse.error) setError(installmentsResponse.error.message);
+      else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
+      if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
+      else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
+      if (taxesResponse.error) setError(taxesResponse.error.message);
+      else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
+      if (marginsResponse.error) setError(marginsResponse.error.message);
+      else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
+      if (syncLogsResponse.error) setError(syncLogsResponse.error.message);
+      else setSyncLogs((syncLogsResponse.data || []) as MercadoLibreSyncLog[]);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "No se pudo cargar el dashboard.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function syncAccount() {
