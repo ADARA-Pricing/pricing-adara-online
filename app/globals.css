@@ -13716,6 +13716,7 @@ body {
 
 /* v8.21 - Ajustes finales responsive Metricas ML */
 .metricas-meli-page .app-page-hero {
+  display: flex !important;
   flex-wrap: wrap;
 }
 
@@ -13725,12 +13726,13 @@ body {
 }
 
 .metricas-meli-page .page-hero-actions {
-  display: flex;
+  display: flex !important;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  flex: 0 0 auto;
-  flex-shrink: 0;
+  gap: 10px !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  flex-wrap: wrap;
   min-width: max-content;
 }
 
