@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 
 const items = [
   { href: "/productos", label: "Productos" },
-  { href: "/rotacion-sku", label: "Rotacion SKU" },
-  { href: "/rentabilidad-meli", label: "Rentabilidad ML" },
-  { href: "/metricas-meli", label: "Metricas ML" },
+  { href: "/metricas-meli", label: "Metricas ML / Negocio" },
+  { href: "/rotacion-sku", label: "Metricas ML / Rotacion SKU" },
+  { href: "/rentabilidad-meli", label: "Metricas ML / Rentabilidad" },
   { href: "/mercadolibre", label: "Costo x canal" },
   { href: "/tienda-nube", label: "Tienda Nube" },
   { href: "/impuestos", label: "Impuestos" },

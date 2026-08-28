@@ -38,9 +38,6 @@ function SidebarIcon({ icon: Icon, active = false, sub = false }: { icon: Lucide
 
 const mainItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/rotacion-sku", label: "Rotacion SKU", icon: RefreshCcw },
-  { href: "/rentabilidad-meli", label: "Rentabilidad ML", icon: CircleDollarSign },
-  { href: "/metricas-meli", label: "Metricas ML", icon: ChartColumnIncreasing },
   { href: "/productos", label: "Productos", icon: Package },
   { href: "/mercadolibre", label: "Costo x canal", icon: ChartNoAxesCombined },
   { href: "/impuestos", label: "Impuestos", icon: ReceiptText },
@@ -49,6 +46,12 @@ const mainItems: NavItem[] = [
   { href: "/promociones-meli", label: "Promociones Meli", icon: BadgePercent },
   { href: "/asesoria-360", label: "Asesoria 360", icon: Compass },
   { href: "/simulador", label: "Simulador", icon: Calculator },
+];
+
+const metricItems: NavItem[] = [
+  { href: "/metricas-meli", label: "Negocio", icon: ChartColumnIncreasing },
+  { href: "/rotacion-sku", label: "Rotacion SKU", icon: RefreshCcw },
+  { href: "/rentabilidad-meli", label: "Rentabilidad ML", icon: CircleDollarSign },
 ];
 
 const configItems: NavItem[] = [
@@ -111,6 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (publicPage) return <>{children}</>;
 
   const configActive = configItems.some((item) => isActive(pathname, item.href));
+  const metricsActive = metricItems.some((item) => isActive(pathname, item.href));
   const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
 
   return (
@@ -141,6 +145,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+
+          <div className={`sidebar-link sidebar-section ${metricsActive ? "active-section" : ""}`}>
+            <span className="sidebar-icon"><SidebarIcon icon={ChartColumnIncreasing} active={metricsActive} /></span>
+            <span className="sidebar-label">Metricas ML</span>
+            <span className="sidebar-caret">⌃</span>
+          </div>
+
+          <div className="sidebar-submenu">
+            {metricItems.map((item) => {
+              const active = isActive(pathname, item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`sidebar-sublink ${active ? "active" : ""}`}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <span className="sidebar-icon sidebar-subicon"><SidebarIcon icon={item.icon} active={active} sub /></span>
+                  <span className="sidebar-label">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
 
           <div className={`sidebar-link sidebar-section ${configActive ? "active-section" : ""}`}>
             <span className="sidebar-icon"><SidebarIcon icon={Settings} active={configActive} /></span>
