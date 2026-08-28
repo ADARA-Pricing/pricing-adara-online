@@ -86,6 +86,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const supabase = createClient();
   const [collapsed, setCollapsed] = useState(false);
+  const [metricsOpen, setMetricsOpen] = useState(true);
+  const [configOpen, setConfigOpen] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   const publicPage = pathname === "/" || pathname?.startsWith("/login");
@@ -93,6 +95,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stored = window.localStorage.getItem("adara-sidebar-collapsed");
     if (stored) setCollapsed(stored === "true");
+    const storedMetrics = window.localStorage.getItem("adara-sidebar-metrics-open");
+    const storedConfig = window.localStorage.getItem("adara-sidebar-config-open");
+    if (storedMetrics) setMetricsOpen(storedMetrics === "true");
+    if (storedConfig) setConfigOpen(storedConfig === "true");
     supabase.auth.getUser().then(({ data }) => {
       setUserEmail(data.user?.email ?? null);
     });
@@ -115,7 +121,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const configActive = configItems.some((item) => isActive(pathname, item.href));
   const metricsActive = metricItems.some((item) => isActive(pathname, item.href));
+  const showMetrics = metricsOpen || metricsActive;
+  const showConfig = configOpen || configActive;
   const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
+
+  function toggleMetricsOpen() {
+    setMetricsOpen((current) => {
+      const next = !current;
+      window.localStorage.setItem("adara-sidebar-metrics-open", String(next));
+      return next;
+    });
+  }
+
+  function toggleConfigOpen() {
+    setConfigOpen((current) => {
+      const next = !current;
+      window.localStorage.setItem("adara-sidebar-config-open", String(next));
+      return next;
+    });
+  }
 
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
@@ -146,13 +170,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
 
-          <div className={`sidebar-link sidebar-section ${metricsActive ? "active-section" : ""}`}>
+          <button
+            type="button"
+            className={`sidebar-link sidebar-section ${metricsActive ? "active-section" : ""}`}
+            onClick={toggleMetricsOpen}
+            aria-expanded={showMetrics}
+          >
             <span className="sidebar-icon"><SidebarIcon icon={ChartColumnIncreasing} active={metricsActive} /></span>
             <span className="sidebar-label">Metricas ML</span>
-            <span className="sidebar-caret">⌃</span>
-          </div>
+            <span className="sidebar-caret">{showMetrics ? "⌃" : "⌄"}</span>
+          </button>
 
-          <div className="sidebar-submenu">
+          {showMetrics && <div className="sidebar-submenu">
             {metricItems.map((item) => {
               const active = isActive(pathname, item.href);
               return (
@@ -167,15 +196,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
-          </div>
+          </div>}
 
-          <div className={`sidebar-link sidebar-section ${configActive ? "active-section" : ""}`}>
+          <button
+            type="button"
+            className={`sidebar-link sidebar-section ${configActive ? "active-section" : ""}`}
+            onClick={toggleConfigOpen}
+            aria-expanded={showConfig}
+          >
             <span className="sidebar-icon"><SidebarIcon icon={Settings} active={configActive} /></span>
             <span className="sidebar-label">Configuracion</span>
-            <span className="sidebar-caret">⌃</span>
-          </div>
+            <span className="sidebar-caret">{showConfig ? "⌃" : "⌄"}</span>
+          </button>
 
-          <div className="sidebar-submenu">
+          {showConfig && <div className="sidebar-submenu">
             {configItems.map((item) => {
               const active = isActive(pathname, item.href);
               return (
@@ -190,7 +224,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
-          </div>
+          </div>}
         </nav>
 
         <div className="sidebar-bottom">
