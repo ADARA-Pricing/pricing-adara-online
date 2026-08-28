@@ -104,6 +104,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  useEffect(() => {
+    if (metricItems.some((item) => isActive(pathname, item.href))) setMetricsOpen(true);
+    if (configItems.some((item) => isActive(pathname, item.href))) setConfigOpen(true);
+  }, [pathname]);
+
   function toggleCollapsed() {
     setCollapsed((current) => {
       const next = !current;
@@ -121,8 +126,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const configActive = configItems.some((item) => isActive(pathname, item.href));
   const metricsActive = metricItems.some((item) => isActive(pathname, item.href));
-  const showMetrics = metricsOpen || metricsActive;
-  const showConfig = configOpen || configActive;
+  const showMetrics = metricsOpen;
+  const showConfig = configOpen;
   const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
 
   function toggleMetricsOpen() {
