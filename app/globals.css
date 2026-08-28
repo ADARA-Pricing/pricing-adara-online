@@ -12,29 +12,34 @@
 
 /* v8.20 - Metricas MercadoLibre */
 .metricas-meli-page .app-page-hero {
-  margin-bottom: 18px;
+  margin-bottom: 22px;
+}
+
+.metricas-meli-page .page-hero-actions .button {
+  min-height: 40px;
+  padding-inline: 16px;
+  white-space: nowrap;
+}
+
+.metricas-meli-page .page-hero-actions .button svg {
+  flex: 0 0 auto;
 }
 
 .metricas-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 18px;
-  align-items: end;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
   padding: 18px;
   margin-bottom: 16px;
 }
 
-.metricas-controls span,
-.metricas-controls label > span {
+.metricas-controls span {
   display: block;
   color: #475569;
   font-size: 12px;
   font-weight: 850;
   margin-bottom: 8px;
-}
-
-.metricas-controls select {
-  width: 100%;
 }
 
 .metricas-segmented {
@@ -63,26 +68,57 @@
 .metricas-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .metricas-summary-grid .kpi-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   min-width: 0;
+  min-height: 94px;
+  padding: 18px 20px;
 }
 
 .metricas-summary-grid .kpi-value {
   display: block;
   max-width: 100%;
   overflow-wrap: anywhere;
-  font-size: clamp(22px, 2.1vw, 30px);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(22px, 2vw, 29px);
+  font-weight: 900;
   line-height: 1.05;
+  margin-top: 6px;
+}
+
+.metricas-summary-grid .kpi-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.metricas-summary-grid .kpi-meta {
+  display: block;
+  margin-top: 8px;
+}
+
+.metricas-help {
+  display: inline-flex;
+  align-items: center;
+  color: #64748b;
+  cursor: help;
+}
+
+.metricas-help svg {
+  width: 14px;
+  height: 14px;
 }
 
 .metricas-chart-card,
 .metricas-table-card {
   padding: 18px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .metricas-chart-head,
@@ -102,17 +138,22 @@
 }
 
 .metricas-chart-head p,
-.metricas-table-head span {
+.metricas-table-head > span {
   margin: 0;
   color: #64748b;
   font-size: 13px;
 }
 
-.metricas-chart-head svg {
-  color: #2563eb;
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
+.metricas-chart-select {
+  display: grid;
+  gap: 6px;
+  min-width: 240px;
+}
+
+.metricas-chart-select span {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .metricas-chart-scroll {
@@ -133,10 +174,21 @@
   stroke-width: 1.4;
 }
 
+.metricas-grid-line {
+  stroke: #e8eef7;
+  stroke-width: 1;
+}
+
+.metricas-y-label {
+  fill: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
 .metricas-line {
   fill: none;
-  stroke: #0f172a;
-  stroke-width: 2.5;
+  stroke: #2563eb;
+  stroke-width: 2.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -155,6 +207,33 @@
   stroke-width: 2;
 }
 
+.metricas-point .metricas-svg-tooltip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.metricas-point:hover .metricas-svg-tooltip {
+  opacity: 1;
+}
+
+.metricas-svg-tooltip rect {
+  fill: #0f172a;
+  opacity: 0.96;
+}
+
+.metricas-svg-tooltip text {
+  fill: #dbeafe;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.metricas-svg-tooltip .metricas-tooltip-date,
+.metricas-svg-tooltip .metricas-tooltip-value {
+  fill: #ffffff;
+  font-weight: 900;
+}
+
 .metricas-axis-label {
   fill: #64748b;
   font-size: 11px;
@@ -166,6 +245,7 @@
   border-collapse: separate;
   border-spacing: 0;
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .metricas-table th {
@@ -185,8 +265,82 @@
   white-space: nowrap;
 }
 
+.metricas-table tbody tr:hover td {
+  background: #f8fafc;
+}
+
+.metricas-table tbody tr.is-today td {
+  background: #f8fbff;
+}
+
 .metricas-table td:first-child {
   color: #0f172a;
+}
+
+.metricas-table .numeric-header,
+.metricas-table .numeric-cell {
+  text-align: right;
+}
+
+.metricas-table .metricas-net-profit {
+  color: #2563eb;
+  font-weight: 650;
+}
+
+.metricas-table .metricas-net-profit.negative-money {
+  color: #dc2626;
+}
+
+.metricas-table .rotation-sort-trigger {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  padding: 0;
+  text-align: inherit;
+  text-transform: inherit;
+  white-space: nowrap;
+}
+
+.metricas-table .numeric-header .rotation-sort-trigger {
+  justify-content: flex-end;
+}
+
+.metricas-table .rotation-sort-trigger svg {
+  width: 13px;
+  height: 13px;
+  color: #2563eb;
+  flex: 0 0 auto;
+}
+
+.metricas-table .rotation-sort-trigger .idle-sort-icon {
+  opacity: 0;
+}
+
+.metricas-table .rotation-sort-trigger:hover .idle-sort-icon {
+  opacity: 0.65;
+}
+
+.metricas-table .rotation-sort-trigger.active {
+  color: #1d4ed8;
+}
+
+.metricas-today-pill {
+  display: inline-flex;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 850;
 }
 
 @media (max-width: 1100px) {
@@ -197,7 +351,8 @@
 
 @media (max-width: 760px) {
   .metricas-controls {
-    grid-template-columns: 1fr;
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .metricas-summary-grid {
@@ -206,6 +361,16 @@
 
   .metricas-segmented button {
     flex: 1 1 calc(50% - 8px);
+  }
+
+  .metricas-chart-head,
+  .metricas-table-head {
+    flex-direction: column;
+  }
+
+  .metricas-chart-select {
+    width: 100%;
+    min-width: 0;
   }
 }
 

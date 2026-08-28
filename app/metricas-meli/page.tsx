@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart3, RefreshCw, TrendingUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Info, RefreshCw, TrendingUp } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import { moneyWithCents, percent } from "@/lib/pricing";
@@ -10,6 +10,8 @@ import type { MercadoLibreOrderItem } from "@/lib/types";
 
 type Period = "week" | "month" | "30" | "60";
 type MetricKey = "revenue" | "netProfit" | "units" | "orders" | "grossProfitRate" | "realMargin" | "normalizedMargin" | "marginOnCost" | "avgTicket";
+type SortKey = "key" | MetricKey;
+type SortDirection = "asc" | "desc";
 
 type DailyMetric = {
   key: string;
@@ -48,11 +50,18 @@ const metricLabels: Record<MetricKey, string> = {
   netProfit: "Ganancia neta",
   units: "Unidades",
   orders: "Ventas",
-  grossProfitRate: "Ganancia / facturacion",
+  grossProfitRate: "Ganancia / facturación",
   realMargin: "Margen real",
   normalizedMargin: "Margen normalizado",
   marginOnCost: "Margen sobre costo",
   avgTicket: "Ticket promedio",
+};
+
+const metricHelp: Partial<Record<MetricKey, string>> = {
+  grossProfitRate: "Ganancia neta real dividida por facturación bruta ML.",
+  realMargin: "Ganancia neta real dividida por venta neta real.",
+  normalizedMargin: "Ganancia neta real dividida por venta neta normalizada a 1 pago.",
+  marginOnCost: "Ganancia neta real dividida por costo usado para el cálculo.",
 };
 
 const metricKinds: Record<MetricKey, "money" | "percent" | "number"> = {
@@ -103,8 +112,8 @@ function startForPeriod(period: Period) {
 function periodLabel(period: Period) {
   if (period === "week") return "Semana";
   if (period === "month") return "Mes en curso";
-  if (period === "30") return "Ultimos 30 dias";
-  return "Ultimos 60 dias";
+  if (period === "30") return "Últimos 30 días";
+  return "Últimos 60 días";
 }
 
 function formatMetric(value: number | null, metric: MetricKey) {
@@ -113,6 +122,17 @@ function formatMetric(value: number | null, metric: MetricKey) {
   if (kind === "money") return moneyWithCents(value);
   if (kind === "percent") return percent(value);
   return new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatAxisValue(value: number, metric: MetricKey) {
+  if (!Number.isFinite(value)) return "-";
+  const kind = metricKinds[metric];
+  if (kind === "percent") return `${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 }).format(value)}%`;
+  if (kind === "number") return new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(value);
+  const abs = Math.abs(value);
+  if (abs >= 1000000) return `$ ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 }).format(value / 1000000)} M`;
+  if (abs >= 1000) return `$ ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(value / 1000)} K`;
+  return moneyWithCents(value);
 }
 
 function isJwtClockError(message?: string | null) {
@@ -125,6 +145,8 @@ export default function MetricasMeliPage() {
   const [sales, setSales] = useState<MercadoLibreOrderItem[]>([]);
   const [period, setPeriod] = useState<Period>("month");
   const [metric, setMetric] = useState<MetricKey>("revenue");
+  const [sortKey, setSortKey] = useState<SortKey>("key");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -174,7 +196,7 @@ export default function MetricasMeliPage() {
       }
       setSales((response.data || []) as MercadoLibreOrderItem[]);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar las metricas ML.");
+      setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar las métricas ML.");
     } finally {
       setLoading(false);
     }
@@ -289,35 +311,80 @@ export default function MetricasMeliPage() {
     };
   }, [dailyRows]);
 
+  const sortedDailyRows = useMemo(() => {
+    const multiplier = sortDirection === "asc" ? 1 : -1;
+    return [...dailyRows].sort((a, b) => {
+      if (sortKey === "key") return a.key.localeCompare(b.key) * multiplier;
+      return (numberValue(a[sortKey]) - numberValue(b[sortKey])) * multiplier;
+    });
+  }, [dailyRows, sortDirection, sortKey]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection(key === "key" ? "desc" : "desc");
+  }
+
+  function SortIcon({ column }: { column: SortKey }) {
+    if (sortKey !== column) return <ArrowUpDown className="idle-sort-icon" aria-hidden="true" />;
+    return sortDirection === "asc" ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />;
+  }
+
+  function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+    return (
+      <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+        {children}
+        <SortIcon column={column} />
+      </button>
+    );
+  }
+
+  function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+    const help = metricHelp[metricKey];
+    if (!help) return null;
+    return (
+      <span className="metricas-help" title={help} aria-label={help}>
+        <Info aria-hidden="true" />
+      </span>
+    );
+  }
+
   const chartValues = dailyRows.map((row) => Number(row[metric] || 0));
   const minValue = Math.min(0, ...chartValues);
   const maxValue = Math.max(1, ...chartValues);
   const range = maxValue - minValue || 1;
-  const chartWidth = Math.max(720, dailyRows.length * 44);
-  const chartHeight = 280;
+  const chartWidth = Math.max(760, dailyRows.length * 46 + 74);
+  const chartHeight = 300;
   const plotTop = 22;
-  const plotBottom = 232;
+  const plotBottom = 244;
+  const plotLeft = 72;
+  const plotRight = chartWidth - 24;
   const zeroY = plotTop + ((maxValue - 0) / range) * (plotBottom - plotTop);
   const points = dailyRows.map((row, index) => {
-    const x = 28 + (index * (chartWidth - 56)) / Math.max(1, dailyRows.length - 1);
+    const x = plotLeft + (index * (plotRight - plotLeft)) / Math.max(1, dailyRows.length - 1);
     const y = plotTop + ((maxValue - Number(row[metric] || 0)) / range) * (plotBottom - plotTop);
     return { x, y, row };
   });
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
+  const yTicks = Array.from({ length: 5 }, (_, index) => minValue + (range * index) / 4).reverse();
+  const todayKey = dateKey(new Date().toISOString());
 
   return (
     <main className="page metricas-meli-page">
       <PageHero
-        title="Metricas ML"
-        description="Ventas de MercadoLibre por dia: facturacion, ganancia, margen y unidades."
+        title="Métricas ML"
+        description="Ventas de MercadoLibre por día: facturación, ganancia, margen y unidades."
         icon={<TrendingUp aria-hidden="true" />}
         actions={(
-          <button className="button rentability-sync-button" type="button" onClick={syncSales} disabled={syncing || loading}>
+          <button className="button" type="button" onClick={syncSales} disabled={syncing || loading}>
             <RefreshCw aria-hidden="true" />
             {syncing ? "Sincronizando..." : "Sincronizar ventas"}
           </button>
         )}
-        onRefresh={loadData}
+        onRefresh={() => loadData()}
         refreshDisabled={loading || syncing}
       />
 
@@ -336,19 +403,11 @@ export default function MetricasMeliPage() {
             ))}
           </div>
         </div>
-        <label>
-          <span>Metrica del grafico</span>
-          <select value={metric} onChange={(event) => setMetric(event.target.value as MetricKey)}>
-            {(Object.keys(metricLabels) as MetricKey[]).map((key) => (
-              <option key={key} value={key}>{metricLabels[key]}</option>
-            ))}
-          </select>
-        </label>
       </section>
 
       <section className="metricas-summary-grid">
         <article className="kpi-card">
-          <span className="kpi-label">Facturacion</span>
+          <span className="kpi-label">Facturación</span>
           <strong className="kpi-value">{moneyWithCents(totals.revenue)}</strong>
           <small className="kpi-meta">{periodLabel(period)}</small>
         </article>
@@ -358,12 +417,12 @@ export default function MetricasMeliPage() {
           <small className="kpi-meta">Suma real del periodo</small>
         </article>
         <article className="kpi-card">
-          <span className="kpi-label">Ganancia / facturacion</span>
+          <span className="kpi-label">Ganancia / facturación <MetricHelp metricKey="grossProfitRate" /></span>
           <strong className="kpi-value">{percent(totals.grossProfitRate)}</strong>
           <small className="kpi-meta">Neta sobre bruto ML</small>
         </article>
         <article className="kpi-card">
-          <span className="kpi-label">Margen real</span>
+          <span className="kpi-label">Margen real <MetricHelp metricKey="realMargin" /></span>
           <strong className="kpi-value">{percent(totals.realMargin)}</strong>
           <small className="kpi-meta">Sobre neto real</small>
         </article>
@@ -375,7 +434,7 @@ export default function MetricasMeliPage() {
         <article className="kpi-card">
           <span className="kpi-label">Ticket promedio</span>
           <strong className="kpi-value">{formatMetric(totals.avgTicket, "avgTicket")}</strong>
-          <small className="kpi-meta">Facturacion / ventas</small>
+          <small className="kpi-meta">Facturación / ventas</small>
         </article>
       </section>
 
@@ -383,23 +442,48 @@ export default function MetricasMeliPage() {
         <div className="metricas-chart-head">
           <div>
             <h2>{metricLabels[metric]}</h2>
-            <p>{periodLabel(period)} - {dailyRows.length} dias - {sales.length} items de venta cargados</p>
+            <p>{periodLabel(period)} - {dailyRows.length} días - {sales.length} items de venta cargados</p>
           </div>
-          <BarChart3 aria-hidden="true" />
+          <label className="metricas-chart-select">
+            <span>Métrica</span>
+            <select value={metric} onChange={(event) => setMetric(event.target.value as MetricKey)}>
+              {(Object.keys(metricLabels) as MetricKey[]).map((key) => (
+                <option key={key} value={key}>{metricLabels[key]}</option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="metricas-chart-scroll">
           <svg className="metricas-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`Grafico de ${metricLabels[metric]}`}>
-            <line x1="20" x2={chartWidth - 20} y1={zeroY} y2={zeroY} className="metricas-zero-line" />
+            {yTicks.map((tick) => {
+              const y = plotTop + ((maxValue - tick) / range) * (plotBottom - plotTop);
+              return (
+                <g key={tick}>
+                  <line x1={plotLeft} x2={plotRight} y1={y} y2={y} className="metricas-grid-line" />
+                  <text x={plotLeft - 10} y={y + 4} textAnchor="end" className="metricas-y-label">{formatAxisValue(tick, metric)}</text>
+                </g>
+              );
+            })}
+            <line x1={plotLeft} x2={plotRight} y1={zeroY} y2={zeroY} className="metricas-zero-line" />
             <path d={path} className="metricas-line" />
             {points.map((point) => {
               const value = Number(point.row[metric] || 0);
               const barHeight = Math.abs(point.y - zeroY);
               const y = value >= 0 ? point.y : zeroY;
+              const tooltipX = Math.min(Math.max(point.x - 66, plotLeft), chartWidth - 150);
+              const tooltipY = Math.max(10, point.y - 88);
               return (
-                <g key={point.row.key}>
+                <g key={point.row.key} className="metricas-point">
                   <rect x={point.x - 9} y={y} width="18" height={Math.max(2, barHeight)} rx="5" className={value >= 0 ? "metricas-bar" : "metricas-bar negative"} />
                   <circle cx={point.x} cy={point.y} r="4" className="metricas-dot" />
-                  <title>{`${point.row.fullLabel}: ${formatMetric(value, metric)}`}</title>
+                  <g className="metricas-svg-tooltip" transform={`translate(${tooltipX} ${tooltipY})`}>
+                    <rect width="142" height="72" rx="10" />
+                    <text x="10" y="18" className="metricas-tooltip-date">{point.row.label}</text>
+                    <text x="10" y="36">{metricLabels[metric]}</text>
+                    <text x="132" y="36" textAnchor="end" className="metricas-tooltip-value">{formatMetric(value, metric)}</text>
+                    <text x="10" y="56">Ventas {point.row.orders}</text>
+                    <text x="132" y="56" textAnchor="end">Unid. {point.row.units}</text>
+                  </g>
                 </g>
               );
             })}
@@ -415,37 +499,37 @@ export default function MetricasMeliPage() {
       <section className="card metricas-table-card">
         <div className="metricas-table-head">
           <h2>Detalle diario</h2>
-          <span>{periodLabel(period)}</span>
+          <span className="badge badge-neutral">{periodLabel(period)}</span>
         </div>
         <div className="table-wrap">
           <table className="metricas-table">
             <thead>
               <tr>
-                <th>Dia</th>
-                <th>Ventas</th>
-                <th>Unidades</th>
-                <th>Facturacion</th>
-                <th>Ganancia neta</th>
-                <th>Ganancia / fact.</th>
-                <th>Margen real</th>
-                <th>Margen normalizado</th>
-                <th>Margen s/costo</th>
-                <th>Ticket prom.</th>
+                <th><SortButton column="key">Dia</SortButton></th>
+                <th className="numeric-header"><SortButton column="orders">Ventas</SortButton></th>
+                <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+                <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+                <th className="numeric-header"><SortButton column="netProfit">Ganancia neta</SortButton></th>
+                <th className="numeric-header"><SortButton column="grossProfitRate">Ganancia / fact.</SortButton></th>
+                <th className="numeric-header"><SortButton column="realMargin">Margen real</SortButton></th>
+                <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+                <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+                <th className="numeric-header"><SortButton column="avgTicket">Ticket prom.</SortButton></th>
               </tr>
             </thead>
             <tbody>
-              {[...dailyRows].reverse().map((row) => (
-                <tr key={row.key}>
-                  <td><strong>{row.fullLabel}</strong></td>
-                  <td>{formatMetric(row.orders, "orders")}</td>
-                  <td>{formatMetric(row.units, "units")}</td>
-                  <td>{moneyWithCents(row.revenue)}</td>
-                  <td className={row.netProfit < 0 ? "negative-money" : "positive-money"}>{moneyWithCents(row.netProfit)}</td>
-                  <td>{percent(row.grossProfitRate)}</td>
-                  <td>{percent(row.realMargin)}</td>
-                  <td>{percent(row.normalizedMargin)}</td>
-                  <td>{percent(row.marginOnCost)}</td>
-                  <td>{formatMetric(row.avgTicket, "avgTicket")}</td>
+              {sortedDailyRows.map((row) => (
+                <tr key={row.key} className={row.key === todayKey ? "is-today" : ""}>
+                  <td><strong>{row.fullLabel}</strong>{row.key === todayKey ? <span className="metricas-today-pill">Hoy</span> : null}</td>
+                  <td className="numeric-cell">{formatMetric(row.orders, "orders")}</td>
+                  <td className="numeric-cell">{formatMetric(row.units, "units")}</td>
+                  <td className="numeric-cell">{moneyWithCents(row.revenue)}</td>
+                  <td className={`numeric-cell metricas-net-profit ${row.netProfit < 0 ? "negative-money" : ""}`}>{moneyWithCents(row.netProfit)}</td>
+                  <td className="numeric-cell">{percent(row.grossProfitRate)}</td>
+                  <td className="numeric-cell">{percent(row.realMargin)}</td>
+                  <td className="numeric-cell">{percent(row.normalizedMargin)}</td>
+                  <td className="numeric-cell">{percent(row.marginOnCost)}</td>
+                  <td className="numeric-cell">{formatMetric(row.avgTicket, "avgTicket")}</td>
                 </tr>
               ))}
             </tbody>
