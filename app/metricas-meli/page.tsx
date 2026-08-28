@@ -360,8 +360,10 @@ export default function MetricasMeliPage() {
   const chartHeight = 300;
   const plotTop = 22;
   const plotBottom = 244;
-  const plotLeft = 72;
+  const plotLeft = 82;
   const plotRight = chartWidth - 24;
+  const tooltipWidth = 220;
+  const tooltipHeight = 126;
   const zeroY = plotTop + ((maxValue - 0) / range) * (plotBottom - plotTop);
   const points = dailyRows.map((row, index) => {
     const x = plotLeft + (index * (plotRight - plotLeft)) / Math.max(1, dailyRows.length - 1);
@@ -470,20 +472,25 @@ export default function MetricasMeliPage() {
               const value = Number(point.row[metric] || 0);
               const barHeight = Math.abs(point.y - zeroY);
               const y = value >= 0 ? point.y : zeroY;
-              const tooltipX = Math.min(Math.max(point.x - 66, plotLeft), chartWidth - 150);
-              const tooltipY = Math.max(10, point.y - 88);
+              const tooltipX = Math.min(Math.max(point.x - tooltipWidth / 2, plotLeft), chartWidth - tooltipWidth - 12);
+              const tooltipY = Math.min(Math.max(point.y - tooltipHeight - 12, 8), chartHeight - tooltipHeight - 8);
               return (
                 <g key={point.row.key} className="metricas-point">
                   <rect x={point.x - 9} y={y} width="18" height={Math.max(2, barHeight)} rx="5" className={value >= 0 ? "metricas-bar" : "metricas-bar negative"} />
                   <circle cx={point.x} cy={point.y} r="4" className="metricas-dot" />
-                  <g className="metricas-svg-tooltip" transform={`translate(${tooltipX} ${tooltipY})`}>
-                    <rect width="142" height="72" rx="10" />
-                    <text x="10" y="18" className="metricas-tooltip-date">{point.row.label}</text>
-                    <text x="10" y="36">{metricLabels[metric]}</text>
-                    <text x="132" y="36" textAnchor="end" className="metricas-tooltip-value">{formatMetric(value, metric)}</text>
-                    <text x="10" y="56">Ventas {point.row.orders}</text>
-                    <text x="132" y="56" textAnchor="end">Unid. {point.row.units}</text>
-                  </g>
+                  <foreignObject className="metricas-svg-tooltip" x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}>
+                    <div className="metricas-tooltip-card">
+                      <strong>{point.row.label}</strong>
+                      <span>{metricLabels[metric]}</span>
+                      <b>{formatMetric(value, metric)}</b>
+                      <div>
+                        <span>Ventas</span>
+                        <em>{formatMetric(point.row.orders, "orders")}</em>
+                        <span>Unidades</span>
+                        <em>{formatMetric(point.row.units, "units")}</em>
+                      </div>
+                    </div>
+                  </foreignObject>
                 </g>
               );
             })}

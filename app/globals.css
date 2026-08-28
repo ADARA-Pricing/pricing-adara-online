@@ -30,7 +30,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 18px;
+  padding: 14px 16px;
   margin-bottom: 16px;
 }
 
@@ -39,7 +39,7 @@
   color: #475569;
   font-size: 12px;
   font-weight: 850;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .metricas-segmented {
@@ -217,21 +217,50 @@
   opacity: 1;
 }
 
-.metricas-svg-tooltip rect {
-  fill: #0f172a;
-  opacity: 0.96;
+.metricas-tooltip-card {
+  min-width: 180px;
+  max-width: 220px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.96);
+  color: #dbeafe;
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.25;
 }
 
-.metricas-svg-tooltip text {
-  fill: #dbeafe;
-  font-size: 10px;
-  font-weight: 750;
+.metricas-tooltip-card strong,
+.metricas-tooltip-card span,
+.metricas-tooltip-card b {
+  display: block;
 }
 
-.metricas-svg-tooltip .metricas-tooltip-date,
-.metricas-svg-tooltip .metricas-tooltip-value {
-  fill: #ffffff;
+.metricas-tooltip-card strong {
+  color: #ffffff;
+  font-size: 12px;
   font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.metricas-tooltip-card b {
+  color: #ffffff;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.metricas-tooltip-card > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  margin-top: 10px;
+}
+
+.metricas-tooltip-card em {
+  color: #ffffff;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  font-weight: 850;
 }
 
 .metricas-axis-label {
@@ -13682,5 +13711,48 @@ body {
 
   .tienda-nube-page .tn-banner-item .button {
     justify-content: center;
+  }
+}
+
+/* v8.21 - Ajustes finales responsive Metricas ML */
+.metricas-meli-page .app-page-hero {
+  flex-wrap: wrap;
+}
+
+.metricas-meli-page .prices-hero-left {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.metricas-meli-page .page-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-width: max-content;
+}
+
+.metricas-meli-page .page-hero-actions .button {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  width: auto;
+  max-width: none;
+  min-width: max-content;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .metricas-meli-page .page-hero-actions {
+    min-width: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .metricas-meli-page .page-hero-actions .button {
+    width: auto;
   }
 }
