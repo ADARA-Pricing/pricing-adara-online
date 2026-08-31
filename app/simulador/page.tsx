@@ -481,6 +481,7 @@ export default function SimulatorPage() {
     const productShipping = shippingForProduct(product);
     const categoryShipping = averageShippingForCategory(product.category || "");
     const shippingGross = productShipping ?? categoryShipping ?? Number(toNumber(form.shippingGross) || 0);
+    const currentMeliPrice = currentPriceForProduct(product);
 
     setForm((current) => ({
       ...current,
@@ -490,6 +491,7 @@ export default function SimulatorPage() {
       costWithoutVat: String(Math.round(Number(product.cost_without_vat || 0))),
       vatCondition: vatConditionFromProduct(product),
       shippingGross: String(Math.round(shippingGross)),
+      salePrice: currentMeliPrice !== null ? String(Math.round(currentMeliPrice)) : current.salePrice,
     }));
     setLoadedSimulation(null);
     setBaseProductPickerOpen(false);
@@ -574,6 +576,9 @@ export default function SimulatorPage() {
   }
 
   function loadSimulation(item: SavedSimulation) {
+    const matchingProduct = products.find((product) => product.name.trim().toLowerCase() === item.name.trim().toLowerCase());
+    const currentMeliPrice = matchingProduct ? currentPriceForProduct(matchingProduct) : null;
+
     setForm({
       productName: item.name || "",
       provider: item.provider || "",
@@ -581,7 +586,7 @@ export default function SimulatorPage() {
       publicationUrl: item.publication_url || "",
       costWithoutVat: String(Math.round(Number(item.cost_without_vat || 0))),
       desiredMarginRate: formatPercentInput(Number(item.desired_margin_rate || 0)),
-      salePrice: String(Math.round(Number(item.sale_price || 0))),
+      salePrice: String(Math.round(currentMeliPrice ?? Number(item.sale_price || 0))),
       vatCondition: item.vat_condition || "iva_21",
       shippingGross: String(Math.round(Number(item.shipping_gross || 0))),
       iibbRate: formatPercentInput(taxes.iibb_rate),
