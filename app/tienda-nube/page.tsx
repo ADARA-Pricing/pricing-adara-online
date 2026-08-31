@@ -29,7 +29,7 @@ type SortDirection = "asc" | "desc";
 type StatusFilter = "" | "ok" | "needs_price" | "missing" | "unlinked";
 type TiendaNubeTab = "prices" | "web";
 type BannerImageVariant = "desktop" | "mobile";
-type BannerPlacement = "main_carousel" | "promo_strip";
+type BannerPlacement = "main_carousel" | "promo_strip" | "featured_product";
 
 type TnStatus = {
   connected: boolean;
@@ -54,6 +54,7 @@ type WebScriptDiagnostics = {
   bannerCounts?: {
     main: number;
     promo: number;
+    featured: number;
     total: number;
     checked_at: string;
   };
@@ -137,10 +138,19 @@ const bannerImageSpecs: Record<BannerPlacement, Record<BannerImageVariant, { lab
     desktop: { label: "Desktop", width: 2172, height: 724, field: "image_url" },
     mobile: { label: "Mobile", width: 1586, height: 992, field: "mobile_image_url" },
   },
+  featured_product: {
+    desktop: { label: "Desktop", width: 1440, height: 520, field: "image_url" },
+    mobile: { label: "Mobile", width: 820, height: 1100, field: "mobile_image_url" },
+  },
 };
 
 function bannerImageSpec(placement: BannerPlacement, variant: BannerImageVariant) {
   return bannerImageSpecs[placement][variant];
+}
+
+function bannerPlacement(value?: string | null): BannerPlacement {
+  if (value === "promo_strip" || value === "featured_product") return value;
+  return "main_carousel";
 }
 
 function normalizeSku(value?: string | null) {
@@ -310,7 +320,7 @@ function dateInputValue(value?: string | null) {
 function bannerToForm(banner: TiendanubeWebBanner): BannerForm {
   return {
     id: banner.id,
-    placement: banner.placement === "promo_strip" ? "promo_strip" : "main_carousel",
+    placement: bannerPlacement(banner.placement),
     position: Number(banner.position || 0),
     title: banner.title || "",
     subtitle: banner.subtitle || "",
@@ -465,7 +475,7 @@ export default function TiendaNubePage() {
   }, []);
 
   const activeSectionBanners = useMemo(() => {
-    return webBanners.filter((banner) => (banner.placement === "promo_strip" ? "promo_strip" : "main_carousel") === webSection);
+    return webBanners.filter((banner) => bannerPlacement(banner.placement) === webSection);
   }, [webBanners, webSection]);
 
   const visibleSectionBanners = useMemo(() => {
@@ -474,7 +484,11 @@ export default function TiendaNubePage() {
 
   const webBannerOverview = useMemo(() => {
     const states = webBanners.reduce((summary, banner) => {
-      const placement = banner.placement === "promo_strip" ? "promo" : "main";
+      const placement = bannerPlacement(banner.placement) === "promo_strip"
+        ? "promo"
+        : bannerPlacement(banner.placement) === "featured_product"
+          ? "featured"
+          : "main";
       const key = bannerPublicationState(banner).key;
       summary[placement].total += 1;
       if (key === "live") summary[placement].live += 1;
@@ -485,6 +499,7 @@ export default function TiendaNubePage() {
     }, {
       main: { live: 0, scheduled: 0, paused: 0, expired: 0, total: 0 },
       promo: { live: 0, scheduled: 0, paused: 0, expired: 0, total: 0 },
+      featured: { live: 0, scheduled: 0, paused: 0, expired: 0, total: 0 },
     });
     return states;
   }, [webBanners]);
@@ -501,11 +516,17 @@ export default function TiendaNubePage() {
         description: "Se muestra debajo del mensaje institucional y reemplaza el bloque fijo de la tienda cuando hay banners activos.",
         listTitle: "Banners bajo mensaje",
       }
-    : {
-        title: "Carrusel principal",
-        description: "Se muestra arriba de categorías como primer bloque visual de la home.",
-        listTitle: "Banners del carrusel",
-      };
+    : webSection === "featured_product"
+      ? {
+          title: "Producto destacado",
+          description: "Se muestra como una banda de lanzamiento antes de los bloques de productos de la home.",
+          listTitle: "Productos destacados",
+        }
+      : {
+          title: "Carrusel principal",
+          description: "Se muestra arriba de categorías como primer bloque visual de la home.",
+          listTitle: "Banners del carrusel",
+        };
 
   const tnOption = useMemo(() => {
     const found = options.find((option) => option.code.toUpperCase() === "TN") ||
@@ -813,7 +834,7 @@ export default function TiendaNubePage() {
     setWebSection(section);
     setBannerForm((current) => {
       if (current.id && current.placement !== section) {
-        const sectionBanners = webBanners.filter((banner) => (banner.placement === "promo_strip" ? "promo_strip" : "main_carousel") === section);
+        const sectionBanners = webBanners.filter((banner) => bannerPlacement(banner.placement) === section);
         return {
           ...emptyBannerForm,
           placement: section,
@@ -833,7 +854,7 @@ export default function TiendaNubePage() {
   }
 
   function clearBannerForm() {
-    const sectionBanners = webBanners.filter((banner) => (banner.placement === "promo_strip" ? "promo_strip" : "main_carousel") === webSection);
+    const sectionBanners = webBanners.filter((banner) => bannerPlacement(banner.placement) === webSection);
     setBannerForm({
       ...emptyBannerForm,
       placement: webSection,
@@ -1229,6 +1250,11 @@ export default function TiendaNubePage() {
           <strong>{webBannerOverview.promo.live}</strong>
           <small>{webBannerOverview.promo.scheduled} programado{webBannerOverview.promo.scheduled === 1 ? "" : "s"} · {webBannerOverview.promo.paused + webBannerOverview.promo.expired} fuera de aire</small>
         </article>
+        <article className="card tn-web-overview-card">
+          <span>Producto destacado</span>
+          <strong>{webBannerOverview.featured.live}</strong>
+          <small>{webBannerOverview.featured.scheduled} programado{webBannerOverview.featured.scheduled === 1 ? "" : "s"} · {webBannerOverview.featured.paused + webBannerOverview.featured.expired} fuera de aire</small>
+        </article>
         <article className={`card tn-web-diagnostics-card ${webDiagnostics?.installed ? "is-ok" : "is-warning"}`}>
           <div>
             <span>Instalación web</span>
@@ -1258,6 +1284,9 @@ export default function TiendaNubePage() {
         <button className={webSection === "promo_strip" ? "active" : ""} type="button" onClick={() => selectWebSection("promo_strip")}>
           Banners bajo mensaje
         </button>
+        <button className={webSection === "featured_product" ? "active" : ""} type="button" onClick={() => selectWebSection("featured_product")}>
+          Producto destacado
+        </button>
       </section>
       <section className="tn-web-grid">
         <article className="card tn-banner-editor">
@@ -1270,7 +1299,7 @@ export default function TiendaNubePage() {
           </div>
 
           <div className="tn-banner-form">
-            {bannerForm.placement === "main_carousel" ? (
+            {bannerForm.placement !== "promo_strip" ? (
               <>
                 <label>
                   <span>Título</span>
@@ -1307,7 +1336,7 @@ export default function TiendaNubePage() {
               <small>Puede ser una URL completa o una ruta de la tienda.</small>
               <input value={bannerForm.link_url} onChange={(event) => setBannerForm((current) => ({ ...current, link_url: event.target.value }))} placeholder="/productos/tablets o https://www.adaragroup.com.ar/..." />
             </label>
-            {bannerForm.placement === "main_carousel" ? (
+            {bannerForm.placement !== "promo_strip" ? (
               <>
                 <label>
                   <span>Botón</span>

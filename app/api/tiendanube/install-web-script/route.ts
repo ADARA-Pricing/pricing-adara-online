@@ -47,9 +47,10 @@ async function visibleBannerCounts() {
 
   if (error) throw new Error(error.message);
   const banners = data || [];
-  const main = banners.filter((banner) => banner.placement !== "promo_strip").length;
+  const main = banners.filter((banner) => banner.placement !== "promo_strip" && banner.placement !== "featured_product").length;
   const promo = banners.filter((banner) => banner.placement === "promo_strip").length;
-  return { main, promo, total: banners.length, checked_at: now };
+  const featured = banners.filter((banner) => banner.placement === "featured_product").length;
+  return { main, promo, featured, total: banners.length, checked_at: now };
 }
 
 export async function GET() {

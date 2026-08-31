@@ -20,7 +20,8 @@ function cleanUrl(value: unknown) {
 
 function cleanPlacement(value: unknown) {
   const placement = cleanText(value) || "main_carousel";
-  return placement === "promo_strip" ? "promo_strip" : "main_carousel";
+  if (placement === "promo_strip" || placement === "featured_product") return placement;
+  return "main_carousel";
 }
 
 function cleanColor(value: unknown) {

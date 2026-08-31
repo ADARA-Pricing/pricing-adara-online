@@ -100,6 +100,7 @@ const script = `
     function enforceSectionOrder() {
       var anchor = root;
       anchor = placeAfter(anchor, document.querySelector(".template-home .section-categories-home"));
+      anchor = placeAfter(anchor, document.getElementById("adara-featured-product-dynamic"));
       anchor = placeAfter(anchor, document.querySelector("[data-adara-bestsellers]"));
       anchor = placeAfter(anchor, document.querySelector("[data-adara-notebooks]"));
       placeAfter(anchor, document.querySelector("[data-adara-tablets]"));
@@ -279,12 +280,61 @@ const script = `
     }
   }
 
+  function renderFeatured(banners) {
+    if (!Array.isArray(banners) || !banners.length) return;
+    var banner = banners[0];
+    var existingDynamic = document.getElementById("adara-featured-product-dynamic");
+    if (existingDynamic && existingDynamic.parentNode) existingDynamic.parentNode.removeChild(existingDynamic);
+    var root = document.createElement("section");
+    root.id = "adara-featured-product-dynamic";
+    root.className = "adara-featured-product-dynamic";
+    var image = escapeHtml(bannerImage(banner));
+    var title = escapeHtml(banner.title);
+    var subtitle = escapeHtml(banner.subtitle);
+    var button = escapeHtml(banner.button_label);
+    var link = banner.link_url ? escapeHtml(banner.link_url) : "#";
+    var showText = banner.show_text !== false;
+    var textWidth = normalizeTextWidth(banner.text_width_desktop, 42, 24, 70);
+    var mobileTextWidth = normalizeTextWidth(banner.text_width_mobile, 86, 55, 100);
+    var text = /^#[0-9a-f]{6}$/i.test(String(banner.text_color || "")) ? banner.text_color : "#ffffff";
+    var overlay = normalizeOpacity(banner.overlay_opacity);
+    root.innerHTML = [
+      '<style>',
+      '#adara-featured-product-dynamic{width:100%!important;padding:22px 0 44px!important;background:#fff!important;overflow:hidden!important}',
+      '#adara-featured-product-dynamic .adara-featured-shell{width:min(1360px,calc(100vw - 64px))!important;margin:0 auto!important}',
+      '#adara-featured-product-dynamic .adara-featured-card{position:relative!important;display:block!important;width:100%!important;aspect-ratio:1440/520!important;overflow:hidden!important;border-radius:8px!important;background:#111827!important;text-decoration:none!important;color:var(--adara-text,#fff)!important;box-shadow:0 18px 44px rgba(15,23,42,.08)!important}',
+      '#adara-featured-product-dynamic .adara-featured-card img{display:block!important;width:100%!important;height:100%!important;object-fit:contain!important;object-position:center center!important;background:#111827!important}',
+      '#adara-featured-product-dynamic .adara-overlay{position:absolute;inset:0;background:#000;opacity:var(--adara-overlay,.24);pointer-events:none}',
+      '#adara-featured-product-dynamic .adara-copy{position:absolute;left:5%;bottom:12%;width:min(680px,var(--adara-copy-width,42vw));max-width:82%;z-index:2;color:var(--adara-text,#fff);text-shadow:0 2px 14px rgba(0,0,0,.35)}',
+      '#adara-featured-product-dynamic .adara-copy h2{margin:0 0 8px;font-size:clamp(28px,3.6vw,52px);line-height:1.04;font-weight:800;letter-spacing:0}',
+      '#adara-featured-product-dynamic .adara-copy p{margin:0 0 16px;font-size:clamp(14px,1.45vw,19px);line-height:1.35}',
+      '#adara-featured-product-dynamic .adara-button{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:6px;background:#fff;color:#111;font-weight:700;text-shadow:none}',
+      '@media(max-width:720px){#adara-featured-product-dynamic{padding:16px 0 30px!important}#adara-featured-product-dynamic .adara-featured-shell{width:calc(100vw - 28px)!important}#adara-featured-product-dynamic .adara-featured-card{aspect-ratio:820/1100!important}#adara-featured-product-dynamic .adara-copy{left:18px;right:18px;bottom:24px;width:var(--adara-copy-width-mobile,86vw);max-width:calc(100% - 36px)}}',
+      '</style>',
+      '<div class="adara-featured-shell"><a class="adara-featured-card" href="' + link + '" style="--adara-text:' + text + ';--adara-overlay:' + overlay + ';--adara-copy-width:' + textWidth + 'vw;--adara-copy-width-mobile:' + mobileTextWidth + 'vw">',
+      '<img src="' + image + '" alt="' + title + '" loading="lazy">',
+      (showText ? '<span class="adara-overlay"></span><span class="adara-copy"><h2>' + title + '</h2>' +
+      (subtitle ? '<p>' + subtitle + '</p>' : '') +
+      (button ? '<span class="adara-button">' + button + '</span>' : '') +
+      '</span>' : ''),
+      '</a></div>'
+    ].join("");
+
+    var categories = document.querySelector(".template-home .section-categories-home, .section-categories-home");
+    var mainCarousel = document.getElementById("adara-campaign-carousel");
+    var target = document.querySelector(".js-home-sections-container") || document.querySelector("main") || document.body;
+    if (categories && categories.parentNode) categories.parentNode.insertBefore(root, categories.nextSibling);
+    else if (mainCarousel && mainCarousel.parentNode) mainCarousel.parentNode.insertBefore(root, mainCarousel.nextSibling);
+    else target.insertBefore(root, target.firstChild);
+  }
+
   fetch(origin + "/api/tiendanube/web-banners/public", { cache: "no-store" })
     .then(function (response) { return response.json(); })
     .then(function (data) {
       var banners = data.banners || [];
-      renderMain(banners.filter(function (banner) { return banner.placement !== "promo_strip"; }));
+      renderMain(banners.filter(function (banner) { return banner.placement !== "promo_strip" && banner.placement !== "featured_product"; }));
       renderPromo(banners.filter(function (banner) { return banner.placement === "promo_strip"; }));
+      renderFeatured(banners.filter(function (banner) { return banner.placement === "featured_product"; }));
     })
     .catch(function () {});
 })();

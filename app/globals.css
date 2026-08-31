@@ -13362,7 +13362,7 @@ body {
 
 .tienda-nube-page .tn-web-overview {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(360px, 1.25fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(360px, 1.35fr);
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -13693,6 +13693,15 @@ body {
 .tienda-nube-page .tn-banner-preview.is-promo_strip.is-mobile {
   aspect-ratio: 1586 / 992;
   width: min(100%, 420px);
+}
+
+.tienda-nube-page .tn-banner-preview.is-featured_product {
+  aspect-ratio: 1440 / 520;
+}
+
+.tienda-nube-page .tn-banner-preview.is-featured_product.is-mobile {
+  aspect-ratio: 820 / 1100;
+  width: min(100%, 390px);
 }
 
 .tienda-nube-page .tn-home-preview-main-skeleton {

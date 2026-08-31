@@ -241,7 +241,7 @@ export type TiendanubePublication = {
 
 export type TiendanubeWebBanner = {
   id?: string;
-  placement?: "main_carousel" | "promo_strip" | string | null;
+  placement?: "main_carousel" | "promo_strip" | "featured_product" | string | null;
   position: number;
   title: string;
   subtitle?: string | null;
