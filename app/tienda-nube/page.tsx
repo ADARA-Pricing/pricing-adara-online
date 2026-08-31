@@ -867,6 +867,12 @@ export default function TiendaNubePage() {
     setMessage(null);
     setError(null);
     try {
+      if (bannerForm.placement !== "promo_strip" && !bannerForm.title.trim()) {
+        throw new Error("El título es obligatorio.");
+      }
+      if (!bannerForm.image_url.trim()) {
+        throw new Error("La imagen desktop es obligatoria.");
+      }
       const response = await fetch("/api/tiendanube/web-banners", {
         method: bannerForm.id ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -883,6 +889,7 @@ export default function TiendaNubePage() {
       await loadData();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "No se pudo guardar el banner.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSavingBanner(false);
     }
