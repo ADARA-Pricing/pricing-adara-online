@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabaseAdmin";
 import { requireApiUser } from "@/lib/serverAuth";
 import { getConnectedTiendanubeAccount, tiendanubeAppConfig } from "@/lib/tiendanube";
 
@@ -32,6 +33,83 @@ async function tiendanubeScriptsFetch(path: string, account: NonNullable<Awaited
     throw new Error(`${response.status}: ${message}`);
   }
   return data;
+}
+
+async function visibleBannerCounts() {
+  const now = new Date().toISOString();
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("tiendanube_web_banners")
+    .select("placement")
+    .eq("active", true)
+    .or(`starts_at.is.null,starts_at.lte.${now}`)
+    .or(`ends_at.is.null,ends_at.gte.${now}`);
+
+  if (error) throw new Error(error.message);
+  const banners = data || [];
+  const main = banners.filter((banner) => banner.placement !== "promo_strip").length;
+  const promo = banners.filter((banner) => banner.placement === "promo_strip").length;
+  return { main, promo, total: banners.length, checked_at: now };
+}
+
+export async function GET() {
+  try {
+    await requireApiUser();
+    const account = await getConnectedTiendanubeAccount();
+    const counts = await visibleBannerCounts();
+    const configuredScriptId = scriptId();
+
+    if (!account) {
+      return NextResponse.json({
+        ok: true,
+        connected: false,
+        canInstall: false,
+        installed: false,
+        scriptId: configuredScriptId || null,
+        bannerCounts: counts,
+        message: "Primero conectá Tienda Nube.",
+      });
+    }
+
+    const hasScope = hasScriptsScope(account.scope);
+    let installed = false;
+    let scriptError: string | null = null;
+
+    if (hasScope && configuredScriptId) {
+      try {
+        const existing = await tiendanubeScriptsFetch("/scripts", account);
+        installed = Array.isArray(existing?.result)
+          ? existing.result.some((item: { id?: number }) => Number(item.id) === configuredScriptId)
+          : false;
+      } catch (error) {
+        scriptError = error instanceof Error ? error.message : "No se pudo consultar la instalación.";
+      }
+    }
+
+    const message = !hasScope
+      ? "La conexión actual no tiene permiso scripts. Reconectá Tienda Nube con ese permiso."
+      : !configuredScriptId
+        ? "Falta configurar TIENDANUBE_WEB_BANNER_SCRIPT_ID."
+        : installed
+          ? "Script instalado en Tienda Nube."
+          : "Script no detectado en Tienda Nube.";
+
+    return NextResponse.json({
+      ok: true,
+      connected: true,
+      canInstall: hasScope && Boolean(configuredScriptId),
+      installed,
+      hasScriptsScope: hasScope,
+      currentScope: account.scope || null,
+      scriptId: configuredScriptId || null,
+      bannerCounts: counts,
+      scriptError,
+      message,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo diagnosticar el script.";
+    return NextResponse.json({ error: message }, { status: message === "No autorizado." ? 401 : 500 });
+  }
 }
 
 export async function POST() {

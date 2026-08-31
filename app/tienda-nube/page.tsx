@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Check, ExternalLink, Globe2, Image as ImageIcon, Monitor, Plus, RefreshCw, Save, Search, Smartphone, Store, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Check, Clock3, ExternalLink, Globe2, Image as ImageIcon, Monitor, Plus, RefreshCw, Save, Search, Smartphone, Store, Trash2, Upload } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -41,6 +41,25 @@ type TnStatus = {
     scope?: string | null;
     updated_at?: string | null;
   } | null;
+};
+
+type WebScriptDiagnostics = {
+  ok?: boolean;
+  connected?: boolean;
+  canInstall?: boolean;
+  installed?: boolean;
+  hasScriptsScope?: boolean;
+  currentScope?: string | null;
+  scriptId?: number | null;
+  bannerCounts?: {
+    main: number;
+    promo: number;
+    total: number;
+    checked_at: string;
+  };
+  scriptError?: string | null;
+  message?: string | null;
+  error?: string;
 };
 
 type Row = {
@@ -159,6 +178,40 @@ function shortDate(value?: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function bannerDateLabel(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function bannerPublicationState(banner: Pick<TiendanubeWebBanner, "active" | "starts_at" | "ends_at">) {
+  const now = Date.now();
+  const startsAt = banner.starts_at ? new Date(banner.starts_at).getTime() : null;
+  const endsAt = banner.ends_at ? new Date(banner.ends_at).getTime() : null;
+  const startsValid = startsAt === null || Number.isFinite(startsAt);
+  const endsValid = endsAt === null || Number.isFinite(endsAt);
+  if (!banner.active) return { key: "paused", label: "Pausado", detail: "No se publica en la tienda" };
+  if (startsValid && startsAt !== null && startsAt > now) return { key: "scheduled", label: "Programado", detail: `Sale el ${bannerDateLabel(banner.starts_at)}` };
+  if (endsValid && endsAt !== null && endsAt < now) return { key: "expired", label: "Vencido", detail: `Terminó el ${bannerDateLabel(banner.ends_at)}` };
+  return { key: "live", label: "Visible ahora", detail: "Disponible en el endpoint público" };
+}
+
+function bannerScheduleLabel(banner: Pick<TiendanubeWebBanner, "starts_at" | "ends_at">) {
+  const start = bannerDateLabel(banner.starts_at);
+  const end = bannerDateLabel(banner.ends_at);
+  if (start && end) return `${start} a ${end}`;
+  if (start) return `Desde ${start}`;
+  if (end) return `Hasta ${end}`;
+  return "Sin fechas";
 }
 
 function latestSyncedPublications(publications: MercadoLibreShippingCost[]) {
@@ -313,6 +366,7 @@ export default function TiendaNubePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<TiendanubePublication[]>([]);
   const [webBanners, setWebBanners] = useState<TiendanubeWebBanner[]>([]);
+  const [webDiagnostics, setWebDiagnostics] = useState<WebScriptDiagnostics | null>(null);
   const [webSection, setWebSection] = useState<BannerPlacement>("main_carousel");
   const [bannerForm, setBannerForm] = useState<BannerForm>(emptyBannerForm);
   const [meliPublications, setMeliPublications] = useState<MercadoLibreShippingCost[]>([]);
@@ -356,6 +410,7 @@ export default function TiendaNubePage() {
         marginsResponse,
         taxesResponse,
         bannersResponse,
+        diagnosticsResponse,
       ] = await Promise.all([
         fetchJsonSafe<TnStatus>("/api/tiendanube/status", "Estado Tienda Nube"),
         supabase.from("products").select("*").in("status", ["active", "paused"]).order("sku", { ascending: true }),
@@ -366,6 +421,7 @@ export default function TiendaNubePage() {
         supabase.from("product_channel_margins").select("*"),
         supabase.from("tax_settings").select("*").eq("key", "default").maybeSingle(),
         fetchJsonSafe<{ banners?: TiendanubeWebBanner[] }>("/api/tiendanube/web-banners", "Banners Tienda Nube"),
+        fetchJsonSafe<WebScriptDiagnostics>("/api/tiendanube/install-web-script", "Diagnóstico web Tienda Nube"),
       ]);
 
       if ("error" in statusResponse && statusResponse.error) setError(statusResponse.error);
@@ -389,6 +445,7 @@ export default function TiendaNubePage() {
         const bannersData = bannersResponse as { banners?: TiendanubeWebBanner[] };
         setWebBanners((bannersData.banners || []) as TiendanubeWebBanner[]);
       }
+      setWebDiagnostics("error" in diagnosticsResponse && diagnosticsResponse.error ? { error: diagnosticsResponse.error } : diagnosticsResponse as WebScriptDiagnostics);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "No se pudo cargar Tienda Nube.");
     } finally {
@@ -410,6 +467,33 @@ export default function TiendaNubePage() {
   const activeSectionBanners = useMemo(() => {
     return webBanners.filter((banner) => (banner.placement === "promo_strip" ? "promo_strip" : "main_carousel") === webSection);
   }, [webBanners, webSection]);
+
+  const visibleSectionBanners = useMemo(() => {
+    return activeSectionBanners.filter((banner) => bannerPublicationState(banner).key === "live");
+  }, [activeSectionBanners]);
+
+  const webBannerOverview = useMemo(() => {
+    const states = webBanners.reduce((summary, banner) => {
+      const placement = banner.placement === "promo_strip" ? "promo" : "main";
+      const key = bannerPublicationState(banner).key;
+      summary[placement].total += 1;
+      if (key === "live") summary[placement].live += 1;
+      if (key === "scheduled") summary[placement].scheduled += 1;
+      if (key === "paused") summary[placement].paused += 1;
+      if (key === "expired") summary[placement].expired += 1;
+      return summary;
+    }, {
+      main: { live: 0, scheduled: 0, paused: 0, expired: 0, total: 0 },
+      promo: { live: 0, scheduled: 0, paused: 0, expired: 0, total: 0 },
+    });
+    return states;
+  }, [webBanners]);
+
+  const bannerFormState = bannerPublicationState({
+    active: bannerForm.active,
+    starts_at: bannerForm.starts_at,
+    ends_at: bannerForm.ends_at,
+  });
 
   const webSectionMeta = webSection === "promo_strip"
     ? {
@@ -880,10 +964,29 @@ export default function TiendaNubePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudo instalar el script.");
       setMessage(data?.message || "Script instalado en la tienda. El carrusel puede tardar unos minutos en aparecer por caché.");
+      await checkWebScript();
     } catch (installError) {
       setError(installError instanceof Error ? installError.message : "No se pudo instalar el script.");
     } finally {
       setInstallingWebScript(false);
+    }
+  }
+
+  async function checkWebScript() {
+    setBusyKey("web-diagnostics");
+    setMessage(null);
+    setError(null);
+    try {
+      const data = await fetchJsonSafe<WebScriptDiagnostics>("/api/tiendanube/install-web-script", "Diagnóstico web Tienda Nube");
+      if ("error" in data && data.error) throw new Error(data.error);
+      setWebDiagnostics(data as WebScriptDiagnostics);
+      setMessage("Diagnóstico de página web actualizado.");
+    } catch (diagnosticsError) {
+      const message = diagnosticsError instanceof Error ? diagnosticsError.message : "No se pudo diagnosticar la página web.";
+      setWebDiagnostics({ error: message });
+      setError(message);
+    } finally {
+      setBusyKey(null);
     }
   }
 
@@ -1115,6 +1218,39 @@ export default function TiendaNubePage() {
       </>
       ) : (
       <>
+      <section className="tn-web-overview" aria-label="Resumen de página web">
+        <article className="card tn-web-overview-card">
+          <span>Carrusel principal</span>
+          <strong>{webBannerOverview.main.live}</strong>
+          <small>{webBannerOverview.main.scheduled} programado{webBannerOverview.main.scheduled === 1 ? "" : "s"} · {webBannerOverview.main.paused + webBannerOverview.main.expired} fuera de aire</small>
+        </article>
+        <article className="card tn-web-overview-card">
+          <span>Banners bajo mensaje</span>
+          <strong>{webBannerOverview.promo.live}</strong>
+          <small>{webBannerOverview.promo.scheduled} programado{webBannerOverview.promo.scheduled === 1 ? "" : "s"} · {webBannerOverview.promo.paused + webBannerOverview.promo.expired} fuera de aire</small>
+        </article>
+        <article className={`card tn-web-diagnostics-card ${webDiagnostics?.installed ? "is-ok" : "is-warning"}`}>
+          <div>
+            <span>Instalación web</span>
+            <strong>{webDiagnostics?.installed ? "Script instalado" : webDiagnostics?.connected === false ? "TN sin conectar" : "Revisar script"}</strong>
+            <small>
+              {webDiagnostics?.scriptError || webDiagnostics?.error || webDiagnostics?.message || "Sin diagnóstico todavía"}
+              {webDiagnostics?.bannerCounts ? ` · ${webDiagnostics.bannerCounts.total} visible${webDiagnostics.bannerCounts.total === 1 ? "" : "s"} en endpoint` : ""}
+            </small>
+          </div>
+          <div className="tn-web-diagnostics-actions">
+            <button className="button ghost small-button" type="button" onClick={checkWebScript} disabled={busyKey === "web-diagnostics"}>
+              <RefreshCw size={14} aria-hidden="true" />
+              {busyKey === "web-diagnostics" ? "Revisando..." : "Revisar"}
+            </button>
+            <a className="button ghost small-button" href="https://www.adaragroup.com.ar/?adara_preview=1" target="_blank" rel="noreferrer">
+              <ExternalLink size={14} aria-hidden="true" />
+              Ver tienda
+            </a>
+          </div>
+        </article>
+      </section>
+
       <section className="tn-web-subtabs" aria-label="Partes editables de la página web">
         <button className={webSection === "main_carousel" ? "active" : ""} type="button" onClick={() => selectWebSection("main_carousel")}>
           Carrusel principal
@@ -1231,18 +1367,48 @@ export default function TiendaNubePage() {
             </div>
           </div>
 
-          <div className={`tn-banner-preview is-${bannerPreviewVariant} is-${bannerForm.placement}`}>
-            {(bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url) ? <img src={bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url} alt="" /> : <div><ImageIcon aria-hidden="true" />Sin imagen</div>}
-            {bannerForm.placement === "main_carousel" && bannerForm.show_text ? (
+          <div className={`tn-banner-publish-note is-${bannerFormState.key}`}>
+            <Clock3 size={14} aria-hidden="true" />
+            <strong>{bannerFormState.label}</strong>
+            <span>{bannerFormState.detail}</span>
+            {bannerPreviewVariant === "mobile" && !bannerForm.mobile_image_url && bannerForm.image_url ? <em>Mobile usa la imagen desktop.</em> : null}
+          </div>
+
+          <div className={`tn-home-preview-frame is-${bannerPreviewVariant}`}>
+            <div className="tn-home-preview-topbar">
+              <span>ADARA</span>
+              <i />
+              <i />
+              <i />
+            </div>
+            {bannerForm.placement === "promo_strip" ? (
               <>
-                <span style={{ background: `rgba(0,0,0,${bannerForm.overlay_opacity})` }} />
-                <div style={{ color: bannerForm.text_color, width: `${bannerPreviewVariant === "mobile" ? bannerForm.text_width_mobile : bannerForm.text_width_desktop}%`, maxWidth: bannerPreviewVariant === "mobile" ? "calc(100% - 36px)" : "88%" }}>
-                  <h3>{bannerForm.title || "Título de campaña"}</h3>
-                  <p>{bannerForm.subtitle || "Subtítulo opcional del banner"}</p>
-                  {bannerForm.button_label ? <strong>{bannerForm.button_label}</strong> : null}
+                <div className="tn-home-preview-main-skeleton" />
+                <div className={`tn-banner-preview is-${bannerPreviewVariant} is-${bannerForm.placement}`}>
+                  {(bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url) ? <img src={bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url} alt="" /> : <div><ImageIcon aria-hidden="true" />Sin imagen</div>}
                 </div>
               </>
-            ) : null}
+            ) : (
+              <div className={`tn-banner-preview is-${bannerPreviewVariant} is-${bannerForm.placement}`}>
+                {(bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url) ? <img src={bannerPreviewVariant === "mobile" ? bannerForm.mobile_image_url || bannerForm.image_url : bannerForm.image_url} alt="" /> : <div><ImageIcon aria-hidden="true" />Sin imagen</div>}
+                {bannerForm.show_text ? (
+                  <>
+                    <span style={{ background: `rgba(0,0,0,${bannerForm.overlay_opacity})` }} />
+                    <div style={{ color: bannerForm.text_color, width: `${bannerPreviewVariant === "mobile" ? bannerForm.text_width_mobile : bannerForm.text_width_desktop}%`, maxWidth: bannerPreviewVariant === "mobile" ? "calc(100% - 36px)" : "88%" }}>
+                      <h3>{bannerForm.title || "Título de campaña"}</h3>
+                      <p>{bannerForm.subtitle || "Subtítulo opcional del banner"}</p>
+                      {bannerForm.button_label ? <strong>{bannerForm.button_label}</strong> : null}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            )}
+            <div className="tn-home-preview-content">
+              <i />
+              <i />
+              <i />
+              <i />
+            </div>
           </div>
 
           <button className="button tn-save-banner" type="button" onClick={saveBanner} disabled={savingBanner}>
@@ -1255,9 +1421,15 @@ export default function TiendaNubePage() {
           <div className="tn-section-head">
             <div>
               <h2>Banners cargados</h2>
-              <p>{webSectionMeta.listTitle}: {activeSectionBanners.length} banner{activeSectionBanners.length === 1 ? "" : "s"}</p>
+              <p>{webSectionMeta.listTitle}: {visibleSectionBanners.length} visible{visibleSectionBanners.length === 1 ? "" : "s"} ahora · {activeSectionBanners.length} total{activeSectionBanners.length === 1 ? "" : "es"}</p>
             </div>
-            <button className="button small-button" type="button" onClick={installWebScript} disabled={installingWebScript || !status?.connected}>
+            <button
+              className="button small-button"
+              type="button"
+              onClick={installWebScript}
+              disabled={installingWebScript || !status?.connected || webDiagnostics?.canInstall === false}
+              title={webDiagnostics?.canInstall === false ? webDiagnostics.message || "No se puede instalar con la configuración actual" : "Instalar script en Tienda Nube"}
+            >
               <Globe2 size={14} aria-hidden="true" />
               {installingWebScript ? "Instalando..." : "Instalar en la tienda"}
             </button>
@@ -1266,12 +1438,18 @@ export default function TiendaNubePage() {
             <code>{`<script src="https://pricing-adara-online.vercel.app/api/tiendanube/web-banners/script.js"></script>`}</code>
           </div>
           <div className="tn-banner-list">
-            {activeSectionBanners.map((banner, index) => (
-              <div className="tn-banner-item" key={banner.id}>
+            {activeSectionBanners.map((banner, index) => {
+              const state = bannerPublicationState(banner);
+              return (
+              <div className={`tn-banner-item is-${state.key}`} key={banner.id}>
                 <img src={banner.image_url} alt="" />
                 <div>
                   <strong>{banner.title}</strong>
-                  <span>{banner.active ? "Activo" : "Pausado"} · orden {banner.position}</span>
+                  <span>
+                    <mark>{state.label}</mark>
+                    orden {banner.position} · {bannerScheduleLabel(banner)}
+                  </span>
+                  {state.key !== "live" ? <small>{state.detail}</small> : null}
                   <small>{banner.link_url || "Sin link"}</small>
                 </div>
                 <div className="tn-banner-order-controls" aria-label="Orden del banner">
@@ -1287,7 +1465,8 @@ export default function TiendaNubePage() {
                   <Trash2 size={14} aria-hidden="true" />
                 </button>
               </div>
-            ))}
+              );
+            })}
             {!activeSectionBanners.length && <div className="tn-empty">Todavía no hay banners cargados en esta parte.</div>}
           </div>
         </article>
