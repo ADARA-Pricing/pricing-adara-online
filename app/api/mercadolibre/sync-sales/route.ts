@@ -209,6 +209,7 @@ function normalizedProfitability({
   unitPrice,
   quantity,
   actualInstallments,
+  saleFeeAmount,
 }: {
   product: Product | null;
   publication: SalesPublication | null;
@@ -220,6 +221,7 @@ function normalizedProfitability({
   unitPrice: number;
   quantity: number;
   actualInstallments?: number | null;
+  saleFeeAmount?: number | null;
 }) {
   if (!product || unitPrice <= 0) {
     return {
@@ -230,11 +232,23 @@ function normalizedProfitability({
     };
   }
 
+  const categoryFeeRate = Number(categoryFee?.marketplace_fee_rate || 0);
+  const actualSaleFee = Number(saleFeeAmount || 0);
+  // El número de cuotas informado por la orden puede incluir pasajes de cuotas.
+  // El cargo total de ML refleja qué se cobró realmente: comisión de categoría + cuotas.
+  // Restamos la comisión de categoría para obtener solo el costo financiero y luego
+  // calculatePriceSummary aplica el mismo tratamiento neto (IVA incluido) que Precios.
+  const observedTotalFeeRate = unitPrice > 0 && actualSaleFee > 0
+    ? (actualSaleFee / unitPrice) * 100
+    : null;
+  const observedFinancingFeeRate = observedTotalFeeRate !== null
+    ? Math.max(0, observedTotalFeeRate - categoryFeeRate)
+    : null;
   const actualOption = {
     ...mercadoLibreClassicOption(),
     code: "ML-ACTUAL",
     name: "MercadoLibre venta real",
-    financing_fee_rate: Number(publication?.meli_financing_fee_rate || 0),
+    financing_fee_rate: observedFinancingFeeRate ?? Number(publication?.meli_financing_fee_rate || 0),
   };
   const actualResult = calculatePriceSummary(
     product,
@@ -479,6 +493,7 @@ export async function POST(request: Request) {
               unitPrice,
               quantity,
               actualInstallments,
+              saleFeeAmount: Number(orderItem.sale_fee || 0),
             });
 
             windowRowsByKey.set(key, {
