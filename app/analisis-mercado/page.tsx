@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ExternalLink, RefreshCw, Search, Trophy } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { moneyWithCents } from "@/lib/pricing";
@@ -34,6 +34,7 @@ export default function AnalisisMercadoPage() {
   const [loadingRanking, setLoadingRanking] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "winning" | "losing" | "expensive" | "cheap">("all");
   const [selected, setSelected] = useState<{ row: CompetitionRow; offers: RankedOffer[] } | null>(null);
+  const rankingRef = useRef<HTMLElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
 
@@ -70,6 +71,7 @@ export default function AnalisisMercadoPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.ok) throw new Error(data.error || "No se pudo traer el ranking de catálogo.");
       setSelected({ row, offers: data.competitors || [] });
+      window.setTimeout(() => rankingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     } catch (rankingError) { setError(rankingError instanceof Error ? rankingError.message : "No se pudo traer el ranking."); }
     finally { setLoadingRanking(null); }
   }
@@ -89,6 +91,6 @@ export default function AnalisisMercadoPage() {
       {!rows.length && !loading ? <div className="empty-state-box">Actualizá la competencia para consultar tus publicaciones activas de catálogo.</div> : null}
       {filtered.length ? <div className="table-wrap"><table className="market-results-table catalog-competition-table"><thead><tr><th>SKU / producto</th><th>Mi precio 1 pago</th><th>Competidor más barato</th><th>Diferencia</th><th>Estado catálogo</th><th>Mi logística</th><th /></tr></thead><tbody>{filtered.map((row) => { const difference = row.ownPrice && row.lowestCompetitor ? row.ownPrice - row.lowestCompetitor : null; return <tr key={row.sku}><td className="market-item-cell"><div>{row.thumbnail ? <img src={row.thumbnail} alt="" /> : <span className="market-thumb-placeholder" />}<span><strong>{row.title || row.sku}</strong><p>{row.sku} · {row.publicationCount || 1} publicación{row.publicationCount === 1 ? "" : "es"} de catálogo</p></span></div></td><td><strong>{row.ownPrice ? moneyWithCents(row.ownPrice) : "-"}</strong></td><td><strong>{row.lowestCompetitor ? moneyWithCents(row.lowestCompetitor) : "Sin competidor"}</strong></td><td><strong className={difference && difference > 0 ? "competition-expensive" : "competition-cheap"}>{difference === null ? "-" : `${difference > 0 ? "+" : ""}${moneyWithCents(difference)}`}</strong></td><td><span className={`badge catalog-status ${row.status}`}>{row.status === "winning" ? <Trophy size={14} /> : null}{statusLabel(row.status)}</span></td><td><span className={`badge ${row.ownFull ? "success" : ""}`}>{row.ownFull ? "Full" : "No Full"}</span></td><td><button className="button ghost small-button" onClick={() => openRanking(row)} disabled={loadingRanking === row.itemId}>{loadingRanking === row.itemId ? "Buscando..." : "Ver top 5"}</button></td></tr>; })}</tbody></table></div> : null}
     </section>
-    {selected ? <section className="card market-results-card"><div className="section-heading"><div><h2>Top 5 en 1 pago · {selected.row.sku}</h2><p className="small">{selected.row.title}</p></div><button className="button ghost small-button" onClick={() => setSelected(null)}>Cerrar</button></div><div className="table-wrap"><table className="market-results-table catalog-competition-table"><thead><tr><th>#</th><th>Vendedor</th><th>Precio 1 pago</th><th>Factura</th><th>Logística</th><th /></tr></thead><tbody>{selected.offers.map((offer, index) => <tr key={offer.itemId}><td><strong>{index + 1}</strong></td><td>{offer.isOwn ? <span className="badge success">Nosotros</span> : <strong>{offer.nickname || offer.itemId}</strong>}</td><td><strong>{offer.price ? moneyWithCents(offer.price) : "-"}</strong></td><td><span className={`badge ${offer.invoiceA ? "success" : ""}`}>{invoiceLabel(offer.invoiceA)}</span></td><td><span className={`badge ${offer.full ? "success" : ""}`}>{offer.full ? "Full" : "No Full"}</span></td><td>{offer.permalink ? <a className="button ghost small-button" href={offer.permalink} target="_blank" rel="noreferrer">Abrir <ExternalLink size={14} /></a> : "-"}</td></tr>)}</tbody></table></div></section> : null}
+    {selected ? <section ref={rankingRef} className="card market-results-card"><div className="section-heading"><div><h2>Top 5 en 1 pago · {selected.row.sku}</h2><p className="small">{selected.row.title}</p></div><button className="button ghost small-button" onClick={() => setSelected(null)}>Cerrar</button></div><div className="table-wrap"><table className="market-results-table catalog-competition-table"><thead><tr><th>#</th><th>Vendedor</th><th>Precio 1 pago</th><th>Factura</th><th>Logística</th><th /></tr></thead><tbody>{selected.offers.map((offer, index) => <tr key={offer.itemId}><td><strong>{index + 1}</strong></td><td>{offer.isOwn ? <span className="badge success">Nosotros</span> : <strong>{offer.nickname || offer.itemId}</strong>}</td><td><strong>{offer.price ? moneyWithCents(offer.price) : "-"}</strong></td><td><span className={`badge ${offer.invoiceA ? "success" : ""}`}>{invoiceLabel(offer.invoiceA)}</span></td><td><span className={`badge ${offer.full ? "success" : ""}`}>{offer.full ? "Full" : "No Full"}</span></td><td>{offer.permalink ? <a className="button ghost small-button" href={offer.permalink} target="_blank" rel="noreferrer">Abrir <ExternalLink size={14} /></a> : "-"}</td></tr>)}</tbody></table></div></section> : null}
   </main>;
 }
