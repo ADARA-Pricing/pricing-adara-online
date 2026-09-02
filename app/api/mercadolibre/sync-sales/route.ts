@@ -343,6 +343,23 @@ function hasDetailedOrderData(order: MeliOrder) {
 async function upsertOrderItemsInBatches(supabase: ReturnType<typeof createAdminClient>, rows: Record<string, unknown>[], batchSize = 100) {
   for (let index = 0; index < rows.length; index += batchSize) {
     const batch = rows.slice(index, index + batchSize);
+    // El SKU puede estar vacío en una primera respuesta de ML y aparecer luego al
+    // resolver la publicación por catálogo. La restricción actual incluye sku, por
+    // lo que eliminamos solo esa versión incompleta antes de guardar la fila correcta.
+    await Promise.all(batch
+      .filter((row) => String(row.sku || "").trim())
+      .map(async (row) => {
+        let query = supabase
+          .from("mercadolibre_order_items")
+          .delete()
+          .eq("order_id", String(row.order_id || ""))
+          .eq("meli_item_id", String(row.meli_item_id || ""))
+          .neq("sku", String(row.sku || ""));
+        const variationId = String(row.variation_id || "");
+        query = variationId ? query.eq("variation_id", variationId) : query.or("variation_id.is.null,variation_id.eq.");
+        const { error } = await query;
+        if (error) throw new Error(error.message);
+      }));
     const { error } = await supabase
       .from("mercadolibre_order_items")
       .upsert(batch, { onConflict: "order_id,meli_item_id,variation_id,sku" });

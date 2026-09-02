@@ -94,6 +94,7 @@ export default function PricesPage() {
   const [refreshingProductSku, setRefreshingProductSku] = useState<string | null>(null);
   const [productSyncMessage, setProductSyncMessage] = useState<string | null>(null);
   const [publishingPriceChannel, setPublishingPriceChannel] = useState<string | null>(null);
+  const [refreshingAdaraSku, setRefreshingAdaraSku] = useState<string | null>(null);
   const productSyncRequestId = useRef(0);
   const [expandedProducts, setExpandedProducts] = useState<
     Record<string, boolean>
@@ -642,6 +643,26 @@ export default function PricesPage() {
     } finally {
       setPublishingPriceChannel(null);
     }
+  }
+
+  async function refreshAdaraPromotion(product: Product, rows: ReturnType<typeof calculateRowsForProduct>) {
+    const entries = rows
+      .filter(({ option, result, promoDiscountRate, promoPrice }) => isMercadoLibreChannel(option) && result.valid && promoDiscountRate > 0 && Number(promoPrice || 0) > 0)
+      .flatMap(({ option, result, promoPrice }) => shippingsForProduct(product)
+        .filter((publication) => publication.meli_status === "active" && publication.meli_item_id && optionMatchesPublication(option, publication))
+        .map((publication) => ({ itemId: publication.meli_item_id, listPrice: promoPrice, dealPrice: result.roundedPrice })));
+    if (!entries.length) { setError("No hay cuotas de Mercado Libre con precio promo para activar en Adara."); return; }
+    if (!window.confirm(`Vas a actualizar y activar Adara en ${entries.length} publicación${entries.length === 1 ? "" : "es"} de ${product.sku}. Solo se tocará la campaña propia Adara.`)) return;
+    setRefreshingAdaraSku(product.sku);
+    setError(null); setMessage(null);
+    try {
+      const response = await fetch("/api/mercadolibre/refresh-adara-promotion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) throw new Error(data.error || "No se pudo actualizar Adara.");
+      setMessage(`Adara actualizada en ${data.updated.length} publicación${data.updated.length === 1 ? "" : "es"}${data.failed?.length ? ` · ${data.failed.length} con error` : ""}.`);
+      await loadData({ quiet: true });
+    } catch (error) { setError(error instanceof Error ? error.message : "No se pudo actualizar Adara."); }
+    finally { setRefreshingAdaraSku(null); }
   }
 
   function effectiveMargin(channelCode: string) {
@@ -1281,14 +1302,16 @@ export default function PricesPage() {
                                 title="Condiciones de venta"
                                 description="Precios y rentabilidad por canal para este producto."
                                 actions={
-                                  <button
-                                    className="button small-button prices-publish-all-button"
-                                    onClick={() => publishAllPricesToMercadoLibre(product, productRows)}
-                                    disabled={publishingPriceChannel === `${product.sku}-all`}
-                                  >
-                                    <Upload aria-hidden="true" />
-                                    {publishingPriceChannel === `${product.sku}-all` ? "Cargando precios..." : "Cargar todas en ML"}
-                                  </button>
+                                  <>
+                                    <button className="button small-button prices-publish-all-button" onClick={() => publishAllPricesToMercadoLibre(product, productRows)} disabled={publishingPriceChannel === `${product.sku}-all`}>
+                                      <Upload aria-hidden="true" />
+                                      {publishingPriceChannel === `${product.sku}-all` ? "Cargando precios..." : "Cargar todas en ML"}
+                                    </button>
+                                    <button className="button ghost small-button" onClick={() => refreshAdaraPromotion(product, productRows)} disabled={refreshingAdaraSku === product.sku}>
+                                      <BadgePercent aria-hidden="true" />
+                                      {refreshingAdaraSku === product.sku ? "Activando Adara..." : "Activar promo Adara"}
+                                    </button>
+                                  </>
                                 }
                               />
                               <table className="nested-table">
