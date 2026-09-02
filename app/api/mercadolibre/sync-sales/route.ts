@@ -41,6 +41,10 @@ type MeliOrder = {
   }>;
 };
 
+type MeliItemCatalogLink = {
+  catalog_product_id?: string | null;
+};
+
 type ProductCostHistory = {
   product_id: string;
   sku: string | null;
@@ -136,7 +140,25 @@ type SalesPublication = Pick<
   | "meli_status"
   | "meli_financing_fee_rate"
   | "meli_installments_text"
+  | "meli_catalog_product_id"
 >;
+
+function catalogPublicationMap(publications: SalesPublication[]) {
+  const result = new Map<string, SalesPublication[]>();
+  publications.forEach((publication) => {
+    const catalogProductId = String(publication.meli_catalog_product_id || "").trim().toUpperCase();
+    if (!catalogProductId || !publication.product_id) return;
+    result.set(catalogProductId, [...(result.get(catalogProductId) || []), publication]);
+  });
+  return result;
+}
+
+function uniqueCatalogPublication(catalogProductId: string | null | undefined, publicationsByCatalog: Map<string, SalesPublication[]>) {
+  const publications = publicationsByCatalog.get(String(catalogProductId || "").trim().toUpperCase()) || [];
+  const productIds = new Set(publications.map((publication) => String(publication.product_id || "")).filter(Boolean));
+  if (productIds.size !== 1) return null;
+  return [...publications].sort((a, b) => Number(b.meli_status === "active") - Number(a.meli_status === "active"))[0] || null;
+}
 
 function publicationSalePrice(publication: SalesPublication) {
   const promoActive = publication.meli_promo_price && /started|active/i.test(publication.meli_promo_status || "");
@@ -346,7 +368,7 @@ export async function POST(request: Request) {
       supabase.from("products").select("*").in("status", ["active", "paused"]),
       supabase
         .from("mercadolibre_shipping_costs")
-        .select("product_id, sku, meli_item_id, meli_title, fixed_fee_amount, shipping_cost_amount, free_shipping, meli_price, meli_promo_price, meli_promo_status, meli_status, meli_financing_fee_rate, meli_installments_text")
+        .select("product_id, sku, meli_item_id, meli_title, fixed_fee_amount, shipping_cost_amount, free_shipping, meli_price, meli_promo_price, meli_promo_status, meli_status, meli_financing_fee_rate, meli_installments_text, meli_catalog_product_id")
         .eq("active", true),
       supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
       supabase.from("tax_settings").select("*").eq("key", "default").maybeSingle(),
@@ -373,6 +395,7 @@ export async function POST(request: Request) {
     const productBySku = mapBySku(products);
     const productById = new Map(products.filter((product) => product.id).map((product) => [String(product.id), product]));
     const publicationByItemId = new Map(publications.filter((item) => item.meli_item_id).map((item) => [String(item.meli_item_id), item]));
+    const publicationsByCatalog = catalogPublicationMap(publications);
     const publicationsBySku = new Map<string, SalesPublication[]>();
     publications.forEach((publication) => {
       const publicationSku = normalizeSku(publication.sku || productById.get(String(publication.product_id))?.sku || "");
@@ -391,6 +414,7 @@ export async function POST(request: Request) {
     const limit = 50;
     let scanned = 0;
     let saved = 0;
+    const catalogPublicationByItemId = new Map<string, SalesPublication | null>();
     const windows = dateWindows(from, to, chunkDays).reverse();
 
     for (const window of windows) {
@@ -420,7 +444,21 @@ export async function POST(request: Request) {
             if (!itemId) continue;
 
             const skuFromOrder = normalizeSku(orderItem.item?.seller_sku || null);
-            const publication = publicationByItemId.get(itemId);
+            let publication = publicationByItemId.get(itemId) || null;
+            if (!skuFromOrder && !publication) {
+              if (!catalogPublicationByItemId.has(itemId)) {
+                try {
+                  const item = await meliFetch(`/items/${itemId}`, account) as MeliItemCatalogLink;
+                  catalogPublicationByItemId.set(
+                    itemId,
+                    uniqueCatalogPublication(item.catalog_product_id, publicationsByCatalog),
+                  );
+                } catch {
+                  catalogPublicationByItemId.set(itemId, null);
+                }
+              }
+              publication = catalogPublicationByItemId.get(itemId) || null;
+            }
             const sku = skuFromOrder || normalizeSku(publication?.sku || null);
             const currentProduct = productBySku.get(sku) || productById.get(String(publication?.product_id || "")) || null;
             const product = productWithCostAtDate(currentProduct, order.date_created, historiesByProductId, historiesBySku);
