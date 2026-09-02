@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       if (!/^MLA\d+$/.test(requestedItemId)) return NextResponse.json({ error: "Publicación inválida." }, { status: 400 });
       const { data: own, error: ownError } = await supabase
         .from("mercadolibre_shipping_costs")
-        .select("sku,meli_item_id,meli_title,meli_thumbnail,meli_price,meli_promo_status,meli_promo_name,meli_promo_price,meli_catalog_product_id")
+        .select("sku,meli_item_id,meli_title,meli_thumbnail,meli_price,meli_promo_status,meli_promo_name,meli_promo_price,meli_promo_meli_amount,meli_promo_meli_rate,meli_catalog_product_id")
         .eq("active", true)
         .eq("meli_catalog_listing", true)
         .eq("meli_item_id", requestedItemId)
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
           isOwn: itemId === requestedItemId,
         };
       });
-      return NextResponse.json({ ok: true, own: { sku: own.sku, itemId: requestedItemId, title: own.meli_title, thumbnail: own.meli_thumbnail, price: own.meli_price, promo: own.meli_promo_status ? { name: own.meli_promo_name, price: own.meli_promo_price } : null, catalogProductId: own.meli_catalog_product_id }, competitors });
+      return NextResponse.json({ ok: true, own: { sku: own.sku, itemId: requestedItemId, title: own.meli_title, thumbnail: own.meli_thumbnail, price: own.meli_price, promo: own.meli_promo_status ? { name: own.meli_promo_name, price: own.meli_promo_price, meliAmount: own.meli_promo_meli_amount, meliRate: own.meli_promo_meli_rate } : null, catalogProductId: own.meli_catalog_product_id }, competitors });
     }
 
     const { data, error } = await supabase
@@ -151,15 +151,19 @@ export async function GET(request: NextRequest) {
             ? calculatePriceSummary(product, mercadoLibreClassicOption(), feesByCategory.get(String(product.category)) || null, taxes, shipping, { salePrice: suggestedPrice })
             : null;
           const marginAtSuggested = profitability?.valid ? profitability.marginOnNetSale : null;
+          const currentProfitability = product && shipping && reference.ownPrice
+            ? calculatePriceSummary(product, mercadoLibreClassicOption(), feesByCategory.get(String(product.category)) || null, taxes, shipping, { salePrice: reference.ownPrice })
+            : null;
+          const currentMargin = currentProfitability?.valid ? currentProfitability.marginOnNetSale : null;
           const action = !suggestedPrice ? "sin_competidor"
             : Number(reference.ownPrice || 0) > suggestedPrice
               ? Number(marginAtSuggested || 0) >= 5 ? "bajar_y_ganar" : "caro_sin_margen"
               : Number(reference.ownPrice || 0) < suggestedPrice
                 ? Number(marginAtSuggested || 0) >= 5 ? "subir_y_seguir_ganando" : "barato_sin_margen"
                 : "en_precio";
-          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor, suggestedPrice, marginAtSuggested, action };
+          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor, suggestedPrice, marginAtSuggested, currentMargin, action };
         } catch {
-          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor: null, suggestedPrice: null, marginAtSuggested: null, action: "sin_competidor" };
+          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor: null, suggestedPrice: null, marginAtSuggested: null, currentMargin: null, action: "sin_competidor" };
         }
       });
       return NextResponse.json({ ok: true, rows: summaries, total: summaries.length, refreshedAt: new Date().toISOString() });
