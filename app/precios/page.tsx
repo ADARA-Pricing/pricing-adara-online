@@ -335,16 +335,18 @@ export default function PricesPage() {
     return optionCount === publicationCount;
   }
 
-  function shippingCostForOption(product: Product, option: MercadoLibrePriceOption) {
+  function shippingCostsForOption(product: Product, option: MercadoLibrePriceOption) {
     const normalizedOption = normalizeOption(option);
     const productCandidates = shippingCosts.filter(
       (item) => item.product_id === product.id || item.sku === product.sku,
     );
     const activeCandidates = productCandidates.filter((item) => item.active !== false && item.meli_status !== "closed");
     const candidates = activeCandidates.length ? activeCandidates : productCandidates;
-    if (!candidates.length) return null;
+    if (!candidates.length) return [];
 
-    return [...candidates].sort((a, b) => {
+    return [...candidates]
+      .filter((item) => optionMatchesPublication(normalizedOption, item))
+      .sort((a, b) => {
       const score = (item: MercadoLibreShippingCost) => {
         let value = 0;
         if (optionMatchesPublication(normalizedOption, item)) value += 1000;
@@ -360,7 +362,43 @@ export default function PricesPage() {
       const diff = score(b) - score(a);
       if (diff) return diff;
       return new Date(b.meli_last_sync_at || b.updated_at || 0).getTime() - new Date(a.meli_last_sync_at || a.updated_at || 0).getTime();
-    })[0] || null;
+      });
+  }
+
+  function calculatePriceWithMatchedShipping(
+    product: Product,
+    option: MercadoLibrePriceOption,
+    categoryFee: MercadoLibreCategoryFee | null | undefined,
+    taxesForCalculation: TaxSettings,
+    target: Parameters<typeof calculatePriceSummary>[5],
+  ) {
+    const normalizedOption = normalizeOption(option);
+    const candidates = normalizedOption.applies_shipping
+      ? shippingCostsForOption(product, normalizedOption)
+      : [];
+    const scenarios = (candidates.length ? candidates : [null]).map((shippingCost) => ({
+      shippingCost,
+      result: calculatePriceSummary(
+        product,
+        normalizedOption,
+        normalizedOption.applies_marketplace_fee ? categoryFee : null,
+        taxesForCalculation,
+        shippingCost,
+        target,
+      ) as any,
+    }));
+
+    // Un mismo SKU puede tener publicaciones con y sin envío gratis. Elegimos el
+    // escenario cuyo precio calculado se parece al precio real de su publicación,
+    // en lugar de usar simplemente la última sincronización.
+    return scenarios.sort((a, b) => {
+      const score = (scenario: typeof scenarios[number]) => {
+        if (!scenario.result?.valid) return Number.POSITIVE_INFINITY;
+        if (!scenario.shippingCost?.meli_price) return Number.POSITIVE_INFINITY / 2;
+        return Math.abs(Number(scenario.result.roundedPrice || 0) - Number(scenario.shippingCost.meli_price || 0));
+      };
+      return score(a) - score(b);
+    })[0];
   }
 
   function isMercadoLibreChannel(option?: MercadoLibrePriceOption | null) {
@@ -705,13 +743,11 @@ export default function PricesPage() {
       (item) =>
         item.category?.toLowerCase() === (product.category || "").toLowerCase(),
     );
-    const shippingCost = shippingCostForOption(product, normalizedOption);
-    const result = calculatePriceSummary(
+    const { result } = calculatePriceWithMatchedShipping(
       product,
       normalizedOption,
-      normalizedOption.applies_marketplace_fee ? categoryFee : null,
+      categoryFee,
       modal.taxOverrides,
-      normalizedOption.applies_shipping ? shippingCost : null,
       {
         desiredMarginRate: effectiveMargin(channelCode),
         desiredNetProfit: net,
@@ -725,7 +761,7 @@ export default function PricesPage() {
         roundTo: 100,
         roundingMode: "nearest",
       },
-    ) as any;
+    );
 
     setModal({
       ...modal,
@@ -760,13 +796,11 @@ export default function PricesPage() {
       (item) =>
         item.category?.toLowerCase() === (product.category || "").toLowerCase(),
     );
-    const shippingCost = shippingCostForOption(product, normalizedOption);
-    const result = calculatePriceSummary(
+    const { result } = calculatePriceWithMatchedShipping(
       product,
       normalizedOption,
-      normalizedOption.applies_marketplace_fee ? categoryFee : null,
+      categoryFee,
       modal.taxOverrides,
-      normalizedOption.applies_shipping ? shippingCost : null,
       {
         salePrice,
         desiredMarginRate: effectiveMargin(channelCode),
@@ -780,7 +814,7 @@ export default function PricesPage() {
         roundTo: 100,
         roundingMode: "nearest",
       },
-    ) as any;
+    );
 
     setModal({
       ...modal,
@@ -894,16 +928,12 @@ export default function PricesPage() {
       const feeForOption = normalizedOption.applies_marketplace_fee
         ? categoryFee
         : null;
-      const shippingForOption = normalizedOption.applies_shipping
-        ? shippingCostForOption(product, normalizedOption)
-        : null;
       const salePriceOverride = modal.priceOverrides[option.code] ?? null;
-      const result = calculatePriceSummary(
+      const scenario = calculatePriceWithMatchedShipping(
         product,
         normalizedOption,
         feeForOption,
         modal.taxOverrides,
-        shippingForOption,
         {
           desiredMarginRate: desiredMargin,
           desiredNetProfit,
@@ -918,10 +948,11 @@ export default function PricesPage() {
           roundingMode: "nearest",
         },
       );
+      const result = scenario.result;
       return {
         option: normalizedOption,
         categoryFee: feeForOption,
-        shippingCost: shippingForOption,
+        shippingCost: scenario.shippingCost,
         result: result as any,
         desiredMargin,
         desiredNetProfit,
@@ -960,15 +991,11 @@ export default function PricesPage() {
       const feeForOption = normalizedOption.applies_marketplace_fee
         ? categoryFee
         : null;
-      const shippingForOption = normalizedOption.applies_shipping
-        ? shippingCostForOption(product, normalizedOption)
-        : null;
-      const result = calculatePriceSummary(
+      const scenario = calculatePriceWithMatchedShipping(
         product,
         normalizedOption,
         feeForOption,
         taxes,
-        shippingForOption,
         {
           desiredMarginRate: getMargin(product.id, normalizedOption.code),
           desiredNetProfit: getNetProfit(product.id, normalizedOption.code),
@@ -983,7 +1010,8 @@ export default function PricesPage() {
           roundTo: 100,
           roundingMode: "nearest",
         },
-      ) as any;
+      );
+      const result = scenario.result;
       const promoDiscountRate = isMercadoLibreChannel(normalizedOption)
         ? getPromoDiscount(product.id, normalizedOption.code)
         : 0;
@@ -1010,20 +1038,18 @@ export default function PricesPage() {
         item.category?.toLowerCase() === (product.category || "").toLowerCase(),
     );
     const mcOption = mercadoLibreClassicOption();
-    const shippingCost = shippingCostForOption(product, mcOption);
-    const result = calculatePriceSummary(
+    const { result } = calculatePriceWithMatchedShipping(
       product,
       mcOption,
       categoryFee,
       taxes,
-      shippingCost,
       {
         desiredMarginRate: getMargin(product.id, "MC"),
         desiredNetProfit: getNetProfit(product.id, "MC"),
         roundTo: 100,
         roundingMode: "nearest",
       },
-    ) as any;
+    );
     return result.valid ? Number(result.roundedPrice || 0) : null;
   }
 
