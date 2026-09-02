@@ -119,6 +119,27 @@ export async function GET(request: NextRequest) {
       ownFull: row.meli_logistic_type === "fulfillment",
       reason: Array.isArray(row.meli_catalog_reason) ? row.meli_catalog_reason : [],
     }));
+
+    if (request.nextUrl.searchParams.get("summary") === "1") {
+      const grouped = new Map<string, typeof rows>();
+      for (const row of rows) grouped.set(row.sku, [...(grouped.get(row.sku) || []), row]);
+      const summaries = await mapWithConcurrency([...grouped.entries()], 5, async ([sku, publications]) => {
+        const reference = [...publications].sort((a, b) => Number(a.ownPrice || Infinity) - Number(b.ownPrice || Infinity))[0];
+        try {
+          const catalog = await meliFetch(`/products/${reference.catalogProductId}/items?limit=5`, account) as { results?: Array<MeliItem & { item_id?: string | null; price?: number | null }> };
+          const ownIds = new Set(publications.map((publication) => String(publication.itemId).toUpperCase()));
+          const lowestCompetitor = (catalog.results || [])
+            .filter((item) => !ownIds.has(String(item.item_id || item.id || "").toUpperCase()))
+            .map((item) => Number(item.price || 0))
+            .filter((price) => price > 0)
+            .sort((a, b) => a - b)[0] || null;
+          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor };
+        } catch {
+          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor: null };
+        }
+      });
+      return NextResponse.json({ ok: true, rows: summaries, total: summaries.length, refreshedAt: new Date().toISOString() });
+    }
     return NextResponse.json({ ok: true, rows, total: rows.length, refreshedAt: new Date().toISOString() });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo consultar la competencia." }, { status: 500 });

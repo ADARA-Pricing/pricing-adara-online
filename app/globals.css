@@ -8713,6 +8713,8 @@ textarea:focus-visible {
 .catalog-competition-table td { min-width: 118px; }
 .market-competition-filters { display: grid; grid-template-columns: minmax(280px, 1fr) 230px; gap: 10px; margin: 14px 0; }
 .market-competition-filters select { min-height: 42px; }
+.competition-expensive { color: #dc2626; }
+.competition-cheap { color: #047857; }
 @media (max-width: 720px) { .market-competition-filters { grid-template-columns: 1fr; } }
 
 .empty-state-box {

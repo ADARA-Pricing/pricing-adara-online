@@ -8,7 +8,7 @@ import { moneyWithCents } from "@/lib/pricing";
 type CompetitionRow = {
   sku: string; itemId: string; title: string | null; thumbnail: string | null; permalink: string | null;
   catalogProductId: string | null; ownPrice: number | null; priceToWin: number | null; status: string;
-  ownFull: boolean; reason: string[];
+  ownFull: boolean; reason: string[]; publicationCount?: number; lowestCompetitor?: number | null;
 };
 type RankedOffer = { itemId: string; price: number | null; nickname: string | null; permalink: string | null; full: boolean; invoiceA: boolean | null; isOwn: boolean };
 
@@ -32,7 +32,7 @@ export default function AnalisisMercadoPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingRanking, setLoadingRanking] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "winning" | "losing">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "winning" | "losing" | "expensive" | "cheap">("all");
   const [selected, setSelected] = useState<{ row: CompetitionRow; offers: RankedOffer[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
@@ -40,7 +40,14 @@ export default function AnalisisMercadoPage() {
   const filtered = useMemo(() => rows.filter((row) => {
     const matchesQuery = `${row.sku} ${row.title || ""} ${row.itemId}`.toLowerCase().includes(query.toLowerCase());
     const isWinning = row.status === "winning" || row.status === "sharing_first_place";
-    return matchesQuery && (statusFilter === "all" || (statusFilter === "winning" ? isWinning : !isWinning));
+    const competitor = Number(row.lowestCompetitor || 0);
+    const own = Number(row.ownPrice || 0);
+    const matchesStatus = statusFilter === "all"
+      || (statusFilter === "winning" && isWinning)
+      || (statusFilter === "losing" && !isWinning)
+      || (statusFilter === "expensive" && competitor > 0 && own > competitor)
+      || (statusFilter === "cheap" && competitor > 0 && own <= competitor);
+    return matchesQuery && matchesStatus;
   }), [rows, query, statusFilter]);
   const losing = rows.filter((row) => row.status === "competing" || row.status === "listed").length;
   const winning = rows.filter((row) => row.status === "winning" || row.status === "sharing_first_place").length;
@@ -48,7 +55,7 @@ export default function AnalisisMercadoPage() {
   async function refresh() {
     setLoading(true); setError(null);
     try {
-      const response = await fetch("/api/mercadolibre/catalog-competition?limit=120");
+      const response = await fetch("/api/mercadolibre/catalog-competition?summary=1");
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.ok) throw new Error(data.error || "No se pudo consultar la competencia de catálogo.");
       setRows(data.rows || []); setRefreshedAt(data.refreshedAt || new Date().toISOString());
@@ -68,7 +75,7 @@ export default function AnalisisMercadoPage() {
   }
 
   return <main className="page market-analysis-page">
-    <PageHero icon={<Trophy size={23} />} title="Métricas de competencia" description="Decidí el precio de 1 pago usando la oferta ganadora real del catálogo. Solo se muestran publicaciones de catálogo activas." actions={<button className="button" onClick={refresh} disabled={loading}><RefreshCw size={16} className={loading ? "spin" : ""} />{loading ? "Consultando catálogo..." : "Actualizar competencia"}</button>} />
+    <PageHero icon={<Trophy size={23} />} title="Métricas de competencia" description="Compará el precio de 1 pago por SKU contra las ofertas reales de catálogo. Solo se muestran SKUs con catálogo activo." actions={<button className="button" onClick={refresh} disabled={loading}><RefreshCw size={16} className={loading ? "spin" : ""} />{loading ? "Armando ranking..." : "Actualizar competencia"}</button>} />
     {error ? <div className="notice error">{error}</div> : null}
     <section className="market-summary-grid">
       <div><span>Catálogos consultados</span><strong>{rows.length || "-"}</strong></div>
@@ -77,10 +84,10 @@ export default function AnalisisMercadoPage() {
       <div><span>Actualización</span><strong>{refreshedAt ? new Date(refreshedAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "Pendiente"}</strong></div>
     </section>
     <section className="card market-results-card">
-      <div className="section-heading"><div><h2>Catálogos activos</h2><p className="small">Elegí un producto para ver las primeras cinco ofertas reales de contado. El “precio para ganar” queda sólo como referencia secundaria.</p></div></div>
-      <div className="market-competition-filters"><label className="search-field"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o MLA" /></label><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | "winning" | "losing")}><option value="all">Todos los estados</option><option value="winning">Ganando catálogo</option><option value="losing">Perdiendo / no compite</option></select></div>
+      <div className="section-heading"><div><h2>SKUs de catálogo</h2><p className="small">Cada fila agrupa las publicaciones del SKU. “Competidor más barato” sale del Top 5 real de ese catálogo.</p></div></div>
+      <div className="market-competition-filters"><label className="search-field"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o MLA" /></label><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | "winning" | "losing" | "expensive" | "cheap")}><option value="all">Todos los estados</option><option value="winning">Ganando catálogo</option><option value="losing">Perdiendo / no compite</option><option value="expensive">Estoy caro</option><option value="cheap">Estoy barato / igual</option></select></div>
       {!rows.length && !loading ? <div className="empty-state-box">Actualizá la competencia para consultar tus publicaciones activas de catálogo.</div> : null}
-      {filtered.length ? <div className="table-wrap"><table className="market-results-table catalog-competition-table"><thead><tr><th>Producto</th><th>Mi precio 1 pago</th><th>Estado catálogo</th><th>Precio para ganar</th><th>Mi logística</th><th /></tr></thead><tbody>{filtered.map((row) => <tr key={row.itemId}><td className="market-item-cell"><div>{row.thumbnail ? <img src={row.thumbnail} alt="" /> : <span className="market-thumb-placeholder" />}<span><strong>{row.title || row.sku}</strong><p>{row.sku} · {row.itemId}</p></span></div></td><td><strong>{row.ownPrice ? moneyWithCents(row.ownPrice) : "-"}</strong></td><td><span className={`badge catalog-status ${row.status}`}>{row.status === "winning" ? <Trophy size={14} /> : null}{statusLabel(row.status)}</span>{row.reason.length ? <p className="small">{row.reason.join(", ")}</p> : null}</td><td><strong>{row.priceToWin ? moneyWithCents(row.priceToWin) : "-"}</strong></td><td><span className={`badge ${row.ownFull ? "success" : ""}`}>{row.ownFull ? "Full" : "No Full"}</span></td><td><button className="button ghost small-button" onClick={() => openRanking(row)} disabled={loadingRanking === row.itemId}>{loadingRanking === row.itemId ? "Buscando..." : "Ver top 5"}</button></td></tr>)}</tbody></table></div> : null}
+      {filtered.length ? <div className="table-wrap"><table className="market-results-table catalog-competition-table"><thead><tr><th>SKU / producto</th><th>Mi precio 1 pago</th><th>Competidor más barato</th><th>Diferencia</th><th>Estado catálogo</th><th>Mi logística</th><th /></tr></thead><tbody>{filtered.map((row) => { const difference = row.ownPrice && row.lowestCompetitor ? row.ownPrice - row.lowestCompetitor : null; return <tr key={row.sku}><td className="market-item-cell"><div>{row.thumbnail ? <img src={row.thumbnail} alt="" /> : <span className="market-thumb-placeholder" />}<span><strong>{row.title || row.sku}</strong><p>{row.sku} · {row.publicationCount || 1} publicación{row.publicationCount === 1 ? "" : "es"} de catálogo</p></span></div></td><td><strong>{row.ownPrice ? moneyWithCents(row.ownPrice) : "-"}</strong></td><td><strong>{row.lowestCompetitor ? moneyWithCents(row.lowestCompetitor) : "Sin competidor"}</strong></td><td><strong className={difference && difference > 0 ? "competition-expensive" : "competition-cheap"}>{difference === null ? "-" : `${difference > 0 ? "+" : ""}${moneyWithCents(difference)}`}</strong></td><td><span className={`badge catalog-status ${row.status}`}>{row.status === "winning" ? <Trophy size={14} /> : null}{statusLabel(row.status)}</span></td><td><span className={`badge ${row.ownFull ? "success" : ""}`}>{row.ownFull ? "Full" : "No Full"}</span></td><td><button className="button ghost small-button" onClick={() => openRanking(row)} disabled={loadingRanking === row.itemId}>{loadingRanking === row.itemId ? "Buscando..." : "Ver top 5"}</button></td></tr>; })}</tbody></table></div> : null}
     </section>
     {selected ? <section className="card market-results-card"><div className="section-heading"><div><h2>Top 5 en 1 pago · {selected.row.sku}</h2><p className="small">{selected.row.title}</p></div><button className="button ghost small-button" onClick={() => setSelected(null)}>Cerrar</button></div><div className="table-wrap"><table className="market-results-table catalog-competition-table"><thead><tr><th>#</th><th>Vendedor</th><th>Precio 1 pago</th><th>Factura</th><th>Logística</th><th /></tr></thead><tbody>{selected.offers.map((offer, index) => <tr key={offer.itemId}><td><strong>{index + 1}</strong></td><td>{offer.isOwn ? <span className="badge success">Nosotros</span> : <strong>{offer.nickname || offer.itemId}</strong>}</td><td><strong>{offer.price ? moneyWithCents(offer.price) : "-"}</strong></td><td><span className={`badge ${offer.invoiceA ? "success" : ""}`}>{invoiceLabel(offer.invoiceA)}</span></td><td><span className={`badge ${offer.full ? "success" : ""}`}>{offer.full ? "Full" : "No Full"}</span></td><td>{offer.permalink ? <a className="button ghost small-button" href={offer.permalink} target="_blank" rel="noreferrer">Abrir <ExternalLink size={14} /></a> : "-"}</td></tr>)}</tbody></table></div></section> : null}
   </main>;
