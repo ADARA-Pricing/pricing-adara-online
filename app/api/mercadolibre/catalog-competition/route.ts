@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConnectedMeliAccount, meliFetch } from "@/lib/mercadolibre";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { requireApiUser } from "@/lib/serverAuth";
+import { calculatePriceSummary, defaultTaxSettings, mercadoLibreClassicOption } from "@/lib/pricing";
+import type { MercadoLibreCategoryFee, Product, TaxSettings } from "@/lib/types";
 
 type SaleTerm = { id?: string | null; value_name?: string | null; value_id?: string | null };
 type CatalogWinner = {
@@ -97,7 +99,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from("mercadolibre_shipping_costs")
-      .select("product_id,sku,meli_item_id,meli_title,meli_thumbnail,meli_permalink,meli_price,meli_catalog_product_id,meli_catalog_listing,meli_status,meli_catalog_status,meli_catalog_price_to_win,meli_catalog_current_price,meli_catalog_reason,meli_logistic_type")
+      .select("product_id,sku,meli_item_id,meli_title,meli_thumbnail,meli_permalink,meli_price,meli_catalog_product_id,meli_catalog_listing,meli_status,meli_catalog_status,meli_catalog_price_to_win,meli_catalog_current_price,meli_catalog_reason,meli_logistic_type,fixed_fee_amount,shipping_cost_amount,free_shipping,active")
       .eq("active", true)
       .eq("meli_catalog_listing", true)
       .eq("meli_status", "active")
@@ -121,6 +123,15 @@ export async function GET(request: NextRequest) {
     }));
 
     if (request.nextUrl.searchParams.get("summary") === "1") {
+      const [productsResponse, feesResponse, taxesResponse] = await Promise.all([
+        supabase.from("products").select("*").neq("status", "discontinued"),
+        supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
+        supabase.from("tax_settings").select("*").eq("key", "default").maybeSingle(),
+      ]);
+      if (productsResponse.error || feesResponse.error || taxesResponse.error) throw new Error(productsResponse.error?.message || feesResponse.error?.message || taxesResponse.error?.message || "No se pudo calcular la rentabilidad.");
+      const productsBySku = new Map((productsResponse.data || []).map((product) => [String(product.sku), product as Product]));
+      const feesByCategory = new Map((feesResponse.data || []).map((fee) => [String(fee.category), fee as MercadoLibreCategoryFee]));
+      const taxes = (taxesResponse.data || defaultTaxSettings()) as TaxSettings;
       const grouped = new Map<string, typeof rows>();
       for (const row of rows) grouped.set(row.sku, [...(grouped.get(row.sku) || []), row]);
       const summaries = await mapWithConcurrency([...grouped.entries()], 5, async ([sku, publications]) => {
@@ -133,9 +144,22 @@ export async function GET(request: NextRequest) {
             .map((item) => Number(item.price || 0))
             .filter((price) => price > 0)
             .sort((a, b) => a - b)[0] || null;
-          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor };
+          const product = productsBySku.get(sku);
+          const shipping = (data || []).find((item) => String(item.meli_item_id) === String(reference.itemId));
+          const suggestedPrice = lowestCompetitor ? Math.max(1, Math.floor(lowestCompetitor - 100)) : null;
+          const profitability = product && shipping && suggestedPrice
+            ? calculatePriceSummary(product, mercadoLibreClassicOption(), feesByCategory.get(String(product.category)) || null, taxes, shipping, { salePrice: suggestedPrice })
+            : null;
+          const marginAtSuggested = profitability?.valid ? profitability.marginOnNetSale : null;
+          const action = !suggestedPrice ? "sin_competidor"
+            : Number(reference.ownPrice || 0) > suggestedPrice
+              ? Number(marginAtSuggested || 0) >= 5 ? "bajar_y_ganar" : "caro_sin_margen"
+              : Number(reference.ownPrice || 0) < suggestedPrice
+                ? Number(marginAtSuggested || 0) >= 5 ? "subir_y_seguir_ganando" : "barato_sin_margen"
+                : "en_precio";
+          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor, suggestedPrice, marginAtSuggested, action };
         } catch {
-          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor: null };
+          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor: null, suggestedPrice: null, marginAtSuggested: null, action: "sin_competidor" };
         }
       });
       return NextResponse.json({ ok: true, rows: summaries, total: summaries.length, refreshedAt: new Date().toISOString() });
