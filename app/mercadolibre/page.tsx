@@ -306,12 +306,22 @@ export default function MercadoLibrePage() {
     setError(null);
 
     try {
-      const response = await fetch("/api/mercadolibre/sync-shipping", { method: "POST" });
-      const data = await response.json();
+      const response = await fetch("/api/mercadolibre/sync-shipping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "installments", pageLimit: 60 }),
+      });
+      const raw = await response.text();
+      let data: { error?: string; installment_fee_updates?: number };
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error(`Mercado Libre devolvió un error sin detalle JSON: ${raw.slice(0, 180) || "sin respuesta"}`);
+      }
       if (!response.ok) throw new Error(data?.error || "No se pudo sincronizar MercadoLibre.");
 
       setMessage(
-        `MercadoLibre sincronizado: ${data.category_fee_updates || 0} categorías y ${data.installment_fee_updates || 0} costos de cuotas actualizados.`
+        `Costos de cuotas actualizados: ${data.installment_fee_updates || 0}.`
       );
       await loadData();
     } catch (syncError) {
@@ -1003,7 +1013,7 @@ export default function MercadoLibrePage() {
           <>
             <button type="button" className="button ghost" onClick={syncFromMercadoLibre} disabled={syncingMeli}>
               <RefreshCw aria-hidden="true" />
-              {syncingMeli ? "Sincronizando..." : "Sincronizar ML"}
+              {syncingMeli ? "Actualizando cuotas..." : "Actualizar cuotas ML"}
             </button>
             <button type="button" className="button ghost" onClick={loadData} disabled={loading}>
               Actualizar

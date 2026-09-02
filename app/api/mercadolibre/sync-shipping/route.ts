@@ -1364,6 +1364,7 @@ export async function POST(request: NextRequest) {
     const targetSkus = normalizeSkuList(body?.skus);
     const promotionsOnly = body?.scope === "promotions";
     const shippingOnly = body?.scope === "shipping";
+    const installmentsOnly = body?.scope === "installments";
     const statusesToSync = normalizeStatusList(body?.statuses);
     const pageOffset = boundedNumber(body?.offset, 0, 0, 1000);
     const pageLimit = boundedNumber(body?.pageLimit, 1000, 1, 1000);
@@ -1524,7 +1525,7 @@ export async function POST(request: NextRequest) {
     );
     const matchedItemIds = new Set(matchedItemsForFetch.map((item) => item.id));
 
-    await mapWithConcurrency(matchedItemsForFetch, promotionsOnly || shippingOnly ? 8 : 4, async (item) => {
+    await mapWithConcurrency(matchedItemsForFetch, promotionsOnly || shippingOnly || installmentsOnly ? 8 : 4, async (item) => {
       if (promotionsOnly) {
         detailedItemsByItem.set(item.id, item);
         await promotionForMatchedItem(item);
@@ -1540,6 +1541,28 @@ export async function POST(request: NextRequest) {
         return;
       }
 
+      if (installmentsOnly) {
+        const detailedItem = await getDetailedItemForPricing(item, account);
+        detailedItemsByItem.set(item.id, detailedItem);
+        const listingPriceResult = await listingPriceForMatchedItem(item);
+        const detectedInstallmentsText = detectInstallmentsText(
+          detailedItem,
+          detailedItem.listing_type_id ? listingTypeNames.get(detailedItem.listing_type_id) || detailedItem.listing_type_id : null,
+        );
+        const detectedInstallments = installmentCountFromText(detectedInstallmentsText);
+        const detectedFinancingFeeRate = financingFeeRate(listingPriceResult);
+        const optionCode = detectedInstallments
+          ? optionCodeForInstallments(detectedInstallments)
+          : optionCodeByFinancingRate(detectedFinancingFeeRate, (currentInstallmentFees || []) as CurrentInstallmentFee[]);
+
+        if (optionCode && optionCode !== "MC" && Number.isFinite(detectedFinancingFeeRate) && detectedFinancingFeeRate > 0) {
+          const currentRates = financingFeeObservations.get(optionCode) || [];
+          currentRates.push(detectedFinancingFeeRate);
+          financingFeeObservations.set(optionCode, currentRates);
+        }
+        return;
+      }
+
       const detailedItem = await getDetailedItemForPricing(item, account);
       detailedItemsByItem.set(item.id, detailedItem);
       await Promise.all([
@@ -1550,7 +1573,7 @@ export async function POST(request: NextRequest) {
       ]);
     });
 
-    const sellerPromotions = shippingOnly ? [] : await getSellerPromotions(account);
+    const sellerPromotions = shippingOnly || installmentsOnly ? [] : await getSellerPromotions(account);
     const sellerPromotionsById = new Map(sellerPromotions.map((promotion) => [promotion.id, promotion]));
     const promotionOpportunityRows: any[] = [];
     const promotionOpportunityKeys = new Set<string>();
@@ -1562,7 +1585,7 @@ export async function POST(request: NextRequest) {
       promotionOpportunityRows.push(row);
     }
 
-    if (!shippingOnly) await mapWithConcurrency(matchedItemsForFetch, 6, async (item) => {
+    if (!shippingOnly && !installmentsOnly) await mapWithConcurrency(matchedItemsForFetch, 6, async (item) => {
       const promotionSummary = promotionsByItem.get(item.id);
       const rawResponses = Array.isArray(promotionSummary?.raw) ? promotionSummary.raw : [];
       for (const entry of rawResponses) {
@@ -1579,19 +1602,40 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    if (!shippingOnly && targetSkus.length) {
+    if (!shippingOnly && !installmentsOnly && targetSkus.length) {
       const idsToRefresh = [...matchedItemIds];
       if (idsToRefresh.length) {
         await supabase.from("mercadolibre_promotion_opportunities").delete().in("meli_item_id", idsToRefresh);
       }
-    } else if (!shippingOnly && resetPromotions) {
+    } else if (!shippingOnly && !installmentsOnly && resetPromotions) {
       await supabase.from("mercadolibre_promotion_opportunities").delete().neq("promotion_id", "__never__");
     }
-    if (!shippingOnly) {
+    if (!shippingOnly && !installmentsOnly) {
       for (const batch of chunk(promotionOpportunityRows, 200)) {
         const { error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch);
         if (promoSaveError) throw new Error(promoSaveError.message);
       }
+    }
+
+    if (installmentsOnly) {
+      const now = new Date().toISOString();
+      let installmentFeeUpdates = 0;
+      for (const [code, rates] of financingFeeObservations.entries()) {
+        const rate = Math.max(...rates.filter((value) => Number.isFinite(value)));
+        if (!Number.isFinite(rate) || rate <= 0) continue;
+        const { error: installmentFeeError } = await supabase
+          .from("mercadolibre_installment_fees")
+          .update({
+            financing_fee_rate: Number(rate.toFixed(3)),
+            notes: `Sincronizado desde MercadoLibre listing_prices (${rates.length} publicaciones)`,
+            updated_at: now,
+          })
+          .eq("code", code);
+        if (installmentFeeError) throw new Error(installmentFeeError.message);
+        installmentFeeUpdates += 1;
+      }
+
+      return NextResponse.json({ ok: true, total_items: matchedItemsForFetch.length, installment_fee_updates: installmentFeeUpdates });
     }
 
     if (promotionsOnly) {
