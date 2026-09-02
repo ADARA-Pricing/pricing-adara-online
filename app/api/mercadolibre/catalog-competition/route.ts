@@ -57,81 +57,69 @@ export async function GET(request: NextRequest) {
     const account = await getConnectedMeliAccount();
     if (!account) return NextResponse.json({ error: "Primero conectá Mercado Libre." }, { status: 400 });
 
-    const requestedLimit = Number(request.nextUrl.searchParams.get("limit") || 120);
-    const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) ? requestedLimit : 120, 200));
     const supabase = createAdminClient();
+    const requestedItemId = String(request.nextUrl.searchParams.get("itemId") || "").toUpperCase();
+
+    if (requestedItemId) {
+      if (!/^MLA\d+$/.test(requestedItemId)) return NextResponse.json({ error: "Publicación inválida." }, { status: 400 });
+      const { data: own, error: ownError } = await supabase
+        .from("mercadolibre_shipping_costs")
+        .select("sku,meli_item_id,meli_title,meli_catalog_product_id")
+        .eq("active", true)
+        .eq("meli_catalog_listing", true)
+        .eq("meli_item_id", requestedItemId)
+        .maybeSingle();
+      if (ownError) throw new Error(ownError.message);
+      if (!own?.meli_catalog_product_id) return NextResponse.json({ error: "Esta publicación no pertenece a un catálogo activo." }, { status: 404 });
+
+      const catalog = await meliFetch(`/products/${own.meli_catalog_product_id}/items?limit=5`, account) as { results?: Array<MeliItem & { item_id?: string | null; price?: number | null }> };
+      const competitors = await mapWithConcurrency(catalog.results || [], 5, async (item) => {
+        const itemId = String(item.item_id || item.id || "").toUpperCase();
+        let nickname: string | null = null;
+        if (item.seller_id) {
+          try {
+            const seller = await meliFetch(`/users/${item.seller_id}`, account) as { nickname?: string | null };
+            nickname = seller.nickname || null;
+          } catch { /* El ranking sigue disponible aunque el perfil comercial no responda. */ }
+        }
+        return {
+          itemId,
+          price: Number(item.price || 0) || null,
+          nickname,
+          permalink: item.permalink || null,
+          full: item.shipping?.logistic_type === "fulfillment",
+          invoiceA: invoiceA(item),
+          isOwn: itemId === requestedItemId,
+        };
+      });
+      return NextResponse.json({ ok: true, own: { sku: own.sku, itemId: requestedItemId, title: own.meli_title, catalogProductId: own.meli_catalog_product_id }, competitors });
+    }
+
     const { data, error } = await supabase
       .from("mercadolibre_shipping_costs")
-      .select("product_id,sku,meli_item_id,meli_title,meli_thumbnail,meli_permalink,meli_price,meli_catalog_product_id,meli_catalog_listing,meli_status")
+      .select("product_id,sku,meli_item_id,meli_title,meli_thumbnail,meli_permalink,meli_price,meli_catalog_product_id,meli_catalog_listing,meli_status,meli_catalog_status,meli_catalog_price_to_win,meli_catalog_current_price,meli_catalog_reason,meli_logistic_type")
       .eq("active", true)
       .eq("meli_catalog_listing", true)
       .eq("meli_status", "active")
       .not("meli_item_id", "is", null)
       .order("sku")
-      .limit(limit);
+      .limit(1000);
     if (error) throw new Error(error.message);
 
-    const rows = (data || []).filter((row) => /^MLA\d+$/.test(String(row.meli_item_id || "")));
-    const competition = await mapWithConcurrency(rows, 6, async (row) => {
-      const itemId = String(row.meli_item_id);
-      try {
-        const detail = await meliFetch(`/items/${itemId}/price_to_win?version=v2`, account) as PriceToWin;
-        const winnerId = String(detail.winner?.item_id || "").toUpperCase() || null;
-        const ownWinner = winnerId === itemId;
-        let winnerItem: MeliItem | null = null;
-        let winnerNickname: string | null = null;
-        if (winnerId) {
-          winnerItem = await meliFetch(`/items/${winnerId}`, account) as MeliItem;
-          if (winnerItem.seller_id) {
-            try {
-              const seller = await meliFetch(`/users/${winnerItem.seller_id}`, account) as { nickname?: string | null };
-              winnerNickname = seller.nickname || null;
-            } catch {
-              // El nombre comercial es complementario: mantenemos precio y condiciones aunque ML no lo devuelva.
-            }
-          }
-        }
-        return {
-          sku: row.sku,
-          itemId,
-          title: row.meli_title,
-          thumbnail: row.meli_thumbnail,
-          permalink: row.meli_permalink,
-          catalogProductId: detail.catalog_product_id || row.meli_catalog_product_id,
-          ownPrice: Number(detail.current_price || row.meli_price || 0) || null,
-          priceToWin: Number(detail.price_to_win || 0) || null,
-          status: detail.status || "unknown",
-          ownFull: isFull(detail.boosts),
-          reason: detail.reason || [],
-          winner: winnerId ? {
-            itemId: winnerId,
-            price: Number(detail.winner?.price || 0) || null,
-            nickname: winnerNickname,
-            permalink: winnerItem?.permalink || null,
-            full: isFull(detail.winner?.boosts, winnerItem),
-            invoiceA: invoiceA(winnerItem),
-            isOwn: ownWinner,
-          } : null,
-        };
-      } catch (fetchError) {
-        return {
-          sku: row.sku,
-          itemId,
-          title: row.meli_title,
-          thumbnail: row.meli_thumbnail,
-          permalink: row.meli_permalink,
-          catalogProductId: row.meli_catalog_product_id,
-          ownPrice: Number(row.meli_price || 0) || null,
-          priceToWin: null,
-          status: "error",
-          ownFull: false,
-          reason: [fetchError instanceof Error ? fetchError.message : "No se pudo consultar catálogo."],
-          winner: null,
-        };
-      }
-    });
-
-    return NextResponse.json({ ok: true, rows: competition, total: competition.length, refreshedAt: new Date().toISOString() });
+    const rows = (data || []).filter((row) => /^MLA\d+$/.test(String(row.meli_item_id || ""))).map((row) => ({
+      sku: row.sku,
+      itemId: row.meli_item_id,
+      title: row.meli_title,
+      thumbnail: row.meli_thumbnail,
+      permalink: row.meli_permalink,
+      catalogProductId: row.meli_catalog_product_id,
+      ownPrice: Number(row.meli_catalog_current_price || row.meli_price || 0) || null,
+      priceToWin: Number(row.meli_catalog_price_to_win || 0) || null,
+      status: row.meli_catalog_status || "unknown",
+      ownFull: row.meli_logistic_type === "fulfillment",
+      reason: Array.isArray(row.meli_catalog_reason) ? row.meli_catalog_reason : [],
+    }));
+    return NextResponse.json({ ok: true, rows, total: rows.length, refreshedAt: new Date().toISOString() });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo consultar la competencia." }, { status: 500 });
   }
