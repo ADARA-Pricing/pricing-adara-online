@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       if (!/^MLA\d+$/.test(requestedItemId)) return NextResponse.json({ error: "Publicación inválida." }, { status: 400 });
       const { data: own, error: ownError } = await supabase
         .from("mercadolibre_shipping_costs")
-        .select("sku,meli_item_id,meli_title,meli_catalog_product_id")
+        .select("sku,meli_item_id,meli_title,meli_thumbnail,meli_price,meli_promo_status,meli_promo_name,meli_promo_price,meli_catalog_product_id")
         .eq("active", true)
         .eq("meli_catalog_listing", true)
         .eq("meli_item_id", requestedItemId)
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
           isOwn: itemId === requestedItemId,
         };
       });
-      return NextResponse.json({ ok: true, own: { sku: own.sku, itemId: requestedItemId, title: own.meli_title, catalogProductId: own.meli_catalog_product_id }, competitors });
+      return NextResponse.json({ ok: true, own: { sku: own.sku, itemId: requestedItemId, title: own.meli_title, thumbnail: own.meli_thumbnail, price: own.meli_price, promo: own.meli_promo_status ? { name: own.meli_promo_name, price: own.meli_promo_price } : null, catalogProductId: own.meli_catalog_product_id }, competitors });
     }
 
     const { data, error } = await supabase

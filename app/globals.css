@@ -8722,6 +8722,13 @@ textarea:focus-visible {
 .market-status-card.danger { border-color: #fca5a5; }
 .market-status-card.active { box-shadow: 0 0 0 3px rgba(37, 99, 235, .15); }
 @media (max-width: 720px) { .market-status-kpis { grid-template-columns: 1fr; } }
+.competition-modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; background: rgba(15, 23, 42, .48); }
+.competition-modal { width: min(1060px, 100%); max-height: calc(100vh - 48px); overflow: auto; padding: 24px; }
+.competition-detail-grid { display: grid; grid-template-columns: 180px repeat(2, 1fr); gap: 16px; margin: 16px 0; }
+.competition-detail-grid > div { display: grid; gap: 7px; align-content: start; }
+.competition-detail-grid span { color: #64748b; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+.competition-detail-image { width: 120px; height: 120px; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 14px; }
+@media (max-width: 720px) { .competition-detail-grid { grid-template-columns: 1fr; } }
 @media (max-width: 720px) { .market-competition-filters { grid-template-columns: 1fr; } }
 
 .empty-state-box {
