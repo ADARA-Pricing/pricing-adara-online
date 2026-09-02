@@ -17,8 +17,8 @@ export async function POST(request: NextRequest) {
 
     const account = await getConnectedMeliAccount();
     if (!account) return NextResponse.json({ error: "Primero conectá Mercado Libre." }, { status: 400 });
-    const campaigns = await meliFetch(`/seller-promotions/users/${account.meli_user_id}?app_version=v2`, account) as Array<{ id?: string; name?: string; type?: string; status?: string }>;
-    const campaign = (Array.isArray(campaigns) ? campaigns : []).find((item) =>
+    const campaignsResponse = await meliFetch(`/seller-promotions/users/${account.meli_user_id}?app_version=v2`, account) as { results?: Array<{ id?: string; name?: string; type?: string; status?: string }> };
+    const campaign = (Array.isArray(campaignsResponse?.results) ? campaignsResponse.results : []).find((item) =>
       item.type === "SELLER_CAMPAIGN" && /^adara\b/i.test(String(item.name || "")) && /started|active|pending/i.test(String(item.status || "")),
     );
     if (!campaign?.id) return NextResponse.json({ error: "No encontré una campaña mensual activa llamada Adara." }, { status: 404 });
