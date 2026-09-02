@@ -15,6 +15,7 @@ import {
   Search,
   SlidersHorizontal,
   Tags,
+  Upload,
   X,
 } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
@@ -92,6 +93,7 @@ export default function PricesPage() {
   const [modal, setModal] = useState<ModalState | null>(null);
   const [refreshingProductSku, setRefreshingProductSku] = useState<string | null>(null);
   const [productSyncMessage, setProductSyncMessage] = useState<string | null>(null);
+  const [publishingPriceChannel, setPublishingPriceChannel] = useState<string | null>(null);
   const productSyncRequestId = useRef(0);
   const [expandedProducts, setExpandedProducts] = useState<
     Record<string, boolean>
@@ -499,6 +501,59 @@ export default function PricesPage() {
       if (productSyncRequestId.current === requestId) {
         setRefreshingProductSku(null);
       }
+    }
+  }
+
+  async function publishPriceToMercadoLibre(
+    product: Product,
+    option: MercadoLibrePriceOption,
+    salePrice: number | null | undefined,
+    promoDiscountRate: number,
+  ) {
+    const normalizedOption = normalizeOption(option);
+    const installmentCount = Number(normalizedOption.installment_count || 0) || 1;
+    const parsedSalePrice = Number(salePrice || 0);
+    const price = promoDiscountRate > 0
+      ? promoListPrice(parsedSalePrice, promoDiscountRate)
+      : parsedSalePrice;
+    if (!Number.isFinite(price) || price <= 0) {
+      setError("No hay un precio válido para cargar en Mercado Libre.");
+      return;
+    }
+
+    const condition = installmentCount === 1 ? "Clásica / 1 pago" : `${installmentCount} cuotas`;
+    const usePromoPrice = promoDiscountRate > 0;
+    const confirmed = window.confirm(
+      `Vas a cargar ${moneyWithCents(price)} en todas las publicaciones activas del SKU ${product.sku} para ${condition}.${usePromoPrice ? ` Es el precio de lista para sostener la promo de ${percent(promoDiscountRate)}.` : ""}\n\nLas publicaciones con automatización de precios activa se omitirán.`,
+    );
+    if (!confirmed) return;
+
+    const actionKey = `${product.sku}-${normalizedOption.code}`;
+    setPublishingPriceChannel(actionKey);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/mercadolibre/update-sku-price", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku: product.sku, installmentCount, price }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || "No se pudo cargar el precio en Mercado Libre.");
+
+      const updated = Array.isArray(data?.updated) ? data.updated.length : 0;
+      const skipped = Array.isArray(data?.skipped) ? data.skipped.length : 0;
+      if (!updated) {
+        throw new Error(skipped ? `Mercado Libre no actualizó publicaciones: ${data.skipped.map((item: { itemId?: string; reason?: string }) => `${item.itemId || "publicación"} (${item.reason || "sin detalle"})`).join(" · ")}` : "Mercado Libre no actualizó ninguna publicación.");
+      }
+      setMessage(
+        `${updated} publicación${updated === 1 ? "" : "es"} actualizada${updated === 1 ? "" : "s"} en ${condition}${skipped ? ` · ${skipped} omitida${skipped === 1 ? "" : "s"} (ver automatización o detalle de ML)` : ""}.`,
+      );
+      await loadData({ quiet: true });
+    } catch (publishError) {
+      setError(publishError instanceof Error ? publishError.message : "No se pudo cargar el precio en Mercado Libre.");
+    } finally {
+      setPublishingPriceChannel(null);
     }
   }
 
@@ -1160,6 +1215,7 @@ export default function PricesPage() {
                                     <th>Ganancia</th>
                                     <th>Desc. promo</th>
                                     <th>Precio promo</th>
+                                    <th></th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1211,6 +1267,19 @@ export default function PricesPage() {
                                               ? moneyWithCents(promoPrice)
                                               : "-"}
                                           </strong>
+                                        </td>
+                                        <td className="prices-publish-cell">
+                                          {isMercadoLibreChannel(option) && result.valid ? (
+                                            <button
+                                              className="button ghost small-button prices-publish-button"
+                                              onClick={() => publishPriceToMercadoLibre(product, option, result.roundedPrice, promoDiscountRate)}
+                                              disabled={publishingPriceChannel === `${product.sku}-${option.code}`}
+                                              title={promoDiscountRate > 0 ? "Carga el precio de lista necesario para conservar esta promoción." : "Carga este precio en las publicaciones de esta cuota."}
+                                            >
+                                              <Upload aria-hidden="true" />
+                                              {publishingPriceChannel === `${product.sku}-${option.code}` ? "Cargando..." : "Cargar en ML"}
+                                            </button>
+                                          ) : "-"}
                                         </td>
                                       </tr>
                                     ),
