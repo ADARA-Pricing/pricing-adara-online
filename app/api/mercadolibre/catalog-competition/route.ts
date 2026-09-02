@@ -138,6 +138,12 @@ export async function GET(request: NextRequest) {
       for (const row of rows) grouped.set(row.sku, [...(grouped.get(row.sku) || []), row]);
       const summaries = await mapWithConcurrency([...grouped.entries()], 5, async ([sku, publications]) => {
         const reference = [...publications].sort((a, b) => Number(a.ownPrice || Infinity) - Number(b.ownPrice || Infinity))[0];
+        const groupedStatus = publications.some((publication) => publication.status === "winning")
+          ? "winning"
+          : publications.some((publication) => publication.status === "sharing_first_place")
+            ? "sharing_first_place"
+            : reference.status;
+        const alreadyWinning = groupedStatus === "winning" || groupedStatus === "sharing_first_place";
         try {
           const catalog = await meliFetch(`/products/${reference.catalogProductId}/items?limit=50`, account) as { results?: Array<MeliItem & { item_id?: string | null; price?: number | null }> };
           const ownIds = new Set(publications.map((publication) => String(publication.itemId).toUpperCase()));
@@ -148,7 +154,6 @@ export async function GET(request: NextRequest) {
             .sort((a, b) => a - b)[0] || null;
           const product = productsBySku.get(sku);
           const shipping = (data || []).find((item) => String(item.meli_item_id) === String(reference.itemId));
-          const alreadyWinning = reference.status === "winning" || reference.status === "sharing_first_place";
           const suggestedPrice = alreadyWinning
             ? Number(reference.ownPrice || 0) || null
             : lowestCompetitor ? Math.max(1, Math.floor(lowestCompetitor - 100)) : null;
@@ -167,9 +172,9 @@ export async function GET(request: NextRequest) {
               : Number(reference.ownPrice || 0) < suggestedPrice
                 ? Number(marginAtSuggested || 0) >= 5 ? "subir_y_seguir_ganando" : "barato_sin_margen"
                 : "en_precio";
-          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor, suggestedPrice, marginAtSuggested, currentMargin, action };
+          return { ...reference, status: groupedStatus, sku, publicationCount: publications.length, lowestCompetitor, suggestedPrice, marginAtSuggested, currentMargin, action };
         } catch {
-          return { ...reference, sku, publicationCount: publications.length, lowestCompetitor: null, suggestedPrice: null, marginAtSuggested: null, currentMargin: null, action: "sin_competidor" };
+          return { ...reference, status: groupedStatus, sku, publicationCount: publications.length, lowestCompetitor: null, suggestedPrice: null, marginAtSuggested: null, currentMargin: null, action: alreadyWinning ? "ya_ganando" : "sin_competidor" };
         }
       });
       return NextResponse.json({ ok: true, rows: summaries, total: summaries.length, refreshedAt: new Date().toISOString() });
