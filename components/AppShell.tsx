@@ -22,6 +22,7 @@ import {
   SlidersHorizontal,
   Store,
   Tags,
+  Trophy,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
@@ -50,6 +51,7 @@ const mainItems: NavItem[] = [
 
 const metricItems: NavItem[] = [
   { href: "/metricas-meli", label: "Negocio", icon: ChartColumnIncreasing },
+  { href: "/analisis-mercado", label: "Competencia catálogo", icon: Trophy },
   { href: "/rotacion-sku", label: "Rotacion SKU", icon: RefreshCcw },
   { href: "/rentabilidad-meli", label: "Rentabilidad ML", icon: CircleDollarSign },
 ];

@@ -8704,6 +8704,14 @@ textarea:focus-visible {
   border-color: #bfdbfe;
 }
 
+.catalog-competition-table { min-width: 1180px; }
+.catalog-competition-table .badge { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.catalog-competition-table .catalog-status.winning,
+.catalog-competition-table .catalog-status.sharing_first_place { color: #047857; background: #ecfdf5; border-color: #a7f3d0; }
+.catalog-competition-table .catalog-status.competing,
+.catalog-competition-table .catalog-status.listed { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+.catalog-competition-table td { min-width: 118px; }
+
 .empty-state-box {
   border: 1px solid #dbe4f0;
   border-radius: 16px;
