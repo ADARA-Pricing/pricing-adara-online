@@ -32,7 +32,7 @@ export default function AnalisisMercadoPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingRanking, setLoadingRanking] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "winning" | "losing" | "expensive" | "cheap" | "no_margin">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "winning" | "sharing" | "losing" | "expensive" | "cheap" | "no_margin">("all");
   const [applyingSku, setApplyingSku] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ row: CompetitionRow; offers: RankedOffer[] } | null>(null);
   const rankingRef = useRef<HTMLElement | null>(null);
@@ -41,19 +41,22 @@ export default function AnalisisMercadoPage() {
 
   const filtered = useMemo(() => rows.filter((row) => {
     const matchesQuery = `${row.sku} ${row.title || ""} ${row.itemId}`.toLowerCase().includes(query.toLowerCase());
-    const isWinning = row.status === "winning" || row.status === "sharing_first_place";
+    const isWinning = row.status === "winning";
+    const isSharing = row.status === "sharing_first_place";
     const competitor = Number(row.lowestCompetitor || 0);
     const own = Number(row.ownPrice || 0);
     const matchesStatus = statusFilter === "all"
       || (statusFilter === "winning" && isWinning)
-      || (statusFilter === "losing" && !isWinning)
+      || (statusFilter === "sharing" && isSharing)
+      || (statusFilter === "losing" && !isWinning && !isSharing)
       || (statusFilter === "expensive" && competitor > 0 && own > competitor)
       || (statusFilter === "cheap" && row.action === "subir_y_seguir_ganando")
       || (statusFilter === "no_margin" && row.action === "caro_sin_margen");
     return matchesQuery && matchesStatus;
   }), [rows, query, statusFilter]);
-  const losing = rows.filter((row) => row.status === "competing" || row.status === "listed").length;
-  const winning = rows.filter((row) => row.status === "winning" || row.status === "sharing_first_place").length;
+  const losing = rows.filter((row) => row.status !== "winning" && row.status !== "sharing_first_place").length;
+  const winning = rows.filter((row) => row.status === "winning").length;
+  const sharing = rows.filter((row) => row.status === "sharing_first_place").length;
 
   async function refresh() {
     setLoading(true); setError(null);
@@ -93,15 +96,14 @@ export default function AnalisisMercadoPage() {
   return <main className="page market-analysis-page">
     <PageHero icon={<Trophy size={23} />} title="Métricas de competencia" description="Compará el precio de 1 pago por SKU contra las ofertas reales de catálogo. Solo se muestran SKUs con catálogo activo." actions={<button className="button" onClick={refresh} disabled={loading}><RefreshCw size={16} className={loading ? "spin" : ""} />{loading ? "Armando ranking..." : "Actualizar competencia"}</button>} />
     {error ? <div className="notice error">{error}</div> : null}
-    <section className="market-summary-grid">
-      <div><span>Catálogos consultados</span><strong>{rows.length || "-"}</strong></div>
-      <div><span>Ganando / compartiendo</span><strong>{rows.length ? winning : "-"}</strong></div>
-      <div><span>Para revisar precio</span><strong>{rows.length ? losing : "-"}</strong></div>
-      <div><span>Actualización</span><strong>{refreshedAt ? new Date(refreshedAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "Pendiente"}</strong></div>
+    <section className="dashboard-kpi-grid market-status-kpis">
+      <button className={`card dashboard-kpi market-status-card success ${statusFilter === "winning" ? "active" : ""}`} onClick={() => setStatusFilter("winning")}><span>Ganando catálogo</span><strong>{rows.length ? winning : "-"}</strong><small>Ver SKUs ganadores</small></button>
+      <button className={`card dashboard-kpi market-status-card warning ${statusFilter === "sharing" ? "active" : ""}`} onClick={() => setStatusFilter("sharing")}><span>Compartiendo 1° puesto</span><strong>{rows.length ? sharing : "-"}</strong><small>Ver SKUs compartidos</small></button>
+      <button className={`card dashboard-kpi market-status-card danger ${statusFilter === "losing" ? "active" : ""}`} onClick={() => setStatusFilter("losing")}><span>Perdiendo catálogo</span><strong>{rows.length ? losing : "-"}</strong><small>Ver SKUs a revisar</small></button>
     </section>
     <section className="card market-results-card">
       <div className="section-heading"><div><h2>SKUs de catálogo</h2><p className="small">Cada fila agrupa las publicaciones del SKU. “Competidor más barato” sale del Top 5 real de ese catálogo.</p></div></div>
-      <div className="market-competition-filters"><label className="search-field"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o MLA" /></label><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | "winning" | "losing" | "expensive" | "cheap" | "no_margin")}><option value="all">Todos los estados</option><option value="winning">Ganando catálogo</option><option value="losing">Perdiendo / no compite</option><option value="expensive">Caros con margen para ganar</option><option value="no_margin">Caros sin margen de 5%</option><option value="cheap">Baratos: puedo subir</option></select></div>
+      <div className="market-competition-filters"><label className="search-field"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o MLA" /></label><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | "winning" | "sharing" | "losing" | "expensive" | "cheap" | "no_margin")}><option value="all">Todos los estados</option><option value="winning">Ganando catálogo</option><option value="sharing">Compartiendo 1° puesto</option><option value="losing">Perdiendo / no compite</option><option value="expensive">Caros con margen para ganar</option><option value="no_margin">Caros sin margen de 5%</option><option value="cheap">Baratos: puedo subir</option></select></div>
       {!rows.length && !loading ? <div className="empty-state-box">Actualizá la competencia para consultar tus publicaciones activas de catálogo.</div> : null}
       {filtered.length ? <div className="table-wrap"><table className="market-results-table catalog-competition-table"><thead><tr><th>SKU / producto</th><th>Mi precio 1 pago</th><th>Competidor más barato</th><th>Decisión</th><th>Acción</th><th /></tr></thead><tbody>{filtered.map((row) => { const actionLabel = row.action === "bajar_y_ganar" ? `Bajar a ${moneyWithCents(row.suggestedPrice)} · margen ${row.marginAtSuggested?.toFixed(2)}%` : row.action === "caro_sin_margen" ? `Caro · bajar deja margen ${row.marginAtSuggested?.toFixed(2)}%` : row.action === "subir_y_seguir_ganando" ? `Podés subir a ${moneyWithCents(row.suggestedPrice)} · margen ${row.marginAtSuggested?.toFixed(2)}%` : row.action === "en_precio" ? "Ya está en precio" : "Sin competidor comparable"; const safeAction = row.action === "bajar_y_ganar" || row.action === "subir_y_seguir_ganando"; return <tr key={row.sku}><td className="market-item-cell"><div>{row.thumbnail ? <img src={row.thumbnail} alt="" /> : <span className="market-thumb-placeholder" />}<span><strong>{row.title || row.sku}</strong><p>{row.sku} · {row.publicationCount || 1} publicación{row.publicationCount === 1 ? "" : "es"} · {statusLabel(row.status)}</p></span></div></td><td><strong>{row.ownPrice ? moneyWithCents(row.ownPrice) : "-"}</strong></td><td><strong>{row.lowestCompetitor ? moneyWithCents(row.lowestCompetitor) : "Sin competidor"}</strong></td><td><strong className={row.action === "caro_sin_margen" ? "competition-expensive" : row.action === "bajar_y_ganar" ? "competition-cheap" : ""}>{actionLabel}</strong></td><td>{safeAction ? <button className="button small-button" onClick={() => applySuggestedPrice(row)} disabled={applyingSku === row.sku}>{applyingSku === row.sku ? "Aplicando..." : "Aplicar sugerido"}</button> : "-"}</td><td><button className="button ghost small-button" onClick={() => openRanking(row)} disabled={loadingRanking === row.itemId}>{loadingRanking === row.itemId ? "Buscando..." : "Ver top 5"}</button></td></tr>; })}</tbody></table></div> : null}
     </section>

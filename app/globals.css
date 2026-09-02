@@ -8715,6 +8715,13 @@ textarea:focus-visible {
 .market-competition-filters select { min-height: 42px; }
 .competition-expensive { color: #dc2626; }
 .competition-cheap { color: #047857; }
+.market-status-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.market-status-card { text-align: left; cursor: pointer; border: 2px solid #e2e8f0; }
+.market-status-card.success { border-color: #86efac; }
+.market-status-card.warning { border-color: #fcd34d; }
+.market-status-card.danger { border-color: #fca5a5; }
+.market-status-card.active { box-shadow: 0 0 0 3px rgba(37, 99, 235, .15); }
+@media (max-width: 720px) { .market-status-kpis { grid-template-columns: 1fr; } }
 @media (max-width: 720px) { .market-competition-filters { grid-template-columns: 1fr; } }
 
 .empty-state-box {
