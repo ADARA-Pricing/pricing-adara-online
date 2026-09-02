@@ -27,6 +27,7 @@ type MeliItem = {
   permalink?: string | null;
   title?: string | null;
   shipping?: { logistic_type?: string | null } | null;
+  international_delivery_mode?: string | null;
   sale_terms?: SaleTerm[] | null;
 };
 
@@ -90,6 +91,7 @@ export async function GET(request: NextRequest) {
           nickname,
           permalink: item.permalink || null,
           full: item.shipping?.logistic_type === "fulfillment",
+          international: Boolean(item.international_delivery_mode && item.international_delivery_mode !== "none"),
           invoiceA: invoiceA(item),
           isOwn: itemId === requestedItemId,
         };
