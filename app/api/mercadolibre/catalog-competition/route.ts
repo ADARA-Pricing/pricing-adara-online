@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
       const summaries = await mapWithConcurrency([...grouped.entries()], 5, async ([sku, publications]) => {
         const reference = [...publications].sort((a, b) => Number(a.ownPrice || Infinity) - Number(b.ownPrice || Infinity))[0];
         try {
-          const catalog = await meliFetch(`/products/${reference.catalogProductId}/items?limit=5`, account) as { results?: Array<MeliItem & { item_id?: string | null; price?: number | null }> };
+          const catalog = await meliFetch(`/products/${reference.catalogProductId}/items?limit=50`, account) as { results?: Array<MeliItem & { item_id?: string | null; price?: number | null }> };
           const ownIds = new Set(publications.map((publication) => String(publication.itemId).toUpperCase()));
           const lowestCompetitor = (catalog.results || [])
             .filter((item) => !ownIds.has(String(item.item_id || item.id || "").toUpperCase()))
