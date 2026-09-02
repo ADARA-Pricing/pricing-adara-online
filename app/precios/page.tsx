@@ -365,12 +365,9 @@ export default function PricesPage() {
 
   function isMercadoLibreChannel(option?: MercadoLibrePriceOption | null) {
     if (!option) return false;
-    const normalized = normalizeOption(option);
-    return (
-      normalized.channel_type === "mercadolibre" ||
-      normalized.code === "MC" ||
-      normalized.code?.startsWith("MP")
-    );
+    // La configuración heredada puede marcar otros canales como MercadoLibre.
+    // Para publicar, solo son válidas la clásica y las condiciones Premium.
+    return option.code === "MC" || option.code?.startsWith("MP");
   }
 
   function sortPricingOptions(options: MercadoLibrePriceOption[]) {
@@ -552,6 +549,58 @@ export default function PricesPage() {
       await loadData({ quiet: true });
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : "No se pudo cargar el precio en Mercado Libre.");
+    } finally {
+      setPublishingPriceChannel(null);
+    }
+  }
+
+  async function publishAllPricesToMercadoLibre(
+    product: Product,
+    rows: ReturnType<typeof calculateRowsForProduct>,
+  ) {
+    const prices = rows
+      .filter(({ option, result }) => isMercadoLibreChannel(option) && result.valid)
+      .map(({ option, result, promoDiscountRate }) => ({
+        option,
+        installmentCount: Number(option.installment_count || 0) || 1,
+        price: promoDiscountRate > 0
+          ? promoListPrice(result.roundedPrice, promoDiscountRate)
+          : result.roundedPrice,
+      }))
+      .filter(({ price }) => Number.isFinite(Number(price)) && Number(price) > 0);
+    if (!prices.length) {
+      setError("No hay precios válidos de Mercado Libre para cargar.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Vas a cargar los ${prices.length} precios de Mercado Libre para el SKU ${product.sku}: Clásica y cuotas Premium.\n\nNo se incluirán Efectivo, Tienda Nube ni Transferencia. Las publicaciones con automatización activa se omitirán.`,
+    );
+    if (!confirmed) return;
+
+    const actionKey = `${product.sku}-all`;
+    setPublishingPriceChannel(actionKey);
+    setError(null);
+    setMessage(null);
+    try {
+      const responses = await Promise.all(prices.map(async ({ installmentCount, price }) => {
+        const response = await fetch("/api/mercadolibre/update-sku-price", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sku: product.sku, installmentCount, price }),
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data, installmentCount };
+      }));
+      const updated = responses.reduce((total, item) => total + (Array.isArray(item.data?.updated) ? item.data.updated.length : 0), 0);
+      const skipped = responses.reduce((total, item) => total + (Array.isArray(item.data?.skipped) ? item.data.skipped.length : 0), 0);
+      const failed = responses.filter((item) => !item.response.ok).map((item) => item.data?.error || `${item.installmentCount} cuotas`);
+      if (!updated) throw new Error(failed.length ? `No se pudieron cargar los precios: ${failed.join(" · ")}` : "Mercado Libre no actualizó ninguna publicación.");
+
+      setMessage(`${updated} publicación${updated === 1 ? "" : "es"} actualizada${updated === 1 ? "" : "s"} en Mercado Libre${skipped ? ` · ${skipped} omitida${skipped === 1 ? "" : "s"}` : ""}${failed.length ? ` · ${failed.length} cuota${failed.length === 1 ? "" : "s"} sin actualizar` : ""}.`);
+      await loadData({ quiet: true });
+    } catch (publishError) {
+      setError(publishError instanceof Error ? publishError.message : "No se pudieron cargar los precios en Mercado Libre.");
     } finally {
       setPublishingPriceChannel(null);
     }
@@ -1205,6 +1254,16 @@ export default function PricesPage() {
                                 icon={<SlidersHorizontal aria-hidden="true" />}
                                 title="Condiciones de venta"
                                 description="Precios y rentabilidad por canal para este producto."
+                                actions={
+                                  <button
+                                    className="button small-button prices-publish-all-button"
+                                    onClick={() => publishAllPricesToMercadoLibre(product, productRows)}
+                                    disabled={publishingPriceChannel === `${product.sku}-all`}
+                                  >
+                                    <Upload aria-hidden="true" />
+                                    {publishingPriceChannel === `${product.sku}-all` ? "Cargando precios..." : "Cargar todas en ML"}
+                                  </button>
+                                }
                               />
                               <table className="nested-table">
                                 <thead>
