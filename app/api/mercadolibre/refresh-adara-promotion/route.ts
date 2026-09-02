@@ -35,7 +35,19 @@ export async function POST(request: NextRequest) {
         updated.push(entry.itemId);
       } catch (error) { failed.push({ itemId: entry.itemId, reason: error instanceof Error ? error.message : "No se pudo actualizar." }); }
     }
-    return NextResponse.json({ ok: updated.length > 0, campaign: campaign.name, updated, failed });
+    if (!updated.length) {
+      const details = failed
+        .map((item) => `${item.itemId}: ${item.reason}`)
+        .join(" · ");
+      return NextResponse.json({
+        error: details ? `Mercado Libre rechazó la actualización de Adara. ${details}` : "Mercado Libre no actualizó ninguna publicación en Adara.",
+        campaign: campaign.name,
+        updated,
+        failed,
+      }, { status: 422 });
+    }
+
+    return NextResponse.json({ ok: true, campaign: campaign.name, updated, failed });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo actualizar la promo Adara." }, { status: 500 });
   }
