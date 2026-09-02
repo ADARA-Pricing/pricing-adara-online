@@ -146,7 +146,10 @@ export async function GET(request: NextRequest) {
             .sort((a, b) => a - b)[0] || null;
           const product = productsBySku.get(sku);
           const shipping = (data || []).find((item) => String(item.meli_item_id) === String(reference.itemId));
-          const suggestedPrice = lowestCompetitor ? Math.max(1, Math.floor(lowestCompetitor - 100)) : null;
+          const alreadyWinning = reference.status === "winning" || reference.status === "sharing_first_place";
+          const suggestedPrice = alreadyWinning
+            ? Number(reference.ownPrice || 0) || null
+            : lowestCompetitor ? Math.max(1, Math.floor(lowestCompetitor - 100)) : null;
           const profitability = product && shipping && suggestedPrice
             ? calculatePriceSummary(product, mercadoLibreClassicOption(), feesByCategory.get(String(product.category)) || null, taxes, shipping, { salePrice: suggestedPrice })
             : null;
@@ -155,7 +158,8 @@ export async function GET(request: NextRequest) {
             ? calculatePriceSummary(product, mercadoLibreClassicOption(), feesByCategory.get(String(product.category)) || null, taxes, shipping, { salePrice: reference.ownPrice })
             : null;
           const currentMargin = currentProfitability?.valid ? currentProfitability.marginOnNetSale : null;
-          const action = !suggestedPrice ? "sin_competidor"
+          const action = alreadyWinning ? "ya_ganando"
+            : !suggestedPrice ? "sin_competidor"
             : Number(reference.ownPrice || 0) > suggestedPrice
               ? Number(marginAtSuggested || 0) >= 5 ? "bajar_y_ganar" : "caro_sin_margen"
               : Number(reference.ownPrice || 0) < suggestedPrice
