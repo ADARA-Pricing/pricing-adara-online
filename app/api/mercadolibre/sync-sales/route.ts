@@ -234,15 +234,18 @@ function normalizedProfitability({
 
   const categoryFeeRate = Number(categoryFee?.marketplace_fee_rate || 0);
   const actualSaleFee = Number(saleFeeAmount || 0);
+  const fixedFeeAmountGross = Number(publication?.fixed_fee_amount || 0);
   // El número de cuotas informado por la orden puede incluir pasajes de cuotas.
-  // El cargo total de ML refleja qué se cobró realmente: comisión de categoría + cuotas.
-  // Restamos la comisión de categoría para obtener solo el costo financiero y luego
-  // calculatePriceSummary aplica el mismo tratamiento neto (IVA incluido) que Precios.
-  const observedTotalFeeRate = unitPrice > 0 && actualSaleFee > 0
-    ? (actualSaleFee / unitPrice) * 100
+  // El cargo total de ML incluye comisión de categoría, cuotas y cargo fijo. Primero
+  // separamos el fijo, que calculatePriceSummary ya descuenta por su propia cuenta.
+  // Así no se duplica en la rentabilidad. El resto define comisión + cuotas y luego
+  // se aplica el mismo tratamiento neto (IVA incluido) que Precios.
+  const variableSaleFee = Math.max(0, actualSaleFee - fixedFeeAmountGross);
+  const observedVariableFeeRate = unitPrice > 0 && variableSaleFee > 0
+    ? (variableSaleFee / unitPrice) * 100
     : null;
-  const observedFinancingFeeRate = observedTotalFeeRate !== null
-    ? Math.max(0, observedTotalFeeRate - categoryFeeRate)
+  const observedFinancingFeeRate = observedVariableFeeRate !== null
+    ? Math.max(0, observedVariableFeeRate - categoryFeeRate)
     : null;
   const actualOption = {
     ...mercadoLibreClassicOption(),
