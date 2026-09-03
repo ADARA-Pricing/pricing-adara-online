@@ -155,6 +155,8 @@ export async function GET(request: NextRequest) {
             : reference.status;
         const alreadyWinning = groupedStatus === "winning" || groupedStatus === "sharing_first_place";
         try {
+          const liveSale = await meliFetch(`/items/${reference.itemId}/sale_price`, account) as { amount?: number | null };
+          const effectiveOwnPrice = Number(liveSale.amount || reference.ownPrice || 0) || null;
           const catalog = await meliFetch(`/products/${reference.catalogProductId}/items?limit=50`, account) as { results?: Array<MeliItem & { item_id?: string | null; price?: number | null }> };
           const ownIds = new Set(publications.map((publication) => String(publication.itemId).toUpperCase()));
           const lowestCompetitor = (catalog.results || [])
@@ -165,24 +167,24 @@ export async function GET(request: NextRequest) {
           const product = productsBySku.get(sku);
           const shipping = (data || []).find((item) => String(item.meli_item_id) === String(reference.itemId));
           const suggestedPrice = alreadyWinning
-            ? Number(reference.ownPrice || 0) || null
+            ? effectiveOwnPrice
             : lowestCompetitor ? Math.max(1, Math.floor(lowestCompetitor - 100)) : null;
           const profitability = product && shipping && suggestedPrice
             ? calculatePriceSummary(product, mercadoLibreClassicOption(), feesByCategory.get(String(product.category)) || null, taxes, shipping, { salePrice: suggestedPrice })
             : null;
           const marginAtSuggested = profitability?.valid ? profitability.marginOnNetSale : null;
-          const currentProfitability = product && shipping && reference.ownPrice
-            ? calculatePriceSummary(product, mercadoLibreClassicOption(), feesByCategory.get(String(product.category)) || null, taxes, shipping, { salePrice: reference.ownPrice })
+          const currentProfitability = product && shipping && effectiveOwnPrice
+            ? calculatePriceSummary(product, mercadoLibreClassicOption(), feesByCategory.get(String(product.category)) || null, taxes, shipping, { salePrice: effectiveOwnPrice })
             : null;
           const currentMargin = currentProfitability?.valid ? currentProfitability.marginOnNetSale : null;
           const action = alreadyWinning ? "ya_ganando"
             : !suggestedPrice ? "sin_competidor"
-            : Number(reference.ownPrice || 0) > suggestedPrice
+            : Number(effectiveOwnPrice || 0) > suggestedPrice
               ? Number(marginAtSuggested || 0) >= 5 ? "bajar_y_ganar" : "caro_sin_margen"
-              : Number(reference.ownPrice || 0) < suggestedPrice
+              : Number(effectiveOwnPrice || 0) < suggestedPrice
                 ? Number(marginAtSuggested || 0) >= 5 ? "subir_y_seguir_ganando" : "barato_sin_margen"
                 : "en_precio";
-          return { ...reference, status: groupedStatus, sku, publicationCount: publications.length, lowestCompetitor, suggestedPrice, marginAtSuggested, currentMargin, action };
+          return { ...reference, ownPrice: effectiveOwnPrice, status: groupedStatus, sku, publicationCount: publications.length, lowestCompetitor, suggestedPrice, marginAtSuggested, currentMargin, action };
         } catch {
           return { ...reference, status: groupedStatus, sku, publicationCount: publications.length, lowestCompetitor: null, suggestedPrice: null, marginAtSuggested: null, currentMargin: null, action: alreadyWinning ? "ya_ganando" : "sin_competidor" };
         }
