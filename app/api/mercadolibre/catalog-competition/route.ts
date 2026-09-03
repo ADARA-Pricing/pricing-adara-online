@@ -42,6 +42,13 @@ function invoiceA(item?: MeliItem | null) {
   return /factura\s*a/i.test(String(invoice.value_name || ""));
 }
 
+function isOnePayment(text?: string | null, listingType?: string | null) {
+  const source = `${text || ""} ${listingType || ""}`.toLowerCase();
+  if (source.includes("sin cuotas") || source.includes("1 pago") || source.includes("clasica") || source.includes("clásica")) return true;
+  const match = source.match(/(\d{1,2})\s*(x|cuotas?|installments?)/i);
+  return match?.[1] === "1";
+}
+
 async function mapWithConcurrency<T, R>(rows: T[], limit: number, task: (row: T) => Promise<R>) {
   const result: R[] = [];
   let index = 0;
@@ -101,7 +108,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from("mercadolibre_shipping_costs")
-      .select("product_id,sku,meli_item_id,meli_title,meli_thumbnail,meli_permalink,meli_price,meli_catalog_product_id,meli_catalog_listing,meli_status,meli_catalog_status,meli_catalog_price_to_win,meli_catalog_current_price,meli_catalog_reason,meli_logistic_type,fixed_fee_amount,shipping_cost_amount,free_shipping,active")
+      .select("product_id,sku,meli_item_id,meli_title,meli_thumbnail,meli_permalink,meli_price,meli_catalog_product_id,meli_catalog_listing,meli_status,meli_catalog_status,meli_catalog_price_to_win,meli_catalog_current_price,meli_catalog_reason,meli_logistic_type,meli_installments_text,meli_listing_type_id,fixed_fee_amount,shipping_cost_amount,free_shipping,active")
       .eq("active", true)
       .eq("meli_catalog_listing", true)
       .eq("meli_status", "active")
@@ -121,6 +128,7 @@ export async function GET(request: NextRequest) {
       priceToWin: Number(row.meli_catalog_price_to_win || 0) || null,
       status: row.meli_catalog_status || "unknown",
       ownFull: row.meli_logistic_type === "fulfillment",
+      onePayment: isOnePayment(row.meli_installments_text, row.meli_listing_type_id),
       reason: Array.isArray(row.meli_catalog_reason) ? row.meli_catalog_reason : [],
     }));
 
@@ -137,7 +145,9 @@ export async function GET(request: NextRequest) {
       const grouped = new Map<string, typeof rows>();
       for (const row of rows) grouped.set(row.sku, [...(grouped.get(row.sku) || []), row]);
       const summaries = await mapWithConcurrency([...grouped.entries()], 5, async ([sku, publications]) => {
-        const reference = [...publications].sort((a, b) => Number(a.ownPrice || Infinity) - Number(b.ownPrice || Infinity))[0];
+        const onePaymentPublications = publications.filter((publication) => publication.onePayment);
+        const reference = [...(onePaymentPublications.length ? onePaymentPublications : publications)]
+          .sort((a, b) => Number(a.ownPrice || Infinity) - Number(b.ownPrice || Infinity))[0];
         const groupedStatus = publications.some((publication) => publication.status === "winning")
           ? "winning"
           : publications.some((publication) => publication.status === "sharing_first_place")
