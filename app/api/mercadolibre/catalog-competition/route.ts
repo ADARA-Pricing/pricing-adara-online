@@ -177,7 +177,9 @@ export async function GET(request: NextRequest) {
             ? calculatePriceSummary(product, mercadoLibreClassicOption(), feesByCategory.get(String(product.category)) || null, taxes, shipping, { salePrice: effectiveOwnPrice })
             : null;
           const currentMargin = currentProfitability?.valid ? currentProfitability.marginOnNetSale : null;
+          const alreadyAtOrBelowCompetitor = Boolean(lowestCompetitor && effectiveOwnPrice && effectiveOwnPrice <= lowestCompetitor);
           const action = alreadyWinning ? "ya_ganando"
+            : alreadyAtOrBelowCompetitor ? "en_precio"
             : !suggestedPrice ? "sin_competidor"
             : Number(effectiveOwnPrice || 0) > suggestedPrice
               ? Number(marginAtSuggested || 0) >= 5 ? "bajar_y_ganar" : "caro_sin_margen"
