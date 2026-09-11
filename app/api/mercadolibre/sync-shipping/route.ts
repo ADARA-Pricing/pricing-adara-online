@@ -1833,7 +1833,10 @@ export async function POST(request: NextRequest) {
       for (const batch of chunk(insertRows, 100)) {
         const { error: insertError } = await supabase
           .from("mercadolibre_shipping_costs")
-          .upsert(batch, { onConflict: "product_id,meli_item_id" });
+          // Esta tabla no tiene una restricción única compuesta en todas las
+          // instalaciones. Los registros existentes ya se actualizan por id
+          // arriba; los que llegaron acá son publicaciones nuevas.
+          .insert(batch);
         if (insertError) throw new Error(insertError.message);
       }
 
