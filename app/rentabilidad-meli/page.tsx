@@ -181,6 +181,7 @@ export default function RentabilidadMeliPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [salesSyncProgress, setSalesSyncProgress] = useState<{ completed: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
   const [loadingInfo, setLoadingInfo] = useState<string | null>("Cargando rentabilidad ML...");
@@ -212,9 +213,11 @@ export default function RentabilidadMeliPage() {
     return { data: result, error: null };
   }
 
-  async function loadData() {
-    setLoading(true);
-    setLoadingInfo("Cargando productos, publicaciones y ventas...");
+  async function loadData(options: { quiet?: boolean } = {}) {
+    if (!options.quiet) {
+      setLoading(true);
+      setLoadingInfo("Cargando productos, publicaciones y ventas...");
+    }
     setError(null);
     const since = new Date();
     since.setDate(since.getDate() - 65);
@@ -235,8 +238,10 @@ export default function RentabilidadMeliPage() {
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar los datos de rentabilidad ML.");
     } finally {
-      setLoading(false);
-      setLoadingInfo(null);
+      if (!options.quiet) {
+        setLoading(false);
+        setLoadingInfo(null);
+      }
     }
   }
 
@@ -248,22 +253,44 @@ export default function RentabilidadMeliPage() {
 
   async function syncSales() {
     setSyncing(true);
-    setSyncInfo("Sincronizando ventas de MercadoLibre...");
+    setSalesSyncProgress(null);
+    setSyncInfo("Sincronizando primero las ventas más recientes de MercadoLibre...");
     setError(null);
     try {
-      const response = await fetch("/api/mercadolibre/sync-sales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 60, chunkDays: 3 }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "No se pudieron sincronizar ventas.");
-      setSyncInfo(`Ventas ML: ${data.saved || 0} items guardados, ${data.scanned || 0} ordenes revisadas.`);
-      await loadData();
+      const totalDays = 60;
+      const chunkDays = 3;
+      const chunkMs = chunkDays * 86400000;
+      const overallFrom = new Date(Date.now() - totalDays * 86400000);
+      let windowEnd = new Date();
+      let completedDays = 0;
+      let saved = 0;
+      let scanned = 0;
+
+      while (windowEnd.getTime() > overallFrom.getTime()) {
+        const windowStart = new Date(Math.max(overallFrom.getTime(), windowEnd.getTime() - chunkMs));
+        const response = await fetch("/api/mercadolibre/sync-sales", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ from: windowStart.toISOString(), to: windowEnd.toISOString(), chunkDays }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || "No se pudieron sincronizar ventas.");
+
+        saved += Number(data.saved || 0);
+        scanned += Number(data.scanned || 0);
+        completedDays = Math.min(totalDays, completedDays + chunkDays);
+        setSalesSyncProgress({ completed: completedDays, total: totalDays });
+        setSyncInfo(`Rentabilidad disponible hasta el momento: ${saved} items guardados, ${scanned} órdenes revisadas.`);
+        await loadData({ quiet: true });
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+        windowEnd = new Date(windowStart.getTime() - 1);
+      }
+      setSyncInfo(`Ventas ML actualizadas: ${saved} items guardados, ${scanned} órdenes revisadas.`);
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "No se pudieron sincronizar ventas.");
     } finally {
       setSyncing(false);
+      setSalesSyncProgress(null);
     }
   }
 
@@ -642,7 +669,11 @@ export default function RentabilidadMeliPage() {
     <main className="page rotation-page">
       <PageHero
         title="Rentabilidad ML"
-        description="Margen promedio por producto normalizado a MercadoLibre 1 pago."
+        description={syncing
+          ? salesSyncProgress
+            ? `Actualizando ventas en segundo plano: últimos ${salesSyncProgress.completed} de ${salesSyncProgress.total} días.`
+            : "Actualizando primero las ventas más recientes..."
+          : "Margen promedio por producto normalizado a MercadoLibre 1 pago."}
         icon={<ChartNoAxesCombined aria-hidden="true" />}
         actions={(
           <button className="button rentability-sync-button" type="button" onClick={syncSales} disabled={syncing || loading}>

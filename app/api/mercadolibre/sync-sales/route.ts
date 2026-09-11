@@ -468,8 +468,21 @@ export async function POST(request: Request) {
         const orders = (Array.isArray(data?.results) ? data.results : []) as MeliOrder[];
         scanned += orders.length;
 
-        for (const searchOrder of orders) {
-          const order = await detailedOrder(searchOrder, account);
+        // La búsqueda no siempre incluye cuotas ni cargos. Pedimos el detalle
+        // de los pedidos en grupos chicos para no demorar toda la ventana por
+        // una llamada a la vez ni saturar el límite de MercadoLibre.
+        const ordersWithDetails: Array<{ searchOrder: MeliOrder; order: MeliOrder }> = [];
+        for (let orderIndex = 0; orderIndex < orders.length; orderIndex += 6) {
+          const detailBatch = await Promise.all(
+            orders.slice(orderIndex, orderIndex + 6).map(async (searchOrder) => ({
+              searchOrder,
+              order: await detailedOrder(searchOrder, account),
+            })),
+          );
+          ordersWithDetails.push(...detailBatch);
+        }
+
+        for (const { searchOrder, order } of ordersWithDetails) {
           const orderId = asString(order.id || searchOrder.id);
           if (!orderId || !order.date_created) continue;
 
