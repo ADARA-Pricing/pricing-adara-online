@@ -1605,14 +1605,33 @@ export async function POST(request: NextRequest) {
     if (!shippingOnly && !installmentsOnly && targetSkus.length) {
       const idsToRefresh = [...matchedItemIds];
       if (idsToRefresh.length) {
-        await supabase.from("mercadolibre_promotion_opportunities").delete().in("meli_item_id", idsToRefresh);
+        const { error: clearTargetPromotionsError } = await supabase
+          .from("mercadolibre_promotion_opportunities")
+          .delete()
+          .in("meli_item_id", idsToRefresh);
+        if (clearTargetPromotionsError) throw new Error(clearTargetPromotionsError.message);
       }
     } else if (!shippingOnly && !installmentsOnly && resetPromotions) {
-      await supabase.from("mercadolibre_promotion_opportunities").delete().neq("promotion_id", "__never__");
+      const { error: clearPromotionsError } = await supabase
+        .from("mercadolibre_promotion_opportunities")
+        .delete()
+        .neq("promotion_id", "__never__");
+      if (clearPromotionsError) throw new Error(clearPromotionsError.message);
     }
     if (!shippingOnly && !installmentsOnly) {
       for (const batch of chunk(promotionOpportunityRows, 200)) {
-        const { error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch);
+        let { error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch);
+        // Dos syncs cercanos pueden cruzarse entre su DELETE e INSERT. Reemplazamos
+        // sólo los MLA de este lote y reintentamos una vez para no interrumpir el sync.
+        if (promoSaveError?.code === "23505") {
+          const itemIds = [...new Set(batch.map((row) => row.meli_item_id).filter(Boolean))];
+          const { error: clearConflictError } = await supabase
+            .from("mercadolibre_promotion_opportunities")
+            .delete()
+            .in("meli_item_id", itemIds);
+          if (clearConflictError) throw new Error(clearConflictError.message);
+          ({ error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch));
+        }
         if (promoSaveError) throw new Error(promoSaveError.message);
       }
     }
