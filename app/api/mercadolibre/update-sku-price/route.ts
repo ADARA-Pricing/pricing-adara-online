@@ -80,7 +80,14 @@ export async function POST(request: NextRequest) {
       /^MLA\d+$/i.test(String(publication.meli_item_id || "")) && installmentsForPublication(publication) === installmentCount,
     );
     if (!targets.length) {
-      return NextResponse.json({ error: `No hay publicaciones activas del SKU ${sku} para ${installmentCount === 1 ? "Clásica / 1 pago" : `${installmentCount} cuotas`}.` }, { status: 404 });
+      // En la carga masiva una cuota sin publicación no debe convertir toda la
+      // operación en error. La UI la informa como omitida.
+      return NextResponse.json({
+        ok: true,
+        price: Math.round(price),
+        updated: [],
+        skipped: [{ itemId: sku, reason: `No hay publicaciones activas para ${installmentCount === 1 ? "Clásica / 1 pago" : `${installmentCount} cuotas`}.` }],
+      });
     }
 
     // Mercado Libre bloquea PUT /items/{id} cuando la automatización de precios está activa.
