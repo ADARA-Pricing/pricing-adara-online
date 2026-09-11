@@ -606,6 +606,14 @@ export default function PricesPage() {
           ? promoListPrice(result.roundedPrice, promoDiscountRate)
           : result.roundedPrice,
       }))
+      // "Cargar todas" sólo debe enviar condiciones que el SKU tenga publicadas
+      // y activas en ML. Evitamos fallar por cuotas configuradas pero inexistentes.
+      .filter(({ option }) => shippingsForProduct(product).some((publication) =>
+        publication.active !== false
+        && publication.meli_status === "active"
+        && Boolean(publication.meli_item_id)
+        && optionMatchesPublication(option, publication),
+      ))
       .filter(({ price }) => Number.isFinite(Number(price)) && Number(price) > 0);
     if (!prices.length) {
       setError("No hay precios válidos de Mercado Libre para cargar.");
