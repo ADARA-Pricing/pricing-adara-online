@@ -789,6 +789,7 @@ export default function PromocionesMeliPage() {
   const [redThreshold, setRedThreshold] = useState(5);
   const [yellowThreshold, setYellowThreshold] = useState(5);
   const [syncingMeli, setSyncingMeli] = useState(false);
+  const [promotionSyncProgress, setPromotionSyncProgress] = useState<{ completed: number; total: number } | null>(null);
   const [activatingPromotionKey, setActivatingPromotionKey] = useState<string | null>(null);
   const [activationErrors, setActivationErrors] = useState<Record<string, string>>({});
   const [blockedActivationKeys, setBlockedActivationKeys] = useState<string[]>([]);
@@ -800,8 +801,8 @@ export default function PromocionesMeliPage() {
     if (!data.session) router.push("/login");
   }
 
-  async function loadData() {
-    setLoading(true);
+  async function loadData(options: { quiet?: boolean } = {}) {
+    if (!options.quiet) setLoading(true);
     setError(null);
 
     const [
@@ -854,7 +855,7 @@ export default function PromocionesMeliPage() {
       if (rows.length < 1000) break;
     }
 
-    setLoading(false);
+    if (!options.quiet) setLoading(false);
 
     if (productsResponse.error) setError(productsResponse.error.message);
     else setProducts((productsResponse.data || []) as Product[]);
@@ -895,33 +896,67 @@ export default function PromocionesMeliPage() {
     if (syncingMeli) return;
     const scope = options.scope || "promotions";
     setSyncingMeli(true);
+    setPromotionSyncProgress(null);
     if (!options.silent) setError(null);
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 120000);
+
+    async function syncBatch(payload: Record<string, unknown>) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 90000);
+      try {
+        const response = await fetch("/api/mercadolibre/sync-shipping", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || "No se pudo sincronizar MercadoLibre.");
+        return data as { total_items?: number; totals_by_status?: Record<string, number> };
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+
     try {
-      const response = await fetch("/api/mercadolibre/sync-shipping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope }),
-        signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (!options.silent) setError(data?.error || "No se pudo sincronizar MercadoLibre.");
+      if (scope !== "promotions") {
+        await syncBatch({ scope });
+        await loadData({ quiet: true });
         return;
       }
-      await loadData();
+
+      // Primero refrescamos el SKU abierto. Después recorremos el resto en
+      // bloques chicos: la pantalla se actualiza entre bloques y no queda
+      // esperando una única petición de cientos de publicaciones.
+      if (selectedGroup?.product.sku) {
+        await syncBatch({ scope, skus: [selectedGroup.product.sku], resetPromotions: false });
+        await loadData({ quiet: true });
+      }
+
+      const pageLimit = 12;
+      let offset = 0;
+      let total = 0;
+      do {
+        const data = await syncBatch({ scope, offset, pageLimit, resetPromotions: false });
+        const totals = Object.values(data.totals_by_status || {}).map((value) => Number(value || 0));
+        total = Math.max(total, ...totals, Number(data.total_items || 0));
+        offset += pageLimit;
+        setPromotionSyncProgress({ completed: Math.min(offset, total || offset), total: total || offset });
+        await loadData({ quiet: true });
+        // Le devolvemos el control al navegador entre lotes para que siga
+        // respondiendo mientras termina la actualización en segundo plano.
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      } while (offset < total);
     } catch (syncError) {
       if (!options.silent) {
         setError(
           syncError instanceof DOMException && syncError.name === "AbortError"
-            ? "La sincronizacion de MercadoLibre tardo mas de 2 minutos. Proba de nuevo o sincroniza por SKU desde Productos."
+            ? "Un bloque de promociones tardó demasiado. Los bloques ya actualizados quedaron guardados; probá nuevamente para continuar."
             : syncError instanceof Error ? syncError.message : "No se pudo sincronizar MercadoLibre.",
         );
       }
     } finally {
-      window.clearTimeout(timeout);
       setSyncingMeli(false);
+      setPromotionSyncProgress(null);
     }
   }
 
@@ -2086,7 +2121,11 @@ export default function PromocionesMeliPage() {
     <main className="container wide promociones-meli-page">
       <PageHero
         title="Promociones Meli"
-        description={syncingMeli ? "Actualizando promociones desde MercadoLibre..." : "Revisa productos activos en MercadoLibre, sus publicaciones y las promociones disponibles o vigentes detectadas en la ultima sincronizacion."}
+        description={syncingMeli
+          ? promotionSyncProgress
+            ? `Actualizando promociones en segundo plano: ${promotionSyncProgress.completed} de ${promotionSyncProgress.total} publicaciones.`
+            : "Actualizando primero las publicaciones prioritarias..."
+          : "Revisa productos activos en MercadoLibre, sus publicaciones y las promociones disponibles o vigentes detectadas en la ultima sincronizacion."}
         onRefresh={() => syncMercadoLibreData()}
         refreshLabel={syncingMeli ? "Actualizando..." : "Actualizar promos"}
         refreshDisabled={syncingMeli}

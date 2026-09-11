@@ -1366,7 +1366,7 @@ export async function POST(request: NextRequest) {
     const shippingOnly = body?.scope === "shipping";
     const installmentsOnly = body?.scope === "installments";
     const statusesToSync = normalizeStatusList(body?.statuses);
-    const pageOffset = boundedNumber(body?.offset, 0, 0, 1000);
+    const pageOffset = boundedNumber(body?.offset, 0, 0, 5000);
     const pageLimit = boundedNumber(body?.pageLimit, 1000, 1, 1000);
     const resetPromotions = body?.resetPromotions !== false;
     const account = await getConnectedMeliAccount();
@@ -1413,7 +1413,7 @@ export async function POST(request: NextRequest) {
       for (const status of statusesToSync) {
         let offset = pageOffset;
         let total = 0;
-        const maxOffset = Math.min(1000, pageOffset + pageLimit);
+        const maxOffset = Math.min(5000, pageOffset + pageLimit);
 
         do {
           const requestLimit = Math.min(limit, maxOffset - offset);
@@ -1602,7 +1602,11 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    if (!shippingOnly && !installmentsOnly && targetSkus.length) {
+    // En una sincronización paginada eliminamos solamente las promos de los
+    // MLA del lote. Así cada bloque reemplaza datos viejos (incluidos los que
+    // ya no tienen promo) sin borrar lo que falta procesar.
+    const refreshPromotionRowsByItem = targetSkus.length > 0 || (promotionsOnly && pageLimit < 1000);
+    if (!shippingOnly && !installmentsOnly && refreshPromotionRowsByItem) {
       const idsToRefresh = [...matchedItemIds];
       if (idsToRefresh.length) {
         const { error: clearTargetPromotionsError } = await supabase
