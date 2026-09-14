@@ -609,6 +609,49 @@ export default function PricesPage() {
     }
   }
 
+  async function activateSelectedB2bRanges(
+    product: Product,
+    groups: Array<{ itemId: string; rows: Array<{ quantity: number; price: number }> }>,
+  ) {
+    const rangesCount = groups.reduce((total, group) => total + group.rows.length, 0);
+    if (!rangesCount || savingB2bItem) return;
+    const confirmed = window.confirm(`¿Activar ${rangesCount} rango(s) mayoristas en ${groups.length} publicación${groups.length === 1 ? "" : "es"}? MercadoLibre validará nuevamente los precios.`);
+    if (!confirmed) return;
+
+    setSavingB2bItem("all");
+    setError(null);
+    const errors: string[] = [];
+    let activated = 0;
+    try {
+      // Cada MLA se guarda en su propia llamada, pero la persona confirma una
+      // sola vez y no necesita recorrer botones repetidos.
+      for (const group of groups) {
+        try {
+          const response = await fetch("/api/mercadolibre/update-b2b-prices", {
+            method: "POST",
+            headers: await authenticatedJsonHeaders(),
+            body: JSON.stringify({ sku: product.sku, itemId: group.itemId, ranges: group.rows }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data?.error || "No se pudieron activar los precios mayoristas.");
+          activated += group.rows.length;
+        } catch (activationError) {
+          errors.push(`${group.itemId}: ${activationError instanceof Error ? activationError.message : "no se pudo actualizar"}`);
+        }
+      }
+      if (activated) {
+        setMessage(`${activated} rango${activated === 1 ? "" : "s"} mayorista${activated === 1 ? "" : "s"} activado${activated === 1 ? "" : "s"} en ${groups.length} MLA.`);
+        setSelectedB2bRanges((current) => Object.fromEntries(
+          Object.entries(current).filter(([rangeKey]) => !rangeKey.startsWith(`${product.sku}|`)),
+        ));
+        await loadB2bForProduct(product);
+      }
+      if (errors.length) setError(`Algunas publicaciones no se pudieron activar: ${errors.join(" · ")}`);
+    } finally {
+      setSavingB2bItem(null);
+    }
+  }
+
   async function refreshProductFromMercadoLibre(product: Product) {
     const sku = product.sku?.trim();
     if (!sku || refreshingProductSku === sku) return;
@@ -1983,15 +2026,26 @@ export default function PricesPage() {
                                       </tbody>
                                     </table>
                                   )}
-                                  {wholesaleRows.length > 0 && [...new Set(wholesaleRows.map((row) => row.itemId))].map((itemId) => {
-                                    const selectedRows = wholesaleRows
-                                      .filter((row) => row.itemId === itemId && selectedB2bRanges[b2bRangeKey(product.sku, row.itemId, row.quantity)] && !row.incoherent && row.priceToActivate > 0)
-                                      .map((row) => ({ quantity: row.quantity, price: row.priceToActivate }));
-                                    return <button key={itemId} className="button small-button" type="button" style={{ marginTop: 14, marginRight: 8 }} disabled={!selectedRows.length || Boolean(savingB2bItem)} onClick={() => activateB2bRanges(product, itemId, selectedRows)}>
-                                      <BadgePercent aria-hidden="true" />
-                                      {savingB2bItem === itemId ? "Activando..." : `Activar seleccionadas en ${itemId}`}
-                                    </button>;
-                                  })}
+                                  {wholesaleRows.length > 0 && (() => {
+                                    const groups = [...new Set(wholesaleRows.map((row) => row.itemId))]
+                                      .map((itemId) => ({
+                                        itemId,
+                                        rows: wholesaleRows
+                                          .filter((row) => row.itemId === itemId && selectedB2bRanges[b2bRangeKey(product.sku, row.itemId, row.quantity)] && !row.incoherent && row.priceToActivate > 0)
+                                          .map((row) => ({ quantity: row.quantity, price: row.priceToActivate })),
+                                      }))
+                                      .filter((group) => group.rows.length > 0);
+                                    const selectedCount = groups.reduce((total, group) => total + group.rows.length, 0);
+                                    return (
+                                      <div className="prices-b2b-footer">
+                                        <span className="small">{selectedCount ? `${selectedCount} rango${selectedCount === 1 ? "" : "s"} seleccionado${selectedCount === 1 ? "" : "s"} · ${groups.length} MLA` : "Seleccioná uno o más rangos para activarlos."}</span>
+                                        <button className="button small-button" type="button" disabled={!selectedCount || Boolean(savingB2bItem)} onClick={() => activateSelectedB2bRanges(product, groups)}>
+                                          <BadgePercent aria-hidden="true" />
+                                          {savingB2bItem ? "Activando..." : "Activar seleccionados"}
+                                        </button>
+                                      </div>
+                                    );
+                                  })()}
                                 </>
                               )}
                             </div>

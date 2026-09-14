@@ -12207,6 +12207,22 @@ textarea:focus,
   background: #f2f6fc !important;
 }
 
+.prices-b2b-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #dbe6f5;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.prices-b2b-footer .small {
+  margin-right: auto;
+}
+
 .prices-page .nested-table td:first-child strong {
   display: block;
   color: #0f172a;
