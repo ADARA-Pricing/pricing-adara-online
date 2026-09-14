@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BadgePercent, BarChart3, ChevronRight, Database, PackageX, RefreshCcw, Search, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
+import { ChevronRight, Database, RefreshCcw, Search, ShieldCheck } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -29,6 +29,7 @@ import type {
 type ActionType =
   | "paused_stock"
   | "low_margin"
+  | "b2b_margin"
   | "activate_promo"
   | "future_promo"
   | "missing_promo"
@@ -80,6 +81,18 @@ type MercadoLibreSyncLog = {
   status?: string | null;
   message?: string | null;
   created_at?: string | null;
+};
+
+type B2BMarginGuard = {
+  meli_item_id: string;
+  minimum_purchase_unit: number;
+  sku: string;
+  target_margin_rate: number | string;
+  required_meli_contribution?: number | string | null;
+  active: boolean;
+  last_checked_at?: string | null;
+  paused_at?: string | null;
+  paused_reason?: string | null;
 };
 
 const ML_FIXED_FEE_PRICE_LIMIT = 30000;
@@ -262,6 +275,7 @@ function typeLabel(type: ActionType) {
   const labels: Record<ActionType, string> = {
     paused_stock: "Pausada con stock",
     low_margin: "Margen bajo",
+    b2b_margin: "Mayorista con margen bajo",
     activate_promo: "Promo para activar",
     future_promo: "Promo futura",
     missing_promo: "Sin promo",
@@ -276,17 +290,11 @@ function typeLabel(type: ActionType) {
 }
 
 function actionTone(type: ActionType) {
-  if (type === "paused_stock" || type === "low_margin") return "review";
+  if (type === "paused_stock" || type === "low_margin" || type === "b2b_margin") return "review";
   if (type === "future_promo") return "future";
   if (type === "data_issue" || type === "missing_local_product") return "data_issue";
   if (type === "missing_promo") return "missing_promo";
   return "activate";
-}
-
-function scoreTone(score: number) {
-  if (score >= 85) return "success";
-  if (score >= 70) return "warning";
-  return "danger";
 }
 
 export default function DashboardPage() {
@@ -301,6 +309,7 @@ export default function DashboardPage() {
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
   const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
   const [syncLogs, setSyncLogs] = useState<MercadoLibreSyncLog[]>([]);
+  const [b2bGuards, setB2bGuards] = useState<B2BMarginGuard[]>([]);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | ActionType>("all");
   const [priorityFilter, setPriorityFilter] = useState<"all" | Priority>("all");
@@ -367,8 +376,12 @@ export default function DashboardPage() {
         taxesResponse,
         marginsResponse,
         syncLogsResponse,
+        b2bGuardsResponse,
       ] = await Promise.all([
-        supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
+        // Un producto local pausado puede seguir teniendo stock en una
+        // publicación pausada de ML; excluirlo haría desaparecer una alerta
+        // justamente cuando hay que actuar.
+        supabase.from("products").select("*").neq("status", "discontinued").order("sku", { ascending: true }),
         supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
         fetchOpportunities(),
         fetchSalesSince(since.toISOString()),
@@ -382,6 +395,9 @@ export default function DashboardPage() {
           .eq("status", "sku_not_found")
           .order("created_at", { ascending: false })
           .limit(2000),
+        supabase
+          .from("mercadolibre_b2b_margin_guard")
+          .select("meli_item_id,minimum_purchase_unit,sku,target_margin_rate,required_meli_contribution,active,last_checked_at,paused_at,paused_reason"),
       ]);
 
       const responseErrors = [
@@ -394,6 +410,7 @@ export default function DashboardPage() {
         taxesResponse.error,
         marginsResponse.error,
         syncLogsResponse.error,
+        b2bGuardsResponse.error,
       ].filter(Boolean);
 
       if (!retriedSession && responseErrors.some((item) => isJwtClockError(item?.message))) {
@@ -422,6 +439,8 @@ export default function DashboardPage() {
       else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
       if (syncLogsResponse.error) setError(syncLogsResponse.error.message);
       else setSyncLogs((syncLogsResponse.data || []) as MercadoLibreSyncLog[]);
+      if (b2bGuardsResponse.error) setError(b2bGuardsResponse.error.message);
+      else setB2bGuards((b2bGuardsResponse.data || []) as B2BMarginGuard[]);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "No se pudo cargar el dashboard.");
     } finally {
@@ -747,6 +766,36 @@ export default function DashboardPage() {
       });
     });
 
+    // Cada rango mayorista queda guardado por MLA y cantidad. El margen fue
+    // calculado al activarlo con el precio real de ML; si queda bajo o
+    // negativo debe aparecer arriba en el controlador, no escondido dentro
+    // de la pantalla de precios.
+    b2bGuards
+      .filter((guard) => guard.active)
+      .forEach((guard) => {
+        const margin = Number(guard.target_margin_rate || 0);
+        if (!Number.isFinite(margin) || margin >= 5) return;
+        const product = products.find((item) => item.sku.toUpperCase() === String(guard.sku || "").toUpperCase());
+        if (!product) return;
+        const publication = publications.find((item) => item.meli_item_id === guard.meli_item_id);
+        const rotation = rotationBySku.get(product.sku.toUpperCase());
+        actions.push({
+          key: `b2b-margin-${guard.meli_item_id}-${guard.minimum_purchase_unit}`,
+          type: "b2b_margin",
+          priority: margin <= 0 ? "critica" : "alta",
+          sku: product.sku,
+          productName: product.name,
+          itemId: guard.meli_item_id,
+          title: margin <= 0 ? "Mayorista activo con margen negativo" : "Mayorista activo con margen bajo",
+          detail: `${guard.minimum_purchase_unit} u. o más · verificá el precio mayorista y el aporte vigente de ML.`,
+          href: `/precios?sku=${encodeURIComponent(product.sku)}`,
+          margin,
+          stock: Number(publication?.meli_stock ?? product.stock ?? 0),
+          units7: rotation?.units7 || 0,
+          units30: rotation?.units30 || 0,
+        });
+      });
+
     activePublications.forEach((publication) => {
       const product = productsById.get(publication.product_id);
       if (!product) return;
@@ -759,6 +808,7 @@ export default function DashboardPage() {
         ? effectiveSalePrice(publication.meli_promo_price, publication.meli_promo_meli_amount, publication.meli_promo_meli_rate, publication.meli_original_price || publication.meli_price, publication.meli_promo_seller_rate)
         : currentBuyerPrice;
       const currentMargin = marginForPublication(product, publication, currentSalePrice, currentBuyerPrice);
+      const targetMargin = Number(channelSetting(product.id, optionForPublication(publication).code)?.desired_margin_rate ?? 5);
       const dailyUnits = Math.max(rotation.units7 / 7, rotation.units30 / 30, rotation.units60 / 60);
       const stockDays = dailyUnits > 0 ? stock / dailyUnits : null;
 
@@ -816,17 +866,17 @@ export default function DashboardPage() {
         });
       }
 
-      if (currentMargin !== null && currentMargin < 5) {
+      if (currentMargin !== null && currentMargin < targetMargin - 0.1) {
         actions.push({
           key: `low-margin-${publication.id || publication.meli_item_id}`,
           type: "low_margin",
-          priority: "critica",
+          priority: currentMargin <= 0 || currentMargin < 5 ? "critica" : "alta",
           sku: product.sku,
           productName: product.name,
           itemId: publication.meli_item_id,
-          title: "Margen peligroso en publicacion activa",
-          detail: publication.meli_promo_name || "Revisar precio, promo, envio o costo.",
-          href: "/rentabilidad-meli",
+          title: "Margen real debajo del objetivo",
+          detail: `${publication.meli_promo_name || "Precio, promo, envío o costo a revisar."} · Real ${percent(currentMargin)} / objetivo ${percent(targetMargin)}.`,
+          href: `/precios?sku=${encodeURIComponent(product.sku)}`,
           margin: currentMargin,
           stock,
           units7: rotation.units7,
@@ -844,7 +894,7 @@ export default function DashboardPage() {
           itemId: publication.meli_item_id,
           title: "Vende bien pero deja poco margen",
           detail: "Conviene revisar precio o costo antes de escalar ventas.",
-          href: "/rentabilidad-meli",
+          href: `/precios?sku=${encodeURIComponent(product.sku)}`,
           margin: currentMargin,
           stock,
           units7: rotation.units7,
@@ -946,39 +996,23 @@ export default function DashboardPage() {
       acc[action.type] = (acc[action.type] || 0) + 1;
       return acc;
     }, {} as Record<ActionType, number>);
-    const pillarPenalties = {
-      stock: Math.min(40, (typeCounts.paused_stock || 0) * 10 + (typeCounts.missing_local_product || 0) * 8 + (typeCounts.stock_risk || 0) * 5 + (typeCounts.stock_idle || 0) * 3),
-      promos: Math.min(45, (typeCounts.missing_promo || 0) * 3 + (typeCounts.activate_promo || 0) * 2 + (typeCounts.future_promo || 0)),
-      rentabilidad: Math.min(50, (typeCounts.low_margin || 0) * 12 + (typeCounts.low_margin_high_rotation || 0) * 7),
-      rotacion: Math.min(35, (typeCounts.high_margin_low_rotation || 0) * 6 + (typeCounts.stock_idle || 0) * 3),
-      datos: Math.min(35, (typeCounts.data_issue || 0) * 4 + (typeCounts.missing_local_product || 0) * 2),
-    };
-    const pillars = [
-      { key: "stock", label: "Stock", score: Math.max(0, 100 - pillarPenalties.stock), detail: `${(typeCounts.paused_stock || 0) + (typeCounts.missing_local_product || 0) + (typeCounts.stock_risk || 0) + (typeCounts.stock_idle || 0)} alertas` },
-      { key: "promos", label: "Promos", score: Math.max(0, 100 - pillarPenalties.promos), detail: `${(typeCounts.missing_promo || 0) + (typeCounts.activate_promo || 0)} oportunidades` },
-      { key: "rentabilidad", label: "Rentabilidad", score: Math.max(0, 100 - pillarPenalties.rentabilidad), detail: `${(typeCounts.low_margin || 0) + (typeCounts.low_margin_high_rotation || 0)} riesgos` },
-      { key: "rotacion", label: "Rotacion", score: Math.max(0, 100 - pillarPenalties.rotacion), detail: `${(typeCounts.high_margin_low_rotation || 0) + (typeCounts.stock_idle || 0)} lentos` },
-      { key: "datos", label: "Datos", score: Math.max(0, 100 - pillarPenalties.datos), detail: `${typeCounts.data_issue || 0} pendientes` },
-    ];
-    const score = Math.round(pillars.reduce((total, pillar) => total + pillar.score, 0) / pillars.length);
     const priorityOrder: Record<Priority, number> = { critica: 1, alta: 2, media: 3, baja: 4 };
     const typeOrder: Record<ActionType, number> = {
       paused_stock: 1,
       missing_local_product: 2,
       low_margin: 3,
-      low_margin_high_rotation: 4,
-      activate_promo: 5,
-      high_margin_low_rotation: 6,
-      stock_risk: 7,
-      stock_idle: 8,
-      missing_promo: 9,
-      future_promo: 10,
-      data_issue: 11,
+      b2b_margin: 4,
+      low_margin_high_rotation: 5,
+      activate_promo: 6,
+      high_margin_low_rotation: 7,
+      stock_risk: 8,
+      stock_idle: 9,
+      missing_promo: 10,
+      future_promo: 11,
+      data_issue: 12,
     };
 
     return {
-      score,
-      pillars,
       actions: actions.sort((a, b) => {
         if (priorityOrder[a.priority] !== priorityOrder[b.priority]) return priorityOrder[a.priority] - priorityOrder[b.priority];
         if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type];
@@ -988,11 +1022,12 @@ export default function DashboardPage() {
       latestSync,
       activePublications: activePublications.length,
       pausedWithStock: typeCounts.paused_stock || 0,
+      b2bLowMargin: typeCounts.b2b_margin || 0,
       sales7: [...rotationBySku.values()].reduce((total, item) => total + item.units7, 0),
       sales30: [...rotationBySku.values()].reduce((total, item) => total + item.units30, 0),
       revenue30: [...rotationBySku.values()].reduce((total, item) => total + item.revenue30, 0),
     };
-  }, [products, productsById, publications, opportunities, sales, pricingOptions, categoryFees, taxes, marginSettings, syncLogs]);
+  }, [products, productsById, publications, opportunities, sales, pricingOptions, categoryFees, taxes, marginSettings, syncLogs, b2bGuards]);
 
   const filteredActions = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -1007,8 +1042,8 @@ export default function DashboardPage() {
   return (
     <main className="container wide dashboard-page opportunities-page">
       <PageHero
-        title="Dashboard"
-        description="Salud de la cuenta MercadoLibre: stock, promociones, rentabilidad, rotacion y calidad de datos."
+        title="Control de cuenta"
+        description="Detectá y resolvé primero los problemas que pueden afectar margen, stock o precios mayoristas."
         icon={<ShieldCheck aria-hidden="true" />}
         onRefresh={loadData}
         refreshLabel={loading ? "Actualizando..." : "Actualizar"}
@@ -1037,52 +1072,35 @@ export default function DashboardPage() {
       )}
 
       <section className="dashboard-account-score-grid">
-        <article className={`card dashboard-score-card ${scoreTone(account.score)}`}>
-          <span>Score cuenta</span>
-          <strong>{account.score}</strong>
-          <small>Promedio de stock, promos, rentabilidad, rotacion y datos</small>
-        </article>
-        <article className="card dashboard-kpi dashboard-kpi-primary">
-          <span>Acciones pendientes</span>
-          <strong>{account.actions.length}</strong>
-          <small>{account.actions.filter((action) => action.priority === "critica" || action.priority === "alta").length} de prioridad alta o critica</small>
-        </article>
         <article className={`card dashboard-kpi dashboard-kpi-primary ${account.pausedWithStock ? "danger" : "success"}`}>
           <span>Pausadas con stock</span>
           <strong>{account.pausedWithStock}</strong>
-          <small>Publicaciones que pueden estar perdiendo ventas</small>
+          <small>Se pueden estar perdiendo ventas</small>
         </article>
-        <article className="card dashboard-kpi dashboard-kpi-primary">
-          <span>Ventas 7 / 30 dias</span>
-          <strong>{account.sales7} / {account.sales30}</strong>
-          <small>{moneyWithCents(account.revenue30)} vendidos en 30 dias</small>
+        <article className={`card dashboard-kpi dashboard-kpi-primary ${(account.typeCounts.low_margin || 0) ? "danger" : "success"}`}>
+          <span>Margen real bajo objetivo</span>
+          <strong>{account.typeCounts.low_margin || 0}</strong>
+          <small>Publicaciones activas debajo de su margen configurado</small>
         </article>
-      </section>
-
-      <section className="dashboard-pillar-grid">
-        {account.pillars.map((pillar) => {
-          const className = `dashboard-pillar-card ${scoreTone(pillar.score)}`;
-          const content = (
-            <>
-              <span>{pillar.label}</span>
-              <strong>{pillar.score}</strong>
-              <small>{pillar.detail}</small>
-            </>
-          );
-          if (pillar.key === "rotacion") {
-            return <Link className={className} href="/rotacion-sku?estado=slow" key={pillar.key}>{content}</Link>;
-          }
-          return <article className={className} key={pillar.key}>{content}</article>;
-        })}
+        <article className={`card dashboard-kpi dashboard-kpi-primary ${account.b2bLowMargin ? "danger" : "success"}`}>
+          <span>Mayorista a revisar</span>
+          <strong>{account.b2bLowMargin}</strong>
+          <small>Rangos B2B activos debajo de 5%</small>
+        </article>
+        <article className={`card dashboard-kpi dashboard-kpi-primary ${account.actions.filter((action) => action.priority === "critica").length ? "danger" : "success"}`}>
+          <span>Alertas críticas</span>
+          <strong>{account.actions.filter((action) => action.priority === "critica").length}</strong>
+          <small>Resolver antes de ajustar promociones</small>
+        </article>
       </section>
 
       <section className="opportunity-summary-grid dashboard-action-summary">
         <button className={`kpi-card opportunity-summary ${typeFilter === "all" ? "active" : ""}`} type="button" onClick={() => setTypeFilter("all")}>
-          <span className="kpi-label">Todas</span>
+          <span className="kpi-label">Todas las alertas</span>
           <strong className="kpi-value">{account.actions.length}</strong>
-          <small className="kpi-meta">Acciones priorizadas</small>
+          <small className="kpi-meta">Ordenadas por impacto</small>
         </button>
-        {(["paused_stock", "stock_risk", "stock_idle", "missing_local_product", "low_margin", "activate_promo", "missing_promo"] as ActionType[]).map((type) => (
+        {(["paused_stock", "low_margin", "b2b_margin", "data_issue", "stock_risk"] as ActionType[]).map((type) => (
           <button className={`kpi-card opportunity-summary ${typeFilter === type ? "active" : ""}`} type="button" onClick={() => setTypeFilter(type)} key={type}>
             <span className="kpi-label">{typeLabel(type)}</span>
             <strong className="kpi-value">{account.typeCounts[type] || 0}</strong>
@@ -1106,6 +1124,7 @@ export default function DashboardPage() {
         <select className="form-control" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}>
           <option value="all">Todos los tipos</option>
           <option value="paused_stock">Pausadas con stock</option>
+          <option value="b2b_margin">Mayorista con margen bajo</option>
           <option value="missing_local_product">En ML sin producto</option>
           <option value="low_margin">Margen bajo</option>
           <option value="activate_promo">Promos para activar</option>
@@ -1120,10 +1139,10 @@ export default function DashboardPage() {
       </section>
 
       <section className="card opportunity-list-card">
-        <div className="opportunity-list-head">
-          <div>
-            <h2>Acciones recomendadas</h2>
-            <p>{filteredActions.length} resultado(s). Ordenado por impacto operativo.</p>
+          <div className="opportunity-list-head">
+            <div>
+            <h2>Problemas para actuar</h2>
+            <p>{filteredActions.length} resultado(s). Cada caso usa datos reales de la última sincronización.</p>
           </div>
           <div className="dashboard-last-sync">
             <Database aria-hidden="true" />
@@ -1165,7 +1184,7 @@ export default function DashboardPage() {
               </div>
 
               <Link className="button opportunity-open-button" href={item.href}>
-                Abrir
+                {item.type === "b2b_margin" ? "Ver mayorista" : item.type === "low_margin" || item.type === "low_margin_high_rotation" ? "Revisar precio" : "Resolver"}
                 <ChevronRight aria-hidden="true" />
               </Link>
             </article>
@@ -1182,33 +1201,6 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="dashboard-next-cases">
-        <Link className="card dashboard-next-card" href="/rotacion-sku?estado=break_risk">
-          <PackageX aria-hidden="true" />
-          <strong>Stock</strong>
-          <span>Pausadas con stock, stock quieto y riesgo de quiebre.</span>
-        </Link>
-        <article className="card dashboard-next-card">
-          <BadgePercent aria-hidden="true" />
-          <strong>Promos</strong>
-          <span>Sin promo activa, oportunidades rentables y promos futuras.</span>
-        </article>
-        <article className="card dashboard-next-card">
-          <TrendingDown aria-hidden="true" />
-          <strong>Rentabilidad</strong>
-          <span>Margen bajo, margen peligroso y ventas que escalan poco margen.</span>
-        </article>
-        <Link className="card dashboard-next-card" href="/rotacion-sku?estado=slow">
-          <TrendingUp aria-hidden="true" />
-          <strong>Rotacion</strong>
-          <span>Rotacion lenta, capital quieto y quiebres cercanos.</span>
-        </Link>
-        <article className="card dashboard-next-card">
-          <BarChart3 aria-hidden="true" />
-          <strong>Datos</strong>
-          <span>Sync viejo, costos faltantes y calculos incompletos.</span>
-        </article>
-      </section>
     </main>
   );
 }

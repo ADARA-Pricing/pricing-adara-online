@@ -38,7 +38,7 @@ function SidebarIcon({ icon: Icon, active = false, sub = false }: { icon: Lucide
 }
 
 const mainItems: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Control de cuenta", icon: LayoutDashboard },
   { href: "/productos", label: "Productos", icon: Package },
   { href: "/mercadolibre", label: "Costo x canal", icon: ChartNoAxesCombined },
   { href: "/impuestos", label: "Impuestos", icon: ReceiptText },

@@ -234,6 +234,14 @@ export default function PricesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    // El controlador de cuenta puede abrir directamente el SKU que necesita
+    // atención; conservamos el filtro dentro de Precios para actuar sin buscar
+    // el producto otra vez.
+    const sku = new URLSearchParams(window.location.search).get("sku")?.trim();
+    if (sku) setQuery(sku);
+  }, []);
+
   const pricingOptions = useMemo<MercadoLibrePriceOption[]>(() => {
     const options = [
       mercadoLibreClassicOption(),
