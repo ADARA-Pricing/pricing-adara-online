@@ -120,6 +120,12 @@ export default function PricesPage() {
   const [b2bPublications, setB2bPublications] = useState<B2BPublication[] | null>(null);
   const [loadingB2b, setLoadingB2b] = useState(false);
   const [b2bError, setB2bError] = useState<string | null>(null);
+  const [expandedPricingTabs, setExpandedPricingTabs] = useState<Record<string, "channels" | "wholesale">>({});
+  const [b2bBySku, setB2bBySku] = useState<Record<string, B2BPublication[]>>({});
+  const [b2bErrorBySku, setB2bErrorBySku] = useState<Record<string, string>>({});
+  const [loadingB2bSku, setLoadingB2bSku] = useState<string | null>(null);
+  const [selectedB2bRanges, setSelectedB2bRanges] = useState<Record<string, boolean>>({});
+  const [savingB2bItem, setSavingB2bItem] = useState<string | null>(null);
   const productSyncRequestId = useRef(0);
   const [expandedProducts, setExpandedProducts] = useState<
     Record<string, boolean>
@@ -529,6 +535,57 @@ export default function PricesPage() {
       setB2bError(requestError instanceof Error ? requestError.message : "No se pudieron consultar los precios mayoristas.");
     } finally {
       setLoadingB2b(false);
+    }
+  }
+
+  async function loadB2bForProduct(product: Product) {
+    const sku = product.sku;
+    if (!sku || loadingB2bSku === sku) return;
+    setLoadingB2bSku(sku);
+    setB2bErrorBySku((current) => ({ ...current, [sku]: "" }));
+    try {
+      const response = await fetch("/api/mercadolibre/b2b-pricing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku, quantities: [2, 5, 10] }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || "No se pudieron consultar los precios mayoristas.");
+      setB2bBySku((current) => ({ ...current, [sku]: (data?.publications || []) as B2BPublication[] }));
+    } catch (requestError) {
+      setB2bErrorBySku((current) => ({
+        ...current,
+        [sku]: requestError instanceof Error ? requestError.message : "No se pudieron consultar los precios mayoristas.",
+      }));
+    } finally {
+      setLoadingB2bSku(null);
+    }
+  }
+
+  function b2bRangeKey(sku: string, itemId: string, quantity: number) {
+    return `${sku}|${itemId}|${quantity}`;
+  }
+
+  async function activateB2bRanges(product: Product, itemId: string, rows: Array<{ quantity: number; price: number }>) {
+    if (!rows.length || savingB2bItem) return;
+    const confirmed = window.confirm(`¿Activar ${rows.length} rango(s) mayoristas en ${itemId}? MercadoLibre validará nuevamente los precios.`);
+    if (!confirmed) return;
+    setSavingB2bItem(itemId);
+    setError(null);
+    try {
+      const response = await fetch("/api/mercadolibre/update-b2b-prices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku: product.sku, itemId, ranges: rows }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || "No se pudieron activar los precios mayoristas.");
+      setMessage(`Precios mayoristas activados en ${itemId}.`);
+      await loadB2bForProduct(product);
+    } catch (activationError) {
+      setError(activationError instanceof Error ? activationError.message : "No se pudieron activar los precios mayoristas.");
+    } finally {
+      setSavingB2bItem(null);
     }
   }
 
@@ -1105,6 +1162,61 @@ export default function PricesPage() {
     });
   }
 
+  function b2bRowsForProduct(product: Product, productRows: any[], publications: B2BPublication[]) {
+    const mc = productRows.find((row) => row.option.code === "MC");
+    if (!mc?.result?.valid) return [];
+    const categoryFee = categoryFees.find(
+      (item) => item.category?.toLowerCase() === (product.category || "").toLowerCase(),
+    ) || null;
+    const setting = getChannelSetting(product.id, "MC");
+    const target = {
+      desiredMarginRate: Number(mc.result.marginOnNetSale || 0),
+      desiredNetProfit: null,
+      structureAmount: Number(setting?.structure_amount || 0),
+      manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
+      salesCommissionRate: 0,
+      saleAppliesVat: setting?.sale_applies_vat ?? Boolean(mc.option.applies_vat),
+      costVatRate: Number(setting?.cost_vat_rate || 0),
+      roundTo: 1,
+      roundingMode: "nearest" as const,
+    };
+
+    return publications.flatMap((publication) => (publication.recommendations || []).map((recommendation) => {
+      const quantity = Number(recommendation.quantity || 0);
+      const totalShipping = Number(recommendation.shipping?.cost || 0);
+      const shippingPerUnit = quantity > 0 ? totalShipping / quantity : 0;
+      const sourcePublication = shippingCosts.find((item) => item.meli_item_id === publication.itemId)
+        || shippingCostsForOption(product, mc.option)[0]
+        || null;
+      const b2bShipping = { ...(sourcePublication || {}), shipping_cost_amount: shippingPerUnit } as MercadoLibreShippingCost;
+      const sameMarginResult = calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, target) as any;
+      const maximumMeliPrice = Number(recommendation.amount || 0);
+      const recommendedResult = maximumMeliPrice > 0
+        ? calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, { ...target, salePrice: maximumMeliPrice }) as any
+        : null;
+      const requiredPrice = sameMarginResult.valid ? Number(sameMarginResult.roundedPrice || 0) : 0;
+      const allowedAtSameMargin = Boolean(requiredPrice && maximumMeliPrice && requiredPrice <= maximumMeliPrice);
+      const priceToActivate = allowedAtSameMargin ? requiredPrice : maximumMeliPrice;
+
+      return {
+        itemId: publication.itemId,
+        quantity,
+        totalShipping,
+        shippingPerUnit,
+        shippingSaving: Number(recommendation.shipping?.discount?.amount || 0),
+        maximumMeliPrice,
+        requiredPrice,
+        priceToActivate,
+        targetMargin: Number(mc.result.marginOnNetSale || 0),
+        marginAtPrice: allowedAtSameMargin
+          ? Number(sameMarginResult.marginOnNetSale || 0)
+          : recommendedResult?.valid ? Number(recommendedResult.marginOnNetSale || 0) : null,
+        allowedAtSameMargin,
+        incoherent: Boolean(recommendation.is_incoherent_quantity),
+      };
+    }));
+  }
+
   function calculateMcPriceForProduct(product: Product) {
     const price = calculateMcRawPriceForProduct(product);
     return price ? moneyWithCents(price) : "-";
@@ -1372,6 +1484,11 @@ export default function PricesPage() {
                   const productRows = isExpanded
                     ? calculateRowsForProduct(product)
                     : [];
+                  const activeExpandedTab = expandedPricingTabs[key] || "channels";
+                  const wholesalePublications = b2bBySku[product.sku] || [];
+                  const wholesaleRows = activeExpandedTab === "wholesale"
+                    ? b2bRowsForProduct(product, productRows, wholesalePublications)
+                    : [];
                   return (
                     <Fragment key={key}>
                       <tr>
@@ -1420,10 +1537,10 @@ export default function PricesPage() {
                             <div className="channel-breakdown">
                               <SectionHeader
                                 icon={<SlidersHorizontal aria-hidden="true" />}
-                                title="Condiciones de venta"
-                                description="Precios y rentabilidad por canal para este producto."
+                                title={activeExpandedTab === "wholesale" ? "Mercado Libre Negocios" : "Condiciones de venta"}
+                                description={activeExpandedTab === "wholesale" ? "Precios por cantidad, envío bonificado y rentabilidad neta por unidad." : "Precios y rentabilidad por canal para este producto."}
                                 actions={
-                                  <>
+                                  activeExpandedTab === "channels" ? <>
                                     <button className="button small-button prices-publish-all-button" onClick={() => publishAllPricesToMercadoLibre(product, productRows)} disabled={publishingPriceChannel === `${product.sku}-all`}>
                                       <Upload aria-hidden="true" />
                                       {publishingPriceChannel === `${product.sku}-all` ? "Cargando precios..." : "Cargar todas en ML"}
@@ -1432,9 +1549,21 @@ export default function PricesPage() {
                                       <BadgePercent aria-hidden="true" />
                                       {refreshingAdaraSku === product.sku ? "Activando Adara..." : "Activar promo Adara"}
                                     </button>
-                                  </>
+                                  </> : <button className="button small-button" onClick={() => loadB2bForProduct(product)} disabled={loadingB2bSku === product.sku}>
+                                    <RefreshCw aria-hidden="true" />
+                                    {loadingB2bSku === product.sku ? "Consultando ML..." : "Actualizar mayorista"}
+                                  </button>
                                 }
                               />
+                              <div className="row-actions" style={{ marginBottom: 14 }}>
+                                <button className={`button ghost small-button ${activeExpandedTab === "channels" ? "active" : ""}`} type="button" onClick={() => setExpandedPricingTabs((current) => ({ ...current, [key]: "channels" }))}>
+                                  Condiciones de venta
+                                </button>
+                                <button className={`button ghost small-button ${activeExpandedTab === "wholesale" ? "active" : ""}`} type="button" onClick={() => { setExpandedPricingTabs((current) => ({ ...current, [key]: "wholesale" })); loadB2bForProduct(product); }}>
+                                  Mayorista
+                                </button>
+                              </div>
+                              {activeExpandedTab === "channels" && (
                               <table className="nested-table">
                                 <thead>
                                   <tr>
@@ -1515,6 +1644,51 @@ export default function PricesPage() {
                                   )}
                                 </tbody>
                               </table>
+                              )}
+                              {activeExpandedTab === "wholesale" && (
+                                <>
+                                  <p className="small" style={{ marginBottom: 12 }}>
+                                    Margen objetivo: <strong>{percent(Number(productRows.find((row) => row.option.code === "MC")?.result?.marginOnNetSale || 0))}</strong>. Cada precio propuesto vuelve a calcular comisión, IVA e impuestos; el envío se prorratea por unidad.
+                                  </p>
+                                  {b2bErrorBySku[product.sku] && <span className="message error">{b2bErrorBySku[product.sku]}</span>}
+                                  {!loadingB2bSku && !wholesalePublications.length && !b2bErrorBySku[product.sku] && <p className="small">Consultá Mercado Libre para ver los rangos mayoristas disponibles.</p>}
+                                  {wholesaleRows.length > 0 && (
+                                    <table className="nested-table">
+                                      <thead>
+                                        <tr>
+                                          <th>Activar</th><th>MLA</th><th>Cantidad</th><th>Precio por unidad</th><th>Rentabilidad</th><th>Envío total</th><th>Envío / unidad</th><th>Estado</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {wholesaleRows.map((row) => {
+                                          const rangeKey = b2bRangeKey(product.sku, row.itemId, row.quantity);
+                                          return (
+                                            <tr key={rangeKey}>
+                                              <td><input type="checkbox" checked={Boolean(selectedB2bRanges[rangeKey])} disabled={row.incoherent || !row.priceToActivate} onChange={(event) => setSelectedB2bRanges((current) => ({ ...current, [rangeKey]: event.target.checked }))} /></td>
+                                              <td><strong>{row.itemId}</strong></td>
+                                              <td>{row.quantity} u.</td>
+                                              <td><strong>{moneyWithCents(row.priceToActivate)}</strong></td>
+                                              <td><span className={`prices-margin-pill ${marginClass(Number(row.marginAtPrice || 0))}`}>{row.marginAtPrice === null ? "-" : percent(row.marginAtPrice)}</span></td>
+                                              <td>{moneyWithCents(row.totalShipping)}</td>
+                                              <td>{moneyWithCents(row.shippingPerUnit)}</td>
+                                              <td>{row.incoherent ? "No permitido" : row.allowedAtSameMargin ? "Mantiene margen" : `ML exige descuento · objetivo ${percent(row.targetMargin)}`}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                  {wholesaleRows.length > 0 && [...new Set(wholesaleRows.map((row) => row.itemId))].map((itemId) => {
+                                    const selectedRows = wholesaleRows
+                                      .filter((row) => row.itemId === itemId && selectedB2bRanges[b2bRangeKey(product.sku, row.itemId, row.quantity)] && !row.incoherent && row.priceToActivate > 0)
+                                      .map((row) => ({ quantity: row.quantity, price: row.priceToActivate }));
+                                    return <button key={itemId} className="button small-button" type="button" style={{ marginTop: 14, marginRight: 8 }} disabled={!selectedRows.length || Boolean(savingB2bItem)} onClick={() => activateB2bRanges(product, itemId, selectedRows)}>
+                                      <BadgePercent aria-hidden="true" />
+                                      {savingB2bItem === itemId ? "Activando..." : `Activar seleccionadas en ${itemId}`}
+                                    </button>;
+                                  })}
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
