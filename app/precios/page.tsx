@@ -2082,11 +2082,11 @@ export default function PricesPage() {
                                   )}
                                   {wholesaleRows.length > 0 && (() => {
                                     const selectedRows = wholesaleRows.filter((row) => selectedB2bRanges[b2bRangeKey(product.sku, row.itemId, row.quantity)] && !row.incoherent && row.priceToActivate > 0);
-                                    const activationGroups = [...new Set(selectedRows.filter((row) => !row.isActive).map((row) => row.itemId))]
+                                    const activationGroups = [...new Set(selectedRows.map((row) => row.itemId))]
                                       .map((itemId) => ({
                                         itemId,
                                         rows: selectedRows
-                                          .filter((row) => row.itemId === itemId && !row.isActive)
+                                          .filter((row) => row.itemId === itemId)
                                           .map((row) => ({ quantity: row.quantity, price: row.priceToActivate })),
                                       }))
                                       .filter((group) => group.rows.length > 0);
@@ -2098,13 +2098,13 @@ export default function PricesPage() {
                                     const deactivationCount = deactivationGroups.reduce((total, group) => total + group.quantities.length, 0);
                                     return (
                                       <div className="prices-b2b-footer">
-                                        <span className="small">{selectedCount ? `${selectedCount} rango${selectedCount === 1 ? "" : "s"} seleccionado${selectedCount === 1 ? "" : "s"} · ${activationCount} para activar · ${deactivationCount} activos` : "Usá el check del encabezado para seleccionar todos los rangos."}</span>
+                                        <span className="small">{selectedCount ? `${selectedCount} rango${selectedCount === 1 ? "" : "s"} seleccionado${selectedCount === 1 ? "" : "s"} · ${deactivationCount} activos` : "Usá el check del encabezado para seleccionar todos los rangos."}</span>
                                         <button className="button ghost small-button" type="button" disabled={!deactivationCount || Boolean(savingB2bItem)} onClick={() => deactivateSelectedB2bRanges(product, deactivationGroups)}>
                                           {savingB2bItem ? "Actualizando..." : "Desactivar seleccionados"}
                                         </button>
                                         <button className="button small-button" type="button" disabled={!activationCount || Boolean(savingB2bItem)} onClick={() => activateSelectedB2bRanges(product, activationGroups)}>
                                           <BadgePercent aria-hidden="true" />
-                                          {savingB2bItem ? "Activando..." : "Activar seleccionados"}
+                                          {savingB2bItem ? "Aplicando..." : "Aplicar / actualizar seleccionados"}
                                         </button>
                                       </div>
                                     );
