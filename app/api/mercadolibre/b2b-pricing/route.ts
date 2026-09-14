@@ -97,8 +97,9 @@ export async function POST(request: NextRequest) {
       try {
         const priceData = await meliFetch(`/items/${itemId}/prices?display_version=true`, account, {
           headers: { "show-all-prices": "true" },
-        }) as { version?: number | null; prices?: MeliPrice[] | null };
+        }) as { version?: number | null; prices?: MeliPrice[] | null; price_per_quantity?: MeliPrice[] | null };
         const prices = Array.isArray(priceData.prices) ? priceData.prices : [];
+        const percentageRanges = Array.isArray(priceData.price_per_quantity) ? priceData.price_per_quantity : [];
         const standardAmount = Number(prices.find((price) => price.type === "standard")?.amount || publication.meli_price || 0);
         const currency = publication.meli_currency_id || "ARS";
         if (standardAmount <= 0) throw new Error("MercadoLibre no devolvió el precio estándar.");
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
           }> | null;
         };
 
-        const existingRanges = prices
+        const existingRanges = [...prices, ...percentageRanges]
           .filter((price) => price.conditions?.context_restrictions?.includes("user_type_business"))
           .map((price) => ({
             type: price.type || null,

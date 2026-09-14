@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { getConnectedMeliAccount, meliFetch } from "@/lib/mercadolibre";
+import { pauseB2bRangesWithoutContribution } from "@/lib/mercadolibreB2bGuard";
 import type { Product } from "@/lib/types";
 
 type MeliItem = {
@@ -2121,6 +2122,18 @@ export async function POST(request: NextRequest) {
       installmentFeeUpdates += 1;
     }
 
+    let b2bGuard = { checked: 0, paused: 0 };
+    if (!shippingOnly) {
+      try {
+        b2bGuard = await pauseB2bRangesWithoutContribution();
+      } catch (guardError) {
+        // La sincronización no debe fallar si el chequeo preventivo necesita
+        // reintentarse; queda trazado en la respuesta para poder revisarlo.
+        b2bGuard = { checked: 0, paused: 0 };
+        console.error("No se pudo revisar protección mayorista", guardError);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       total_items: items.length,
@@ -2143,6 +2156,7 @@ export async function POST(request: NextRequest) {
       promotion_opportunities: promotionOpportunityRows.length,
       category_fee_updates: categoryFeeRows.length,
       installment_fee_updates: installmentFeeUpdates,
+      b2b_guard: b2bGuard,
       logs: logs.slice(0, 50),
     });
   } catch (error) {

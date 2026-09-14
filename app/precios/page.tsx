@@ -567,6 +567,11 @@ export default function PricesPage() {
     const sku = product.sku;
     if (!sku || loadingB2bSku === sku) return;
     setLoadingB2bSku(sku);
+    // Una consulta es sólo lectura: nunca debe conservar checks de una foto
+    // anterior ni permitir que una acción vieja vuelva a activar rangos.
+    setSelectedB2bRanges((current) => Object.fromEntries(
+      Object.entries(current).filter(([rangeKey]) => !rangeKey.startsWith(`${sku}|`)),
+    ));
     setB2bErrorBySku((current) => ({ ...current, [sku]: "" }));
     try {
       const response = await fetch("/api/mercadolibre/b2b-pricing", {
@@ -591,7 +596,7 @@ export default function PricesPage() {
     return `${sku}|${itemId}|${quantity}`;
   }
 
-  async function activateB2bRanges(product: Product, itemId: string, rows: Array<{ quantity: number; price: number }>) {
+  async function activateB2bRanges(product: Product, itemId: string, rows: Array<{ quantity: number; price: number; targetMargin: number }>) {
     if (!rows.length || savingB2bItem) return;
     const confirmed = window.confirm(`¿Activar ${rows.length} rango(s) mayoristas en ${itemId}? MercadoLibre validará nuevamente los precios.`);
     if (!confirmed) return;
@@ -616,7 +621,7 @@ export default function PricesPage() {
 
   async function activateSelectedB2bRanges(
     product: Product,
-    groups: Array<{ itemId: string; rows: Array<{ quantity: number; price: number }> }>,
+    groups: Array<{ itemId: string; rows: Array<{ quantity: number; price: number; targetMargin: number }> }>,
   ) {
     const rangesCount = groups.reduce((total, group) => total + group.rows.length, 0);
     if (!rangesCount || savingB2bItem) return;
@@ -1431,8 +1436,10 @@ export default function PricesPage() {
       // percentage. Leer sólo percentage hacía que la tabla dijera "Sin
       // activar" aun cuando Mercado Libre ya tenía el rango vigente.
       const activePrice = Number(existingRange?.amount || 0);
-      const isActive = activePrice > 0;
+      const activePercentage = Number(existingRange?.percentage || 0);
+      const isActive = activePrice > 0 || activePercentage > 0;
       const matchesSuggestedPrice = isActive && Math.abs(activePrice - priceToActivate) < 1;
+      const hasFinalPromotion = Number(publication.salePriceAmount || 0) < Number(publication.standardAmount || 0) - 1;
 
       return {
         itemId: publication.itemId,
@@ -1451,32 +1458,17 @@ export default function PricesPage() {
         allowedAtSameMargin,
         isActive,
         activePrice,
+        activePercentage,
         matchesSuggestedPrice,
-        hasFinalPromotion: Number(publication.salePriceAmount || 0) < Number(publication.standardAmount || 0) - 1,
-        usesPromotionReference: false,
+        hasFinalPromotion,
         marginAtCustomerPrice,
         incoherent: Boolean(recommendation.is_incoherent_quantity),
       };
     }));
 
-    // Si una publicación espejo tiene la promo activa, sus precios mayoristas
-    // son la referencia para el mismo SKU y cantidad. Las MLA sin la promo
-    // sincronizada no deben recalcular un precio más alto a partir de su lista:
-    // ML compara contra el precio final que ve el cliente y lo rechaza.
-    return rows.map((row) => {
-      const reference = rows
-        .filter((candidate) => candidate.quantity === row.quantity && candidate.hasFinalPromotion && candidate.priceToActivate > 0)
-        .sort((left, right) => left.priceToActivate - right.priceToActivate)[0];
-      if (!reference || row.priceToActivate <= reference.priceToActivate) return row;
-      const referencePrice = reference.priceToActivate;
-      return {
-        ...row,
-        priceToActivate: referencePrice,
-        marginAtPrice: row.marginAtCustomerPrice(referencePrice),
-        allowedAtSameMargin: false,
-        usesPromotionReference: true,
-      };
-    });
+    // Cada MLA mantiene su propio resultado. El precio, la promoción, el
+    // aporte y el envío pueden ser distintos aun dentro del mismo SKU.
+    return rows;
   }
 
   function calculateMcPriceForProduct(product: Product) {
@@ -2110,8 +2102,8 @@ export default function PricesPage() {
                                               <td>{moneyWithCents(row.totalShipping)}</td>
                                               <td className="positive"><strong>{row.shippingSaving > 0 ? `-${moneyWithCents(row.shippingSaving)}` : "-"}</strong></td>
                                               <td>{moneyWithCents(row.shippingPerUnit)}</td>
-                                              <td><span className={`prices-margin-pill ${row.isActive ? "positive" : ""}`}>{row.isActive ? row.matchesSuggestedPrice ? "Activo" : `Activo · ${moneyWithCents(row.activePrice)}` : "Sin activar"}</span></td>
-                                              <td>{row.incoherent ? "No permitido" : row.usesPromotionReference ? "Usa precio promo del SKU" : row.allowedAtSameMargin ? "Mantiene margen" : `ML exige descuento · objetivo ${percent(row.targetMargin)}`}</td>
+                                              <td><span className={`prices-margin-pill ${row.isActive ? "positive" : ""}`}>{row.isActive ? row.activePrice > 0 ? row.matchesSuggestedPrice ? "Activo" : `Activo · ${moneyWithCents(row.activePrice)}` : `Activo · ${row.activePercentage.toFixed(2)}%` : "Sin activar"}</span></td>
+                                              <td>{row.incoherent ? "No permitido" : row.isActive && !row.hasFinalPromotion ? "Revisar: sin promo vigente" : row.allowedAtSameMargin ? "Mantiene margen" : `ML exige descuento · objetivo ${percent(row.targetMargin)}`}</td>
                                             </tr>
                                           );
                                         })}
@@ -2125,7 +2117,7 @@ export default function PricesPage() {
                                         itemId,
                                         rows: selectedRows
                                           .filter((row) => row.itemId === itemId)
-                                          .map((row) => ({ quantity: row.quantity, price: row.priceToActivate })),
+                                          .map((row) => ({ quantity: row.quantity, price: row.priceToActivate, targetMargin: row.targetMargin })),
                                       }))
                                       .filter((group) => group.rows.length > 0);
                                     const deactivationGroups = [...new Set(selectedRows.filter((row) => row.isActive).map((row) => row.itemId))]

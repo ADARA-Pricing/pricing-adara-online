@@ -16,7 +16,7 @@ type MeliPrice = {
   } | null;
 };
 
-type RequestedRange = { quantity?: number; price?: number };
+type RequestedRange = { quantity?: number; price?: number; targetMargin?: number };
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     const sku = String(body?.sku || "").trim().toUpperCase();
     const itemId = String(body?.itemId || "").trim().toUpperCase();
     const requestedRanges = (body?.ranges || [])
-      .map((range) => ({ quantity: Number(range.quantity), price: Number(range.price) }))
+      .map((range) => ({ quantity: Number(range.quantity), price: Number(range.price), targetMargin: Number(range.targetMargin) }))
       .filter((range) => Number.isInteger(range.quantity) && range.quantity > 1 && range.quantity <= 100 && Number.isFinite(range.price) && range.price > 0);
     const removeQuantities = [...new Set((Array.isArray(body?.removeQuantities) ? body.removeQuantities : [])
       .map(Number)
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     const { data: ownedPublication, error: ownedPublicationError } = await supabase
       .from("mercadolibre_shipping_costs")
-      .select("meli_item_id, meli_currency_id, meli_price")
+      .select("meli_item_id, meli_currency_id, meli_price, meli_promo_meli_amount")
       .eq("sku", sku)
       .eq("meli_item_id", itemId)
       .eq("active", true)
@@ -60,11 +60,40 @@ export async function POST(request: NextRequest) {
 
     const priceData = await meliFetch(`/items/${itemId}/prices?display_version=true`, account, {
       headers: { "show-all-prices": "true" },
-    }) as { version?: number | null; prices?: MeliPrice[] | null };
+    }) as { version?: number | null; prices?: MeliPrice[] | null; price_per_quantity?: MeliPrice[] | null };
     const prices = Array.isArray(priceData.prices) ? priceData.prices : [];
+    const percentageRanges = Array.isArray(priceData.price_per_quantity) ? priceData.price_per_quantity : [];
     const standardAmount = Number(prices.find((price) => price.type === "standard")?.amount || 0);
     if (!priceData.version || standardAmount <= 0) {
       return NextResponse.json({ error: "MercadoLibre no devolvió versión o precio estándar para esta publicación." }, { status: 422 });
+    }
+
+    // Al desactivar, eliminamos únicamente los rangos porcentuales B2B que
+    // fueron seleccionados. Antes el endpoint de importes fijos no veía esos
+    // nodos y dejaba los descuentos activos en Mercado Libre.
+    if (!requestedRanges.length && removeQuantities.length) {
+      const b2bPercentageRanges = percentageRanges.filter((price) =>
+        price.conditions?.context_restrictions?.includes("user_type_business"),
+      );
+      if (b2bPercentageRanges.length) {
+        const remainingPercentageRanges = percentageRanges
+          .filter((price) => {
+            const quantity = Number(price.conditions?.min_purchase_unit || 0);
+            return !price.conditions?.context_restrictions?.includes("user_type_business") || !removeQuantities.includes(quantity);
+          })
+          .map((price) => price.id ? { id: price.id } : null)
+          .filter((price): price is { id: string } => Boolean(price));
+        await meliFetch(`/items/${itemId}/prices/price-per-quantity`, account, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Version": String(priceData.version) },
+          body: JSON.stringify({ price_per_quantity: remainingPercentageRanges }),
+        });
+        await supabase.from("mercadolibre_b2b_margin_guard")
+          .update({ active: false, paused_at: new Date().toISOString(), paused_reason: "Desactivado manualmente", updated_at: new Date().toISOString() })
+          .eq("meli_item_id", itemId)
+          .in("minimum_purchase_unit", removeQuantities);
+        return NextResponse.json({ ok: true, itemId, ranges: [], removed_quantities: removeQuantities });
+      }
     }
 
     let currentCustomerPrice = standardAmount;
@@ -152,6 +181,27 @@ export async function POST(request: NextRequest) {
       headers: { "Content-Type": "application/json", "X-Version": String(priceData.version) },
       body: JSON.stringify({ prices: [...currentPriceReferences, ...pricePerQuantity] }),
     });
+
+    if (requestedRanges.length) {
+      const contribution = Number(ownedPublication.meli_promo_meli_amount || 0);
+      const now = new Date().toISOString();
+      const guardRows = requestedRanges.map((range) => ({
+        meli_item_id: itemId,
+        minimum_purchase_unit: range.quantity,
+        sku,
+        target_margin_rate: Number.isFinite(range.targetMargin) ? range.targetMargin : 0,
+        required_meli_contribution: contribution,
+        active: true,
+        last_checked_at: now,
+        paused_at: null,
+        paused_reason: null,
+        updated_at: now,
+      }));
+      const { error: guardError } = await supabase
+        .from("mercadolibre_b2b_margin_guard")
+        .upsert(guardRows, { onConflict: "meli_item_id,minimum_purchase_unit" });
+      if (guardError) throw new Error(`No se pudo registrar la protección mayorista: ${guardError.message}`);
+    }
 
     return NextResponse.json({ ok: true, itemId, ranges: pricePerQuantity, removed_quantities: removeQuantities });
   } catch (error) {
