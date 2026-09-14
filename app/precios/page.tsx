@@ -142,6 +142,12 @@ export default function PricesPage() {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 800));
       sessionResponse = await supabase.auth.getSession();
     }
+    // La página puede seguir abierta con un access token vencido. Intentamos
+    // renovarlo antes de llamar a endpoints que modifican datos en ML.
+    if (!sessionResponse.data.session) {
+      const refreshed = await supabase.auth.refreshSession();
+      if (refreshed.data.session) sessionResponse = refreshed;
+    }
     return {
       "Content-Type": "application/json",
       ...(sessionResponse.data.session?.access_token ? { Authorization: `Bearer ${sessionResponse.data.session.access_token}` } : {}),
