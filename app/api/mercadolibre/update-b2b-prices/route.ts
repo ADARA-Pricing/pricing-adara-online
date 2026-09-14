@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "MercadoLibre no devolvió versión o precio estándar para esta publicación." }, { status: 422 });
     }
 
+    let businessDiscountBase = standardAmount;
     if (requestedRanges.length) {
       const recommendation = await meliFetch("/prices-per-quantity/v1/recommendations", account, {
         method: "POST",
@@ -74,7 +75,11 @@ export async function POST(request: NextRequest) {
           range_item_quantities: requestedRanges.map((range) => range.quantity),
           price: { standard_amount: standardAmount, currency: ownedPublication.meli_currency_id || "ARS" },
         }),
-      }) as { recommendations?: Array<{ quantity?: number | null; amount?: number | null; is_incoherent_quantity?: boolean | null }> | null };
+      }) as {
+        price?: { sale_price_amount?: number | null } | null;
+        recommendations?: Array<{ quantity?: number | null; amount?: number | null; is_incoherent_quantity?: boolean | null }> | null;
+      };
+      businessDiscountBase = Number(recommendation.price?.sale_price_amount || standardAmount);
       const recommendedByQuantity = new Map((recommendation.recommendations || []).map((entry) => [Number(entry.quantity || 0), entry]));
 
       for (const range of requestedRanges) {
@@ -108,10 +113,14 @@ export async function POST(request: NextRequest) {
         },
       });
     });
+    // En una promoción vigente ML aplica el descuento mayorista sobre el precio
+    // final del comprador, no sobre el precio de lista. Usar el estándar hacía
+    // que ambos descuentos se acumularan y el precio publicado quedara mucho
+    // más bajo que el recomendado.
     requestedRanges.forEach((range) => {
       nextRanges.set(range.quantity, {
         type: "discount_percentage",
-        percentage: Number(((1 - range.price / standardAmount) * 100).toFixed(4)),
+        percentage: Number(((1 - range.price / businessDiscountBase) * 100).toFixed(4)),
         conditions: {
           context_restrictions: ["channel_marketplace", "user_type_business"],
           min_purchase_unit: range.quantity,
