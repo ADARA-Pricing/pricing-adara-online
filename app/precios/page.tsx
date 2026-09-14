@@ -1376,7 +1376,7 @@ export default function PricesPage() {
       roundingMode: "nearest" as const,
     };
 
-    return publications.flatMap((publication) => (publication.recommendations || []).map((recommendation) => {
+    const rows = publications.flatMap((publication) => (publication.recommendations || []).map((recommendation) => {
       const quantity = Number(recommendation.quantity || 0);
       const totalShipping = Number(recommendation.shipping?.cost || 0);
       const shippingPerUnit = quantity > 0 ? totalShipping / quantity : 0;
@@ -1417,6 +1417,13 @@ export default function PricesPage() {
         : 0;
       const allowedAtSameMargin = Boolean(requiredPrice && maximumMeliPrice && requiredPrice <= maximumMeliPrice);
       const priceToActivate = allowedAtSameMargin ? requiredPrice : maximumMeliPrice;
+      const marginAtCustomerPrice = (customerPrice: number) => {
+        const result = calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, {
+          ...target,
+          salePrice: customerPrice + meliPromoContribution,
+        }) as any;
+        return result.valid ? Number(result.marginOnNetSale || 0) : null;
+      };
       const existingRange = (publication.existingRanges || []).find(
         (range) => Number(range.conditions?.min_purchase_unit || 0) === quantity,
       );
@@ -1438,9 +1445,31 @@ export default function PricesPage() {
           : recommendedResult?.valid ? Number(recommendedResult.marginOnNetSale || 0) : null,
         allowedAtSameMargin,
         isActive,
+        hasFinalPromotion: Number(publication.salePriceAmount || 0) < Number(publication.standardAmount || 0) - 1,
+        usesPromotionReference: false,
+        marginAtCustomerPrice,
         incoherent: Boolean(recommendation.is_incoherent_quantity),
       };
     }));
+
+    // Si una publicación espejo tiene la promo activa, sus precios mayoristas
+    // son la referencia para el mismo SKU y cantidad. Las MLA sin la promo
+    // sincronizada no deben recalcular un precio más alto a partir de su lista:
+    // ML compara contra el precio final que ve el cliente y lo rechaza.
+    return rows.map((row) => {
+      const reference = rows
+        .filter((candidate) => candidate.quantity === row.quantity && candidate.hasFinalPromotion && candidate.priceToActivate > 0)
+        .sort((left, right) => left.priceToActivate - right.priceToActivate)[0];
+      if (!reference || row.priceToActivate <= reference.priceToActivate) return row;
+      const referencePrice = reference.priceToActivate;
+      return {
+        ...row,
+        priceToActivate: referencePrice,
+        marginAtPrice: row.marginAtCustomerPrice(referencePrice),
+        allowedAtSameMargin: false,
+        usesPromotionReference: true,
+      };
+    });
   }
 
   function calculateMcPriceForProduct(product: Product) {
@@ -2075,7 +2104,7 @@ export default function PricesPage() {
                                               <td className="positive"><strong>{row.shippingSaving > 0 ? `-${moneyWithCents(row.shippingSaving)}` : "-"}</strong></td>
                                               <td>{moneyWithCents(row.shippingPerUnit)}</td>
                                               <td><span className={`prices-margin-pill ${row.isActive ? "positive" : ""}`}>{row.isActive ? "Activo" : "Sin activar"}</span></td>
-                                              <td>{row.incoherent ? "No permitido" : row.allowedAtSameMargin ? "Mantiene margen" : `ML exige descuento · objetivo ${percent(row.targetMargin)}`}</td>
+                                              <td>{row.incoherent ? "No permitido" : row.usesPromotionReference ? "Usa precio promo del SKU" : row.allowedAtSameMargin ? "Mantiene margen" : `ML exige descuento · objetivo ${percent(row.targetMargin)}`}</td>
                                             </tr>
                                           );
                                         })}
