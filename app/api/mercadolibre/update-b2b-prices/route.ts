@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     const { data: ownedPublication, error: ownedPublicationError } = await supabase
       .from("mercadolibre_shipping_costs")
-      .select("meli_item_id, meli_currency_id")
+      .select("meli_item_id, meli_currency_id, meli_price")
       .eq("sku", sku)
       .eq("meli_item_id", itemId)
       .eq("active", true)
@@ -65,12 +65,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "MercadoLibre no devolvió versión o precio estándar para esta publicación." }, { status: 422 });
     }
 
-    // Mercado Libre persiste los precios mayoristas como un porcentaje sobre
-    // el precio estándar de la publicación. Aunque haya una promoción vigente,
-    // calcularlo sobre sale_price_amount hace que ML vuelva a aplicar el
-    // porcentaje contra otra base y el precio visible termine siendo distinto
-    // (y mayor) que el monto absoluto elegido en la app.
-    const businessDiscountBase = standardAmount;
+    // ML aplica el porcentaje de Negocios sobre el precio configurado de la
+    // publicación, que puede diferir del precio "standard" devuelto por
+    // /prices cuando hay promociones. Esta es la única base que hace que el
+    // importe final guardado sea el mismo que eligió la persona en la app.
+    const configuredPublicationPrice = Number(ownedPublication.meli_price || 0);
+    const businessDiscountBase = configuredPublicationPrice > 0 ? configuredPublicationPrice : standardAmount;
     if (requestedRanges.length) {
       const recommendation = await meliFetch("/prices-per-quantity/v1/recommendations", account, {
         method: "POST",
@@ -121,8 +121,8 @@ export async function POST(request: NextRequest) {
       });
     });
     // La API recibe porcentaje, pero la pantalla trabaja con el importe final
-    // por unidad. El porcentaje debe salir del precio estándar de ESTA MLA:
-    // así el monto resultante en Mercado Libre es exactamente el solicitado.
+    // por unidad. Se transforma usando el precio configurado de ESTA MLA para
+    // que Mercado Libre muestre exactamente el importe solicitado.
     requestedRanges.forEach((range) => {
       nextRanges.set(range.quantity, {
         type: "discount_percentage",
