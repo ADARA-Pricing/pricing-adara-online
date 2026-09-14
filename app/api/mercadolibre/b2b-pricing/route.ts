@@ -9,6 +9,8 @@ type Publication = {
   meli_currency_id: string | null;
   meli_installments_text: string | null;
   meli_listing_type_id: string | null;
+  meli_stock: number | string | null;
+  meli_logistic_type: string | null;
   notes: string | null;
 };
 
@@ -44,7 +46,7 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("mercadolibre_shipping_costs")
-      .select("meli_item_id, meli_price, meli_currency_id, meli_installments_text, meli_listing_type_id, notes")
+      .select("meli_item_id, meli_price, meli_currency_id, meli_installments_text, meli_listing_type_id, meli_stock, meli_logistic_type, notes")
       .eq("sku", sku)
       .eq("active", true)
       .eq("meli_status", "active");
@@ -52,7 +54,15 @@ export async function POST(request: NextRequest) {
 
     const publications = ((data || []) as Publication[])
       .filter((publication) => /^MLA\d+$/i.test(String(publication.meli_item_id || "")))
-      .filter(isOnePaymentPublication);
+      .filter(isOnePaymentPublication)
+      // Negocios se calcula sobre una condición de venta. Para evitar repetir
+      // el mismo SKU en MLA espejo, priorizamos stock, Full y un orden estable.
+      .sort((a, b) =>
+        Number(b.meli_stock || 0) - Number(a.meli_stock || 0)
+        || Number(b.meli_logistic_type === "fulfillment") - Number(a.meli_logistic_type === "fulfillment")
+        || String(a.meli_item_id || "").localeCompare(String(b.meli_item_id || "")),
+      )
+      .slice(0, 1);
 
     if (!publications.length) {
       return NextResponse.json({ error: "No hay una publicación activa de 1 pago para este SKU." }, { status: 404 });

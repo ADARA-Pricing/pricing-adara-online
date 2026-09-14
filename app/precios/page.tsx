@@ -1187,8 +1187,8 @@ export default function PricesPage() {
       (item) => item.category?.toLowerCase() === (product.category || "").toLowerCase(),
     ) || null;
     const setting = getChannelSetting(product.id, "MC");
-    const target = {
-      desiredMarginRate: Number(mc.result.marginOnNetSale || 0),
+    const targetBase = {
+      desiredMarginRate: 0,
       desiredNetProfit: null,
       structureAmount: Number(setting?.structure_amount || 0),
       manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
@@ -1207,6 +1207,18 @@ export default function PricesPage() {
         || shippingCostsForOption(product, mc.option)[0]
         || null;
       const b2bShipping = { ...(sourcePublication || {}), shipping_cost_amount: shippingPerUnit } as MercadoLibreShippingCost;
+      const currentOnePay = calculatePriceSummary(
+        product,
+        mc.option,
+        categoryFee,
+        taxes,
+        sourcePublication,
+        { ...targetBase, salePrice: Number(publication.salePriceAmount || 0) },
+      ) as any;
+      const targetMargin = currentOnePay.valid
+        ? Number(currentOnePay.marginOnNetSale || 0)
+        : Number(mc.result.marginOnNetSale || 0);
+      const target = { ...targetBase, desiredMarginRate: targetMargin };
       const sameMarginResult = calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, target) as any;
       const maximumMeliPrice = Number(recommendation.amount || 0);
       const recommendedResult = maximumMeliPrice > 0
@@ -1225,7 +1237,7 @@ export default function PricesPage() {
         maximumMeliPrice,
         requiredPrice,
         priceToActivate,
-        targetMargin: Number(mc.result.marginOnNetSale || 0),
+        targetMargin,
         marginAtPrice: allowedAtSameMargin
           ? Number(sameMarginResult.marginOnNetSale || 0)
           : recommendedResult?.valid ? Number(recommendedResult.marginOnNetSale || 0) : null,
@@ -1269,9 +1281,8 @@ export default function PricesPage() {
     const categoryFee = categoryFees.find(
       (item) => item.category?.toLowerCase() === (modal.product.category || "").toLowerCase(),
     ) || null;
-    const targetMargin = Number(mcRow.result.marginOnNetSale || 0);
-    const target = {
-      desiredMarginRate: targetMargin,
+    const targetBase = {
+      desiredMarginRate: 0,
       desiredNetProfit: null,
       structureAmount: modal.structureAmounts.MC || 0,
       manualShippingAmount: modal.manualShippingAmounts.MC || 0,
@@ -1291,6 +1302,20 @@ export default function PricesPage() {
         ...(sourcePublication || {}),
         shipping_cost_amount: shippingPerUnit,
       } as MercadoLibreShippingCost;
+      const currentOnePay = calculatePriceSummary(
+        modal.product,
+        mcRow.option,
+        categoryFee,
+        modal.taxOverrides,
+        sourcePublication,
+        { ...targetBase, salePrice: Number(publication.salePriceAmount || 0) },
+      ) as any;
+      const target = {
+        ...targetBase,
+        desiredMarginRate: currentOnePay.valid
+          ? Number(currentOnePay.marginOnNetSale || 0)
+          : Number(mcRow.result.marginOnNetSale || 0),
+      };
       const sameMargin = calculatePriceSummary(
         modal.product,
         mcRow.option,
@@ -1666,7 +1691,7 @@ export default function PricesPage() {
                               {activeExpandedTab === "wholesale" && (
                                 <>
                                   <p className="small" style={{ marginBottom: 12 }}>
-                                    Margen objetivo: <strong>{percent(Number(productRows.find((row) => row.option.code === "MC")?.result?.marginOnNetSale || 0))}</strong>. Cada precio propuesto vuelve a calcular comisión, IVA e impuestos; el envío se prorratea por unidad.
+                                    Margen objetivo sobre el precio final de 1 pago: <strong>{wholesaleRows.length ? percent(wholesaleRows[0].targetMargin) : "-"}</strong>. Cada precio propuesto vuelve a calcular comisión, IVA e impuestos; el envío se prorratea por unidad.
                                   </p>
                                   {b2bErrorBySku[product.sku] && <span className="message error">{b2bErrorBySku[product.sku]}</span>}
                                   {!loadingB2bSku && !wholesalePublications.length && !b2bErrorBySku[product.sku] && <p className="small">Consultá Mercado Libre para ver los rangos mayoristas disponibles.</p>}
@@ -1674,7 +1699,7 @@ export default function PricesPage() {
                                     <table className="nested-table">
                                       <thead>
                                         <tr>
-                                          <th>Activar</th><th>MLA</th><th>Cantidad</th><th>Precio por unidad</th><th>Rentabilidad</th><th>Envío total</th><th>Envío / unidad</th><th>Estado</th>
+                                          <th>Activar</th><th>MLA</th><th>Cantidad</th><th>Precio por unidad</th><th>Rentabilidad</th><th>Envío total</th><th>Bonif. envío ML</th><th>Envío / unidad</th><th>Estado</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -1682,12 +1707,13 @@ export default function PricesPage() {
                                           const rangeKey = b2bRangeKey(product.sku, row.itemId, row.quantity);
                                           return (
                                             <tr key={rangeKey}>
-                                              <td><input type="checkbox" checked={Boolean(selectedB2bRanges[rangeKey])} disabled={row.incoherent || !row.priceToActivate} onChange={(event) => setSelectedB2bRanges((current) => ({ ...current, [rangeKey]: event.target.checked }))} /></td>
+                                              <td><input className="b2b-range-checkbox" type="checkbox" checked={Boolean(selectedB2bRanges[rangeKey])} disabled={row.incoherent || !row.priceToActivate} onChange={(event) => setSelectedB2bRanges((current) => ({ ...current, [rangeKey]: event.target.checked }))} /></td>
                                               <td><strong>{row.itemId}</strong></td>
                                               <td>{row.quantity} u.</td>
                                               <td><strong>{moneyWithCents(row.priceToActivate)}</strong></td>
                                               <td><span className={`prices-margin-pill ${marginClass(Number(row.marginAtPrice || 0))}`}>{row.marginAtPrice === null ? "-" : percent(row.marginAtPrice)}</span></td>
                                               <td>{moneyWithCents(row.totalShipping)}</td>
+                                              <td className="positive"><strong>{row.shippingSaving > 0 ? `-${moneyWithCents(row.shippingSaving)}` : "-"}</strong></td>
                                               <td>{moneyWithCents(row.shippingPerUnit)}</td>
                                               <td>{row.incoherent ? "No permitido" : row.allowedAtSameMargin ? "Mantiene margen" : `ML exige descuento · objetivo ${percent(row.targetMargin)}`}</td>
                                             </tr>

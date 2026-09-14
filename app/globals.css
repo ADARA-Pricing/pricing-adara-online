@@ -12126,6 +12126,18 @@ textarea:focus,
   padding: 10px 12px;
 }
 
+/* Los checkboxes de rangos mayoristas no deben heredar el tamaño de inputs de precio. */
+.prices-page .nested-table .b2b-range-checkbox {
+  width: 18px !important;
+  min-width: 18px;
+  height: 18px !important;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
 .prices-page .nested-table td:first-child strong {
   display: block;
   color: #0f172a;
