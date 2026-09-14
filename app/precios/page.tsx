@@ -1427,7 +1427,12 @@ export default function PricesPage() {
       const existingRange = (publication.existingRanges || []).find(
         (range) => Number(range.conditions?.min_purchase_unit || 0) === quantity,
       );
-      const isActive = Boolean(existingRange && Number(existingRange.percentage || 0) > 0);
+      // Los rangos B2B de importe fijo son nodos "standard" y no incluyen
+      // percentage. Leer sólo percentage hacía que la tabla dijera "Sin
+      // activar" aun cuando Mercado Libre ya tenía el rango vigente.
+      const activePrice = Number(existingRange?.amount || 0);
+      const isActive = activePrice > 0;
+      const matchesSuggestedPrice = isActive && Math.abs(activePrice - priceToActivate) < 1;
 
       return {
         itemId: publication.itemId,
@@ -1445,6 +1450,8 @@ export default function PricesPage() {
           : recommendedResult?.valid ? Number(recommendedResult.marginOnNetSale || 0) : null,
         allowedAtSameMargin,
         isActive,
+        activePrice,
+        matchesSuggestedPrice,
         hasFinalPromotion: Number(publication.salePriceAmount || 0) < Number(publication.standardAmount || 0) - 1,
         usesPromotionReference: false,
         marginAtCustomerPrice,
@@ -2103,7 +2110,7 @@ export default function PricesPage() {
                                               <td>{moneyWithCents(row.totalShipping)}</td>
                                               <td className="positive"><strong>{row.shippingSaving > 0 ? `-${moneyWithCents(row.shippingSaving)}` : "-"}</strong></td>
                                               <td>{moneyWithCents(row.shippingPerUnit)}</td>
-                                              <td><span className={`prices-margin-pill ${row.isActive ? "positive" : ""}`}>{row.isActive ? "Activo" : "Sin activar"}</span></td>
+                                              <td><span className={`prices-margin-pill ${row.isActive ? "positive" : ""}`}>{row.isActive ? row.matchesSuggestedPrice ? "Activo" : `Activo · ${moneyWithCents(row.activePrice)}` : "Sin activar"}</span></td>
                                               <td>{row.incoherent ? "No permitido" : row.usesPromotionReference ? "Usa precio promo del SKU" : row.allowedAtSameMargin ? "Mantiene margen" : `ML exige descuento · objetivo ${percent(row.targetMargin)}`}</td>
                                             </tr>
                                           );
