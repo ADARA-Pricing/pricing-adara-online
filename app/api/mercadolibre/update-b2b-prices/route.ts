@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     if (origin && new URL(origin).host !== request.nextUrl.host) {
       return NextResponse.json({ error: "Origen no permitido." }, { status: 403 });
     }
-    await requireApiUser();
+    await requireApiUser(request);
 
     const body = await request.json().catch(() => null) as {
       sku?: string;

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Origen no permitido." }, { status: 403 });
     }
 
-    await requireApiUser();
+    await requireApiUser(request);
     const body = await request.json().catch(() => null) as { sku?: string; quantities?: unknown } | null;
     const sku = String(body?.sku || "").trim().toUpperCase();
     const quantities = Array.isArray(body?.quantities)

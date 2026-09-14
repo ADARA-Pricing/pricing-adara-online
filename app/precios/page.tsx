@@ -136,6 +136,18 @@ export default function PricesPage() {
     if (!data.session) router.push("/login");
   }
 
+  async function authenticatedJsonHeaders() {
+    let sessionResponse = await supabase.auth.getSession();
+    if (/failed to get project config/i.test(sessionResponse.error?.message || "")) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 800));
+      sessionResponse = await supabase.auth.getSession();
+    }
+    return {
+      "Content-Type": "application/json",
+      ...(sessionResponse.data.session?.access_token ? { Authorization: `Bearer ${sessionResponse.data.session.access_token}` } : {}),
+    };
+  }
+
   async function logout() {
     await supabase.auth.signOut();
     router.push("/login");
@@ -525,7 +537,7 @@ export default function PricesPage() {
     try {
       const response = await fetch("/api/mercadolibre/b2b-pricing", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authenticatedJsonHeaders(),
         body: JSON.stringify({ sku: modal.product.sku, quantities: [2, 5, 10] }),
       });
       const data = await response.json().catch(() => ({}));
@@ -546,7 +558,7 @@ export default function PricesPage() {
     try {
       const response = await fetch("/api/mercadolibre/b2b-pricing", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authenticatedJsonHeaders(),
         body: JSON.stringify({ sku, quantities: [2, 5, 10] }),
       });
       const data = await response.json().catch(() => ({}));
@@ -575,7 +587,7 @@ export default function PricesPage() {
     try {
       const response = await fetch("/api/mercadolibre/update-b2b-prices", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authenticatedJsonHeaders(),
         body: JSON.stringify({ sku: product.sku, itemId, ranges: rows }),
       });
       const data = await response.json().catch(() => ({}));

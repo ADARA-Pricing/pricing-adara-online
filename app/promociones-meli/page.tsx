@@ -801,7 +801,7 @@ export default function PromocionesMeliPage() {
     if (!data.session) router.push("/login");
   }
 
-  async function loadData(options: { quiet?: boolean } = {}) {
+  async function loadData(options: { quiet?: boolean; retried?: boolean } = {}) {
     if (!options.quiet) setLoading(true);
     setError(null);
 
@@ -853,6 +853,25 @@ export default function PromocionesMeliPage() {
       const rows = (response.data || []) as MercadoLibrePromotionOpportunity[];
       allOpportunities.push(...rows);
       if (rows.length < 1000) break;
+    }
+
+    const responsesWithErrors = [
+      productsResponse,
+      publicationsResponse,
+      installmentsResponse,
+      categoryFeesResponse,
+      taxesResponse,
+      marginsResponse,
+    ];
+    const projectConfigUnavailable = responsesWithErrors.some((response) =>
+      /failed to get project config/i.test(response.error?.message || ""),
+    ) || /failed to get project config/i.test(opportunitiesError || "");
+    // Supabase puede devolver este error de configuración de forma transitoria
+    // mientras renueva Auth en el navegador. Reintentamos una vez sin dejar la
+    // pantalla vacía ni obligar a recargar manualmente.
+    if (projectConfigUnavailable && !options.retried) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 1200));
+      return loadData({ ...options, retried: true });
     }
 
     if (!options.quiet) setLoading(false);
