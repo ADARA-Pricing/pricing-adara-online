@@ -29,18 +29,21 @@ async function main() {
     const metadata = await sharp(output).metadata();
     assert.equal(metadata.width, 1024);
     assert.equal(metadata.height, 1024);
-    assert.equal(metadata.format, 'jpeg');
+    assert.equal(metadata.format, 'png');
+    assert.equal(metadata.hasAlpha, true);
     const { data, info } = await sharp(output).raw().toBuffer({ resolveWithObject: true });
-    const pixel = (x, y) => [...data.subarray((y * info.width + x) * info.channels, (y * info.width + x) * info.channels + 3)];
+    const pixel = (x, y) => [...data.subarray((y * info.width + x) * info.channels, (y * info.width + x) * info.channels + 4)];
     assert.ok(pixel(512, 512)[0] > 240 && pixel(512, 512)[1] < 15);
+    assert.equal(pixel(512, 512)[3], 255);
     if (width !== height) {
       const borders = width > height ? [[512, 100], [512, 924]] : [[100, 512], [924, 512]];
-      for (const [x, y] of borders) assert.ok(pixel(x, y).every(channel => channel > 245));
+      for (const [x, y] of borders) assert.equal(pixel(x, y)[3], 0);
     }
   }
   const transparent = await sharp({ create: { width: 40, height: 40, channels: 4, background: '#00000000' } }).png().toBuffer();
   const { channels } = await sharp(await squareProductImage(transparent)).stats();
-  assert.ok(channels.every(channel => channel.min === 255));
+  assert.equal(channels.length, 4);
+  assert.equal(channels[3].max, 0);
   console.log('OK: galería completa, orden, variantes, URL, tamaño, centrado y transparencia.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

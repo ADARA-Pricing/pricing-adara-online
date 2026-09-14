@@ -47,9 +47,9 @@ export function mercadoLibreImageUrls(item: MeliImageItem, sku: string) {
 export async function squareProductImage(input: Buffer) {
   return sharp(input, { limitInputPixels: 40_000_000 })
     .rotate()
-    .flatten({ background: "#ffffff" })
-    .resize(1024, 1024, { fit: "contain", position: "centre", background: "#ffffff" })
-    .jpeg({ quality: 92 })
+    .ensureAlpha()
+    .resize(1024, 1024, { fit: "contain", position: "centre", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
     .toBuffer();
 }
 

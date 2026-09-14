@@ -231,7 +231,7 @@ export async function POST(request: NextRequest) {
           method: "POST",
           body: JSON.stringify({
             attachment: image.toString("base64"),
-            filename: `${normalizedSku.replace(/[^a-zA-Z0-9_-]/g, "-")}-${index + 1}.jpg`,
+            filename: `${normalizedSku.replace(/[^a-zA-Z0-9_-]/g, "-")}-${index + 1}.png`,
             position: index + 1,
           }),
         });
