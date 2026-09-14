@@ -80,6 +80,7 @@ type B2BPublication = {
   itemId: string;
   standardAmount?: number | null;
   salePriceAmount?: number | null;
+  meliPromoContributionAmount?: number | null;
   currency?: string | null;
   recommendations?: B2BRecommendation[];
   existingRanges?: Array<{ type?: string | null; amount?: number | null; conditions?: unknown }>;
@@ -1213,7 +1214,10 @@ export default function PricesPage() {
         categoryFee,
         taxes,
         sourcePublication,
-        { ...targetBase, salePrice: Number(publication.salePriceAmount || 0) },
+        {
+          ...targetBase,
+          salePrice: Number(publication.salePriceAmount || 0) + Number(publication.meliPromoContributionAmount || 0),
+        },
       ) as any;
       const targetMargin = currentOnePay.valid
         ? Number(currentOnePay.marginOnNetSale || 0)
@@ -1221,10 +1225,18 @@ export default function PricesPage() {
       const target = { ...targetBase, desiredMarginRate: targetMargin };
       const sameMarginResult = calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, target) as any;
       const maximumMeliPrice = Number(recommendation.amount || 0);
+      const meliPromoContribution = Number(publication.meliPromoContributionAmount || 0);
       const recommendedResult = maximumMeliPrice > 0
-        ? calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, { ...target, salePrice: maximumMeliPrice }) as any
+        ? calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, {
+          ...target,
+          salePrice: maximumMeliPrice + meliPromoContribution,
+        }) as any
         : null;
-      const requiredPrice = sameMarginResult.valid ? Number(sameMarginResult.roundedPrice || 0) : 0;
+      // El precio que se carga en Negocios es el que ve el comprador. El aporte
+      // compartido de ML se suma al cobro del vendedor, no al precio publicado.
+      const requiredPrice = sameMarginResult.valid
+        ? Math.max(Number(sameMarginResult.roundedPrice || 0) - meliPromoContribution, 0)
+        : 0;
       const allowedAtSameMargin = Boolean(requiredPrice && maximumMeliPrice && requiredPrice <= maximumMeliPrice);
       const priceToActivate = allowedAtSameMargin ? requiredPrice : maximumMeliPrice;
 
@@ -1234,6 +1246,7 @@ export default function PricesPage() {
         totalShipping,
         shippingPerUnit,
         shippingSaving: Number(recommendation.shipping?.discount?.amount || 0),
+        meliPromoContribution,
         maximumMeliPrice,
         requiredPrice,
         priceToActivate,
@@ -1308,7 +1321,10 @@ export default function PricesPage() {
         categoryFee,
         modal.taxOverrides,
         sourcePublication,
-        { ...targetBase, salePrice: Number(publication.salePriceAmount || 0) },
+        {
+          ...targetBase,
+          salePrice: Number(publication.salePriceAmount || 0) + Number(publication.meliPromoContributionAmount || 0),
+        },
       ) as any;
       const target = {
         ...targetBase,
@@ -1325,6 +1341,7 @@ export default function PricesPage() {
         target,
       ) as any;
       const maximumMeliPrice = Number(recommendation.amount || 0);
+      const meliPromoContribution = Number(publication.meliPromoContributionAmount || 0);
       const atMeliRecommendation = maximumMeliPrice > 0
         ? calculatePriceSummary(
           modal.product,
@@ -1332,7 +1349,7 @@ export default function PricesPage() {
           categoryFee,
           modal.taxOverrides,
           b2bShipping,
-          { ...target, salePrice: maximumMeliPrice },
+          { ...target, salePrice: maximumMeliPrice + meliPromoContribution },
         ) as any
         : null;
 
@@ -1343,11 +1360,14 @@ export default function PricesPage() {
         shippingPerUnit,
         shippingOriginal: Number(recommendation.shipping?.original_cost || 0),
         shippingSaving: Number(recommendation.shipping?.discount?.amount || 0),
+        meliPromoContribution,
         meliRecommendedPrice: maximumMeliPrice,
-        requiredPrice: sameMargin.valid ? Number(sameMargin.roundedPrice || 0) : null,
+        requiredPrice: sameMargin.valid
+          ? Math.max(Number(sameMargin.roundedPrice || 0) - meliPromoContribution, 0)
+          : null,
         requiredMargin: sameMargin.valid ? Number(sameMargin.marginOnNetSale || 0) : null,
         recommendedMargin: atMeliRecommendation?.valid ? Number(atMeliRecommendation.marginOnNetSale || 0) : null,
-        allowedAtSameMargin: sameMargin.valid && maximumMeliPrice > 0 && Number(sameMargin.roundedPrice || 0) <= maximumMeliPrice,
+        allowedAtSameMargin: sameMargin.valid && maximumMeliPrice > 0 && Math.max(Number(sameMargin.roundedPrice || 0) - meliPromoContribution, 0) <= maximumMeliPrice,
         incoherent: Boolean(recommendation.is_incoherent_quantity),
       };
     }));
@@ -1691,7 +1711,7 @@ export default function PricesPage() {
                               {activeExpandedTab === "wholesale" && (
                                 <>
                                   <p className="small" style={{ marginBottom: 12 }}>
-                                    Margen objetivo sobre el precio final de 1 pago: <strong>{wholesaleRows.length ? percent(wholesaleRows[0].targetMargin) : "-"}</strong>. Cada precio propuesto vuelve a calcular comisión, IVA e impuestos; el envío se prorratea por unidad.
+                                    Margen objetivo sobre el precio final de 1 pago: <strong>{wholesaleRows.length ? percent(wholesaleRows[0].targetMargin) : "-"}</strong>. Cada precio propuesto vuelve a calcular comisión, IVA e impuestos; el envío se prorratea por unidad e incluye el aporte vigente de ML en promos compartidas.
                                   </p>
                                   {b2bErrorBySku[product.sku] && <span className="message error">{b2bErrorBySku[product.sku]}</span>}
                                   {!loadingB2bSku && !wholesalePublications.length && !b2bErrorBySku[product.sku] && <p className="small">Consultá Mercado Libre para ver los rangos mayoristas disponibles.</p>}
@@ -1699,7 +1719,7 @@ export default function PricesPage() {
                                     <table className="nested-table">
                                       <thead>
                                         <tr>
-                                          <th>Activar</th><th>MLA</th><th>Cantidad</th><th>Precio por unidad</th><th>Rentabilidad</th><th>Envío total</th><th>Bonif. envío ML</th><th>Envío / unidad</th><th>Estado</th>
+                                          <th>Activar</th><th>MLA</th><th>Cantidad</th><th>Precio por unidad</th><th>Aporte promo ML</th><th>Rentabilidad</th><th>Envío total</th><th>Bonif. envío ML</th><th>Envío / unidad</th><th>Estado</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -1711,6 +1731,7 @@ export default function PricesPage() {
                                               <td><strong>{row.itemId}</strong></td>
                                               <td>{row.quantity} u.</td>
                                               <td><strong>{moneyWithCents(row.priceToActivate)}</strong></td>
+                                              <td className="positive"><strong>{row.meliPromoContribution > 0 ? `+${moneyWithCents(row.meliPromoContribution)}` : "-"}</strong></td>
                                               <td><span className={`prices-margin-pill ${marginClass(Number(row.marginAtPrice || 0))}`}>{row.marginAtPrice === null ? "-" : percent(row.marginAtPrice)}</span></td>
                                               <td>{moneyWithCents(row.totalShipping)}</td>
                                               <td className="positive"><strong>{row.shippingSaving > 0 ? `-${moneyWithCents(row.shippingSaving)}` : "-"}</strong></td>
@@ -2048,7 +2069,7 @@ export default function PricesPage() {
                   <div>
                     <h3>Mercado Libre Negocios · precios por cantidad</h3>
                     <p className="small">
-                      Usa la bonificación real de envío que informa ML. Comisión, IVA e impuestos se recalculan sobre cada precio mayorista para conservar el margen neto de 1 pago.
+                      Usa la bonificación real de envío que informa ML y el aporte vigente de ML cuando la promoción es compartida. Comisión, IVA e impuestos se recalculan sobre cada precio mayorista.
                     </p>
                   </div>
                   <button className="button ghost small-button" type="button" onClick={loadB2bRecommendations} disabled={loadingB2b}>
@@ -2073,6 +2094,7 @@ export default function PricesPage() {
                           <th>Envío B2B total</th>
                           <th>Envío por unidad</th>
                           <th>Ahorro envío</th>
+                          <th>Aporte promo ML</th>
                           <th>Máx. precio ML</th>
                           <th>Precio p/ mismo margen</th>
                           <th>Margen con precio ML</th>
@@ -2087,6 +2109,7 @@ export default function PricesPage() {
                             <td>{moneyWithCents(row.totalShipping)}</td>
                             <td>{moneyWithCents(row.shippingPerUnit)}</td>
                             <td className="positive">{moneyWithCents(row.shippingSaving)}</td>
+                            <td className="positive">{row.meliPromoContribution > 0 ? `+${moneyWithCents(row.meliPromoContribution)}` : "-"}</td>
                             <td><strong>{moneyWithCents(row.meliRecommendedPrice)}</strong></td>
                             <td>{row.requiredPrice ? moneyWithCents(row.requiredPrice) : "-"}</td>
                             <td className={marginClass(row.recommendedMargin || 0)}>{row.recommendedMargin === null ? "-" : percent(row.recommendedMargin)}</td>

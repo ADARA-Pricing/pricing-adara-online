@@ -11,6 +11,11 @@ type Publication = {
   meli_listing_type_id: string | null;
   meli_stock: number | string | null;
   meli_logistic_type: string | null;
+  meli_promo_price: number | string | null;
+  meli_promo_meli_amount: number | string | null;
+  meli_promo_meli_rate: number | string | null;
+  meli_promo_seller_rate: number | string | null;
+  meli_original_price: number | string | null;
   notes: string | null;
 };
 
@@ -23,6 +28,24 @@ type MeliPrice = {
 function isOnePaymentPublication(publication: Publication) {
   const source = `${publication.meli_installments_text || ""} ${publication.meli_listing_type_id || ""} ${publication.notes || ""}`.toLowerCase();
   return source.includes("sin cuotas") || source.includes("1 pago") || source.includes("clásica") || source.includes("clasica");
+}
+
+function meliPromoContribution(publication: Publication, customerPrice: number) {
+  const promoPrice = Number(publication.meli_promo_price || 0);
+  // Solo aplicamos el aporte guardado si corresponde al precio que hoy recibe
+  // el comprador. Así una promo vieja no altera el cálculo mayorista.
+  if (!promoPrice || Math.abs(promoPrice - customerPrice) > 1) return 0;
+
+  const explicitAmount = Number(publication.meli_promo_meli_amount || 0);
+  if (explicitAmount > 0) return explicitAmount;
+
+  const originalPrice = Number(publication.meli_original_price || publication.meli_price || 0);
+  const meliRate = Number(publication.meli_promo_meli_rate || 0);
+  const sellerRate = Number(publication.meli_promo_seller_rate || 0);
+  const totalDiscount = Math.max(originalPrice - customerPrice, 0);
+  return totalDiscount > 0 && meliRate > 0 && meliRate + sellerRate > 0
+    ? (totalDiscount * meliRate) / (meliRate + sellerRate)
+    : 0;
 }
 
 export async function POST(request: NextRequest) {
@@ -46,7 +69,7 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("mercadolibre_shipping_costs")
-      .select("meli_item_id, meli_price, meli_currency_id, meli_installments_text, meli_listing_type_id, meli_stock, meli_logistic_type, notes")
+      .select("meli_item_id, meli_price, meli_currency_id, meli_installments_text, meli_listing_type_id, meli_stock, meli_logistic_type, meli_promo_price, meli_promo_meli_amount, meli_promo_meli_rate, meli_promo_seller_rate, meli_original_price, notes")
       .eq("sku", sku)
       .eq("active", true)
       .eq("meli_status", "active");
@@ -106,11 +129,13 @@ export async function POST(request: NextRequest) {
           .filter((price) => price.conditions?.context_restrictions?.includes("user_type_business"))
           .map((price) => ({ type: price.type || null, amount: Number(price.amount || 0), conditions: price.conditions || null }));
 
+        const salePriceAmount = Number(recommendation.price?.sale_price_amount || standardAmount);
         return {
           itemId,
           version: priceData.version || null,
           standardAmount,
-          salePriceAmount: Number(recommendation.price?.sale_price_amount || standardAmount),
+          salePriceAmount,
+          meliPromoContributionAmount: meliPromoContribution(publication, salePriceAmount),
           currency: recommendation.price?.currency || currency,
           existingRanges,
           recommendations: recommendation.recommendations || [],
