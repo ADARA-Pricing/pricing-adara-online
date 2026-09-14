@@ -809,8 +809,6 @@ export default function DashboardPage() {
         : currentBuyerPrice;
       const currentMargin = marginForPublication(product, publication, currentSalePrice, currentBuyerPrice);
       const targetMargin = Number(channelSetting(product.id, optionForPublication(publication).code)?.desired_margin_rate ?? 5);
-      const dailyUnits = Math.max(rotation.units7 / 7, rotation.units30 / 30, rotation.units60 / 60);
-      const stockDays = dailyUnits > 0 ? stock / dailyUnits : null;
 
       if (!Number(product.cost_without_vat || 0)) {
         actions.push({
@@ -922,34 +920,57 @@ export default function DashboardPage() {
         });
       }
 
+    });
+
+    // El stock y la rotación corresponden al SKU, no a cada MLA o cuota.
+    // Las publicaciones pueden compartir inventario: nunca sumamos sus stocks.
+    const stockPublicationsBySku = new Map<string, MercadoLibreShippingCost[]>();
+    activePublications.forEach((publication) => {
+      const sku = productsById.get(publication.product_id)!.sku.toUpperCase();
+      stockPublicationsBySku.set(sku, [...(stockPublicationsBySku.get(sku) || []), publication]);
+    });
+    stockPublicationsBySku.forEach((skuPublications, sku) => {
+      const product = productsById.get(skuPublications[0].product_id)!;
+      const rotation = rotationBySku.get(sku) || { units7: 0, units30: 0, units60: 0, revenue30: 0 };
+      const withStock = skuPublications.filter((publication) => publication.meli_stock != null);
+      const synced = withStock.map((publication) => ({
+        publication,
+        time: new Date(publication.meli_last_sync_at || publication.updated_at || 0).getTime(),
+      })).filter((item) => Number.isFinite(item.time) && item.time > 0);
+      const latest = Math.max(0, ...synced.map((item) => item.time));
+      const stockSources = synced.length
+        ? synced.filter((item) => latest - item.time <= 10 * 60 * 1000).map((item) => item.publication)
+        : withStock;
+      const stock = stockSources.length
+        ? Math.max(...stockSources.map((publication) => numberValue(publication.meli_stock)))
+        : numberValue(product.stock);
+      const dailyUnits = Math.max(rotation.units7 / 7, rotation.units30 / 30, rotation.units60 / 60);
+      const stockDays = dailyUnits > 0 ? stock / dailyUnits : null;
+
       if (stockDays !== null && stockDays < 14) {
         actions.push({
-          key: `stock-risk-${publication.id || publication.meli_item_id}`,
+          key: `stock-risk-${sku}`,
           type: "stock_risk",
           priority: "media",
           sku: product.sku,
           productName: product.name,
-          itemId: publication.meli_item_id,
           title: "Riesgo de quedarse sin stock",
-          detail: `Stock estimado para ${Math.max(1, Math.round(stockDays))} dias.`,
+          detail: `Stock estimado para ${stock <= 0 ? 0 : Math.max(1, Math.round(stockDays))} dias. Ventas de todas las publicaciones del SKU.`,
           href: "/rotacion-sku?estado=break_risk",
-          margin: currentMargin,
           stock,
           units7: rotation.units7,
           units30: rotation.units30,
         });
       } else if (stock >= 5 && rotation.units30 === 0) {
         actions.push({
-          key: `stock-idle-${publication.id || publication.meli_item_id}`,
+          key: `stock-idle-${sku}`,
           type: "stock_idle",
           priority: "media",
           sku: product.sku,
           productName: product.name,
-          itemId: publication.meli_item_id,
           title: "Stock sin rotacion",
           detail: "Sin ventas en 30 dias con stock disponible.",
           href: "/rotacion-sku?estado=capital_idle",
-          margin: currentMargin,
           stock,
           units7: rotation.units7,
           units30: rotation.units30,
@@ -1161,7 +1182,7 @@ export default function DashboardPage() {
                 </div>
                 <strong>{item.sku} - {item.productName}</strong>
                 <small>{item.title}: {item.detail}</small>
-                <small>{item.itemId || "-"}{typeof item.stock === "number" ? ` | Stock ${item.stock}` : ""}</small>
+                <small>{[item.itemId, typeof item.stock === "number" ? `Stock ${item.stock}` : null].filter(Boolean).join(" | ")}</small>
               </div>
 
               <div className="opportunity-row-metrics">
