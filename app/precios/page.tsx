@@ -64,6 +64,28 @@ type ModalState = {
   taxOverrides: TaxSettings;
 };
 
+type B2BRecommendation = {
+  quantity?: number | null;
+  amount?: number | null;
+  is_incoherent_quantity?: boolean | null;
+  discount?: { amount?: number | null; percentage?: number | null } | null;
+  shipping?: {
+    original_cost?: number | null;
+    cost?: number | null;
+    discount?: { amount?: number | null; percentage?: number | null } | null;
+  } | null;
+};
+
+type B2BPublication = {
+  itemId: string;
+  standardAmount?: number | null;
+  salePriceAmount?: number | null;
+  currency?: string | null;
+  recommendations?: B2BRecommendation[];
+  existingRanges?: Array<{ type?: string | null; amount?: number | null; conditions?: unknown }>;
+  error?: string;
+};
+
 export default function PricesPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -95,6 +117,9 @@ export default function PricesPage() {
   const [productSyncMessage, setProductSyncMessage] = useState<string | null>(null);
   const [publishingPriceChannel, setPublishingPriceChannel] = useState<string | null>(null);
   const [refreshingAdaraSku, setRefreshingAdaraSku] = useState<string | null>(null);
+  const [b2bPublications, setB2bPublications] = useState<B2BPublication[] | null>(null);
+  const [loadingB2b, setLoadingB2b] = useState(false);
+  const [b2bError, setB2bError] = useState<string | null>(null);
   const productSyncRequestId = useRef(0);
   const [expandedProducts, setExpandedProducts] = useState<
     Record<string, boolean>
@@ -482,7 +507,29 @@ export default function PricesPage() {
       summaryChannelCode: "MC",
       taxOverrides: { ...taxes },
     });
+    setB2bPublications(null);
+    setB2bError(null);
     refreshProductFromMercadoLibre(product);
+  }
+
+  async function loadB2bRecommendations() {
+    if (!modal || loadingB2b) return;
+    setLoadingB2b(true);
+    setB2bError(null);
+    try {
+      const response = await fetch("/api/mercadolibre/b2b-pricing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku: modal.product.sku, quantities: [2, 5, 10] }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || "No se pudieron consultar los precios mayoristas.");
+      setB2bPublications((data?.publications || []) as B2BPublication[]);
+    } catch (requestError) {
+      setB2bError(requestError instanceof Error ? requestError.message : "No se pudieron consultar los precios mayoristas.");
+    } finally {
+      setLoadingB2b(false);
+    }
   }
 
   async function refreshProductFromMercadoLibre(product: Product) {
@@ -1086,6 +1133,70 @@ export default function PricesPage() {
 
   const currentRows = modalRows();
   const mcRow = currentRows.find((row) => row.option.code === "MC");
+
+  const b2bRows = (() => {
+    if (!modal || !mcRow?.result?.valid || !b2bPublications) return [];
+    const categoryFee = categoryFees.find(
+      (item) => item.category?.toLowerCase() === (modal.product.category || "").toLowerCase(),
+    ) || null;
+    const targetMargin = Number(mcRow.result.marginOnNetSale || 0);
+    const target = {
+      desiredMarginRate: targetMargin,
+      desiredNetProfit: null,
+      structureAmount: modal.structureAmounts.MC || 0,
+      manualShippingAmount: modal.manualShippingAmounts.MC || 0,
+      salesCommissionRate: 0,
+      saleAppliesVat: modal.saleAppliesVat.MC ?? Boolean(mcRow.option.applies_vat),
+      costVatRate: modal.costVatRates.MC || 0,
+      roundTo: 1,
+      roundingMode: "nearest" as const,
+    };
+
+    return b2bPublications.flatMap((publication) => (publication.recommendations || []).map((recommendation) => {
+      const quantity = Number(recommendation.quantity || 0);
+      const totalShipping = Number(recommendation.shipping?.cost || 0);
+      const shippingPerUnit = quantity > 0 ? totalShipping / quantity : 0;
+      const sourcePublication = shippingCosts.find((item) => item.meli_item_id === publication.itemId) || mcRow.shippingCost || null;
+      const b2bShipping = {
+        ...(sourcePublication || {}),
+        shipping_cost_amount: shippingPerUnit,
+      } as MercadoLibreShippingCost;
+      const sameMargin = calculatePriceSummary(
+        modal.product,
+        mcRow.option,
+        categoryFee,
+        modal.taxOverrides,
+        b2bShipping,
+        target,
+      ) as any;
+      const maximumMeliPrice = Number(recommendation.amount || 0);
+      const atMeliRecommendation = maximumMeliPrice > 0
+        ? calculatePriceSummary(
+          modal.product,
+          mcRow.option,
+          categoryFee,
+          modal.taxOverrides,
+          b2bShipping,
+          { ...target, salePrice: maximumMeliPrice },
+        ) as any
+        : null;
+
+      return {
+        itemId: publication.itemId,
+        quantity,
+        totalShipping,
+        shippingPerUnit,
+        shippingOriginal: Number(recommendation.shipping?.original_cost || 0),
+        shippingSaving: Number(recommendation.shipping?.discount?.amount || 0),
+        meliRecommendedPrice: maximumMeliPrice,
+        requiredPrice: sameMargin.valid ? Number(sameMargin.roundedPrice || 0) : null,
+        requiredMargin: sameMargin.valid ? Number(sameMargin.marginOnNetSale || 0) : null,
+        recommendedMargin: atMeliRecommendation?.valid ? Number(atMeliRecommendation.marginOnNetSale || 0) : null,
+        allowedAtSameMargin: sameMargin.valid && maximumMeliPrice > 0 && Number(sameMargin.roundedPrice || 0) <= maximumMeliPrice,
+        incoherent: Boolean(recommendation.is_incoherent_quantity),
+      };
+    }));
+  })();
   const selectedSummaryRow =
     currentRows.find(
       (row) => row.option.code === (modal?.summaryChannelCode || "MC"),
@@ -1713,6 +1824,68 @@ export default function PricesPage() {
                 )}
                 </aside>
               </div>
+
+              <section className="pricing-conditions-card">
+                <div className="pricing-conditions-header">
+                  <div>
+                    <h3>Mercado Libre Negocios · precios por cantidad</h3>
+                    <p className="small">
+                      Usa la bonificación real de envío que informa ML. Comisión, IVA e impuestos se recalculan sobre cada precio mayorista para conservar el margen neto de 1 pago.
+                    </p>
+                  </div>
+                  <button className="button ghost small-button" type="button" onClick={loadB2bRecommendations} disabled={loadingB2b}>
+                    <RefreshCw aria-hidden="true" />
+                    {loadingB2b ? "Calculando Negocios..." : "Calcular Negocios"}
+                  </button>
+                </div>
+                <p className="small">
+                  Margen objetivo 1 pago: <strong>{mcRow?.result?.valid ? percent(mcRow.result.marginOnNetSale) : "-"}</strong>. El precio recomendado por ML es el máximo permitido para cada rango; si no alcanza para el margen objetivo, se informa el margen real posible.
+                </p>
+                {b2bError && <span className="message error">{b2bError}</span>}
+                {b2bPublications && !b2bRows.length && (
+                  <p className="small">Mercado Libre no devolvió rangos B2B para esta publicación.</p>
+                )}
+                {b2bRows.length > 0 && (
+                  <div className="table-wrap polished-table-wrap">
+                    <table className="pricing-conditions-table">
+                      <thead>
+                        <tr>
+                          <th>Publicación</th>
+                          <th>Cantidad</th>
+                          <th>Envío B2B total</th>
+                          <th>Envío por unidad</th>
+                          <th>Ahorro envío</th>
+                          <th>Máx. precio ML</th>
+                          <th>Precio p/ mismo margen</th>
+                          <th>Margen con precio ML</th>
+                          <th>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {b2bRows.map((row) => (
+                          <tr key={`${row.itemId}-${row.quantity}`}>
+                            <td><strong>{row.itemId}</strong></td>
+                            <td>{row.quantity} u.</td>
+                            <td>{moneyWithCents(row.totalShipping)}</td>
+                            <td>{moneyWithCents(row.shippingPerUnit)}</td>
+                            <td className="positive">{moneyWithCents(row.shippingSaving)}</td>
+                            <td><strong>{moneyWithCents(row.meliRecommendedPrice)}</strong></td>
+                            <td>{row.requiredPrice ? moneyWithCents(row.requiredPrice) : "-"}</td>
+                            <td className={marginClass(row.recommendedMargin || 0)}>{row.recommendedMargin === null ? "-" : percent(row.recommendedMargin)}</td>
+                            <td>
+                              {row.incoherent
+                                ? <span className="message error">Rango incoherente</span>
+                                : row.allowedAtSameMargin
+                                  ? <span className="prices-margin-pill positive">Mantiene margen</span>
+                                  : <span className="prices-margin-pill negative">ML exige más descuento</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
 
               <section className="pricing-conditions-card">
               <div className="pricing-conditions-header">
