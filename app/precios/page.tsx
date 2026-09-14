@@ -1225,7 +1225,15 @@ export default function PricesPage() {
 
   function toggleProductExpanded(product: Product) {
     const key = productKey(product);
+    const willExpand = !expandedProducts[key];
     setExpandedProducts((current) => ({ ...current, [key]: !current[key] }));
+
+    // La tabla Comparar y actuar no debe quedar basada solamente en la foto
+    // guardada. Al abrir un SKU refrescamos únicamente sus publicaciones ML;
+    // así no se dispara una sincronización completa de todos los productos.
+    if (willExpand) {
+      void refreshProductFromMercadoLibre(product);
+    }
   }
 
   function calculateRowsForProduct(product: Product) {
@@ -1982,7 +1990,11 @@ export default function PricesPage() {
                               )}
                               {activeExpandedTab === "compare" && (
                                 <div className="prices-comparison">
-                                  <p className="small prices-comparison-intro">Una fila por cuota. Abrí el detalle sólo cuando necesitás revisar las MLA, promos, Full y stock.</p>
+                                  <p className="small prices-comparison-intro">
+                                    {refreshingProductSku === product.sku
+                                      ? "Sincronizando las publicaciones activas de este SKU en Mercado Libre..."
+                                      : "Una fila por cuota. Abrí el detalle sólo cuando necesitás revisar las MLA, promos, Full y stock."}
+                                  </p>
                                   <table className="nested-table prices-comparison-table">
                                     <thead>
                                       <tr>
@@ -2023,7 +2035,9 @@ export default function PricesPage() {
                                               </td>
                                               <td>
                                                 {!row.publications.length
-                                                  ? <span className="negative">Sin publicación activa</span>
+                                                  ? refreshingProductSku === product.sku
+                                                    ? <span className="small">Consultando Mercado Libre...</span>
+                                                    : <span className="negative">Sin publicación activa</span>
                                                   : row.listMismatch
                                                     ? <span className="negative">Precio lista distinto · {row.publications.length} MLA</span>
                                                     : <span className="positive">En línea · {row.publications.length} MLA{row.promotionCount ? ` · ${row.promotionCount} con promo` : ""}</span>}
