@@ -919,21 +919,29 @@ export default function PromocionesMeliPage() {
     if (!options.silent) setError(null);
 
     async function syncBatch(payload: Record<string, unknown>) {
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 90000);
-      try {
-        const response = await fetch("/api/mercadolibre/sync-shipping", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data?.error || "No se pudo sincronizar MercadoLibre.");
-        return data as { total_items?: number; totals_by_status?: Record<string, number> };
-      } finally {
-        window.clearTimeout(timeout);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 90000);
+        try {
+          const response = await fetch("/api/mercadolibre/sync-shipping", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          });
+          const data = await response.json().catch(() => ({}));
+          if (response.ok) return data as { total_items?: number; totals_by_status?: Record<string, number> };
+          // Un 502/503/504 puede ser temporal (ML o el gateway). Reintentar el
+          // mismo lote es seguro porque el servidor reemplaza sus oportunidades.
+          if (![502, 503, 504].includes(response.status) || attempt === 2) {
+            throw new Error(data?.error || `No se pudo sincronizar MercadoLibre (${response.status}).`);
+          }
+        } finally {
+          window.clearTimeout(timeout);
+        }
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 1200 * (attempt + 1)));
       }
+      throw new Error("No se pudo sincronizar MercadoLibre.");
     }
 
     try {
@@ -946,12 +954,7 @@ export default function PromocionesMeliPage() {
       // Primero refrescamos el SKU abierto. Después recorremos el resto en
       // bloques chicos: la pantalla se actualiza entre bloques y no queda
       // esperando una única petición de cientos de publicaciones.
-      if (selectedGroup?.product.sku) {
-        await syncBatch({ scope, skus: [selectedGroup.product.sku], resetPromotions: false });
-        await loadData({ quiet: true });
-      }
-
-      const pageLimit = 12;
+      const pageLimit = 3;
       let offset = 0;
       let total = 0;
       do {
