@@ -837,22 +837,40 @@ export default function PromocionesMeliPage() {
       supabase.from("product_channel_margins").select("*"),
     ]);
 
-    const allOpportunities: MercadoLibrePromotionOpportunity[] = [];
-    let opportunitiesError: string | null = null;
-    for (let from = 0; ; from += 1000) {
-      const to = from + 999;
-      const response = await supabase
-        .from("mercadolibre_promotion_opportunities")
-        .select("*")
-        .order("meli_amount", { ascending: false })
-        .range(from, to);
-      if (response.error) {
-        opportunitiesError = response.error.message;
-        break;
+    // La pantalla tenía que pedir cada página de oportunidades una después de
+    // otra. Con miles de promos eso demoraba la carga incluso antes de mostrar
+    // los datos ya sincronizados. Pedimos la primera con total y el resto en
+    // paralelo, conservando la misma información completa.
+    const firstOpportunitiesResponse = await supabase
+      .from("mercadolibre_promotion_opportunities")
+      .select("*", { count: "exact" })
+      .order("meli_amount", { ascending: false })
+      .range(0, 999);
+    const allOpportunities: MercadoLibrePromotionOpportunity[] = [
+      ...((firstOpportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]),
+    ];
+    let opportunitiesError: string | null = firstOpportunitiesResponse.error?.message || null;
+    const opportunitiesTotal = Number(firstOpportunitiesResponse.count || allOpportunities.length);
+    if (!opportunitiesError && opportunitiesTotal > 1000) {
+      const pages = Array.from(
+        { length: Math.ceil(opportunitiesTotal / 1000) - 1 },
+        (_, index) => {
+          const from = (index + 1) * 1000;
+          return supabase
+            .from("mercadolibre_promotion_opportunities")
+            .select("*")
+            .order("meli_amount", { ascending: false })
+            .range(from, from + 999);
+        },
+      );
+      const remainingPages = await Promise.all(pages);
+      for (const response of remainingPages) {
+        if (response.error) {
+          opportunitiesError = response.error.message;
+          break;
+        }
+        allOpportunities.push(...((response.data || []) as MercadoLibrePromotionOpportunity[]));
       }
-      const rows = (response.data || []) as MercadoLibrePromotionOpportunity[];
-      allOpportunities.push(...rows);
-      if (rows.length < 1000) break;
     }
 
     const responsesWithErrors = [
@@ -954,16 +972,32 @@ export default function PromocionesMeliPage() {
       // Primero refrescamos el SKU abierto. Después recorremos el resto en
       // bloques chicos: la pantalla se actualiza entre bloques y no queda
       // esperando una única petición de cientos de publicaciones.
-      const pageLimit = 3;
+      // Veinte publicaciones mantienen cada petición corta, pero evitan las
+      // cientos de recargas de datos que provocaban timeout con la lista entera.
+      const pageLimit = 20;
       let offset = 0;
       let total = 0;
+      let batchesSinceReload = 0;
+
+      // Si hay un producto abierto, éste se actualiza primero para que la
+      // pantalla refleje el cambio enseguida y el resto siga en segundo plano.
+      if (selectedGroup?.product.sku) {
+        await syncBatch({ scope, skus: [selectedGroup.product.sku], resetPromotions: false });
+        await loadData({ quiet: true });
+      }
       do {
         const data = await syncBatch({ scope, offset, pageLimit, resetPromotions: false });
         const totals = Object.values(data.totals_by_status || {}).map((value) => Number(value || 0));
         total = Math.max(total, ...totals, Number(data.total_items || 0));
         offset += pageLimit;
         setPromotionSyncProgress({ completed: Math.min(offset, total || offset), total: total || offset });
-        await loadData({ quiet: true });
+        batchesSinceReload += 1;
+        // Refrescamos resultados por tramos, no después de cada pequeño lote.
+        // El progreso sigue visible sin bloquear la interfaz ni saturar Supabase.
+        if (batchesSinceReload >= 3 || offset >= total) {
+          await loadData({ quiet: true });
+          batchesSinceReload = 0;
+        }
         // Le devolvemos el control al navegador entre lotes para que siga
         // respondiendo mientras termina la actualización en segundo plano.
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));

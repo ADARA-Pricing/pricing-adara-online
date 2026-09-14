@@ -1093,7 +1093,10 @@ async function getSellerPromotions(account: any): Promise<MeliSellerPromotion[]>
       .filter((item: MeliSellerPromotion) => item?.id && item?.type)
       .filter((item: MeliSellerPromotion) => {
         const status = String(item.status || "").toLowerCase();
-        return status === "started" || status === "pending";
+        // Las futuras pueden llegar como scheduled, candidate, available o
+        // pending. Antes sólo reteníamos started/pending y se perdían sus
+        // fechas y su aporte al unirlas con las ofertas de cada publicación.
+        return !/finished|expired|ended|cancel|closed|inactive/.test(status);
       });
   } catch {
     return [];
