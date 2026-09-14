@@ -25,16 +25,20 @@ export async function POST(request: NextRequest) {
     await requireApiUser(request);
 
     const body = await request.json().catch(() => null) as {
-      sku?: string;
-      itemId?: string;
-      ranges?: RequestedRange[];
+    sku?: string;
+    itemId?: string;
+    ranges?: RequestedRange[];
+    removeQuantities?: unknown;
     } | null;
     const sku = String(body?.sku || "").trim().toUpperCase();
     const itemId = String(body?.itemId || "").trim().toUpperCase();
     const requestedRanges = (body?.ranges || [])
       .map((range) => ({ quantity: Number(range.quantity), price: Number(range.price) }))
       .filter((range) => Number.isInteger(range.quantity) && range.quantity > 1 && range.quantity <= 100 && Number.isFinite(range.price) && range.price > 0);
-    if (!sku || !/^MLA\d+$/i.test(itemId) || !requestedRanges.length) {
+    const removeQuantities = [...new Set((Array.isArray(body?.removeQuantities) ? body.removeQuantities : [])
+      .map(Number)
+      .filter((quantity) => Number.isInteger(quantity) && quantity > 1 && quantity <= 100))];
+    if (!sku || !/^MLA\d+$/i.test(itemId) || (!requestedRanges.length && !removeQuantities.length)) {
       return NextResponse.json({ error: "SKU, publicación y al menos un rango válido son obligatorios." }, { status: 400 });
     }
 
@@ -61,24 +65,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "MercadoLibre no devolvió versión o precio estándar para esta publicación." }, { status: 422 });
     }
 
-    const recommendation = await meliFetch("/prices-per-quantity/v1/recommendations", account, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        item_id: itemId,
-        range_item_quantities: requestedRanges.map((range) => range.quantity),
-        price: { standard_amount: standardAmount, currency: ownedPublication.meli_currency_id || "ARS" },
-      }),
-    }) as { recommendations?: Array<{ quantity?: number | null; amount?: number | null; is_incoherent_quantity?: boolean | null }> | null };
-    const recommendedByQuantity = new Map((recommendation.recommendations || []).map((entry) => [Number(entry.quantity || 0), entry]));
+    if (requestedRanges.length) {
+      const recommendation = await meliFetch("/prices-per-quantity/v1/recommendations", account, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item_id: itemId,
+          range_item_quantities: requestedRanges.map((range) => range.quantity),
+          price: { standard_amount: standardAmount, currency: ownedPublication.meli_currency_id || "ARS" },
+        }),
+      }) as { recommendations?: Array<{ quantity?: number | null; amount?: number | null; is_incoherent_quantity?: boolean | null }> | null };
+      const recommendedByQuantity = new Map((recommendation.recommendations || []).map((entry) => [Number(entry.quantity || 0), entry]));
 
-    for (const range of requestedRanges) {
-      const allowed = recommendedByQuantity.get(range.quantity);
-      if (!allowed || allowed.is_incoherent_quantity) {
-        return NextResponse.json({ error: `MercadoLibre no permite el rango de ${range.quantity} unidades.` }, { status: 422 });
-      }
-      if (range.price > Number(allowed.amount || 0) + 0.01) {
-        return NextResponse.json({ error: `El precio de ${range.quantity} unidades supera el máximo recomendado por MercadoLibre (${Number(allowed.amount || 0).toFixed(2)}).` }, { status: 422 });
+      for (const range of requestedRanges) {
+        const allowed = recommendedByQuantity.get(range.quantity);
+        if (!allowed || allowed.is_incoherent_quantity) {
+          return NextResponse.json({ error: `MercadoLibre no permite el rango de ${range.quantity} unidades.` }, { status: 422 });
+        }
+        if (range.price > Number(allowed.amount || 0) + 0.01) {
+          return NextResponse.json({ error: `El precio de ${range.quantity} unidades supera el máximo recomendado por MercadoLibre (${Number(allowed.amount || 0).toFixed(2)}).` }, { status: 422 });
+        }
       }
     }
 
@@ -113,6 +119,7 @@ export async function POST(request: NextRequest) {
         },
       });
     });
+    removeQuantities.forEach((quantity) => nextRanges.delete(quantity));
 
     const pricePerQuantity = [...nextRanges.values()].sort(
       (a, b) => a.conditions.min_purchase_unit - b.conditions.min_purchase_unit,
@@ -127,7 +134,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({ price_per_quantity: pricePerQuantity }),
     });
 
-    return NextResponse.json({ ok: true, itemId, ranges: pricePerQuantity });
+    return NextResponse.json({ ok: true, itemId, ranges: pricePerQuantity, removed_quantities: removeQuantities });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudieron activar los precios mayoristas.";
     return NextResponse.json({ error: message }, { status: message === "No autorizado." ? 401 : 500 });

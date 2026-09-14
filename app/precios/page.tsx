@@ -83,7 +83,12 @@ type B2BPublication = {
   meliPromoContributionAmount?: number | null;
   currency?: string | null;
   recommendations?: B2BRecommendation[];
-  existingRanges?: Array<{ type?: string | null; amount?: number | null; conditions?: unknown }>;
+  existingRanges?: Array<{
+    type?: string | null;
+    amount?: number | null;
+    percentage?: number | null;
+    conditions?: { min_purchase_unit?: number | null; eligible?: boolean | null; context_restrictions?: string[] | null } | null;
+  }>;
   error?: string;
 };
 
@@ -647,6 +652,46 @@ export default function PricesPage() {
         await loadB2bForProduct(product);
       }
       if (errors.length) setError(`Algunas publicaciones no se pudieron activar: ${errors.join(" · ")}`);
+    } finally {
+      setSavingB2bItem(null);
+    }
+  }
+
+  async function deactivateSelectedB2bRanges(
+    product: Product,
+    groups: Array<{ itemId: string; quantities: number[] }>,
+  ) {
+    const rangesCount = groups.reduce((total, group) => total + group.quantities.length, 0);
+    if (!rangesCount || savingB2bItem) return;
+    if (!window.confirm(`¿Desactivar ${rangesCount} rango(s) mayoristas seleccionados? Las publicaciones volverán a no ofrecer ese descuento por cantidad.`)) return;
+
+    setSavingB2bItem("all");
+    setError(null);
+    const errors: string[] = [];
+    let deactivated = 0;
+    try {
+      for (const group of groups) {
+        try {
+          const response = await fetch("/api/mercadolibre/update-b2b-prices", {
+            method: "POST",
+            headers: await authenticatedJsonHeaders(),
+            body: JSON.stringify({ sku: product.sku, itemId: group.itemId, removeQuantities: group.quantities }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data?.error || "No se pudieron desactivar los precios mayoristas.");
+          deactivated += group.quantities.length;
+        } catch (deactivationError) {
+          errors.push(`${group.itemId}: ${deactivationError instanceof Error ? deactivationError.message : "no se pudo actualizar"}`);
+        }
+      }
+      if (deactivated) {
+        setMessage(`${deactivated} rango${deactivated === 1 ? "" : "s"} mayorista${deactivated === 1 ? "" : "s"} desactivado${deactivated === 1 ? "" : "s"}.`);
+        setSelectedB2bRanges((current) => Object.fromEntries(
+          Object.entries(current).filter(([rangeKey]) => !rangeKey.startsWith(`${product.sku}|`)),
+        ));
+        await loadB2bForProduct(product);
+      }
+      if (errors.length) setError(`Algunas publicaciones no se pudieron desactivar: ${errors.join(" · ")}`);
     } finally {
       setSavingB2bItem(null);
     }
@@ -1370,6 +1415,10 @@ export default function PricesPage() {
         : 0;
       const allowedAtSameMargin = Boolean(requiredPrice && maximumMeliPrice && requiredPrice <= maximumMeliPrice);
       const priceToActivate = allowedAtSameMargin ? requiredPrice : maximumMeliPrice;
+      const existingRange = (publication.existingRanges || []).find(
+        (range) => Number(range.conditions?.min_purchase_unit || 0) === quantity,
+      );
+      const isActive = Boolean(existingRange && Number(existingRange.percentage || 0) > 0);
 
       return {
         itemId: publication.itemId,
@@ -1386,6 +1435,7 @@ export default function PricesPage() {
           ? Number(sameMarginResult.marginOnNetSale || 0)
           : recommendedResult?.valid ? Number(recommendedResult.marginOnNetSale || 0) : null,
         allowedAtSameMargin,
+        isActive,
         incoherent: Boolean(recommendation.is_incoherent_quantity),
       };
     }));
@@ -2002,7 +2052,10 @@ export default function PricesPage() {
                                     <table className="nested-table">
                                       <thead>
                                         <tr>
-                                          <th>Activar</th><th>MLA</th><th>Cantidad</th><th>Precio por unidad</th><th>Aporte promo ML</th><th>Rentabilidad</th><th>Envío total</th><th>Bonif. envío ML</th><th>Envío / unidad</th><th>Estado</th>
+                                          <th><input className="b2b-range-checkbox" type="checkbox" aria-label="Seleccionar todos los rangos" checked={wholesaleRows.filter((row) => !row.incoherent && row.priceToActivate > 0).length > 0 && wholesaleRows.filter((row) => !row.incoherent && row.priceToActivate > 0).every((row) => selectedB2bRanges[b2bRangeKey(product.sku, row.itemId, row.quantity)])} onChange={(event) => {
+                                            const selectableKeys = wholesaleRows.filter((row) => !row.incoherent && row.priceToActivate > 0).map((row) => b2bRangeKey(product.sku, row.itemId, row.quantity));
+                                            setSelectedB2bRanges((current) => ({ ...current, ...Object.fromEntries(selectableKeys.map((rangeKey) => [rangeKey, event.target.checked])) }));
+                                          }} /></th><th>MLA</th><th>Cantidad</th><th>Precio por unidad</th><th>Aporte promo ML</th><th>Rentabilidad</th><th>Envío total</th><th>Bonif. envío ML</th><th>Envío / unidad</th><th>Estado B2B</th><th>Resultado</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -2019,6 +2072,7 @@ export default function PricesPage() {
                                               <td>{moneyWithCents(row.totalShipping)}</td>
                                               <td className="positive"><strong>{row.shippingSaving > 0 ? `-${moneyWithCents(row.shippingSaving)}` : "-"}</strong></td>
                                               <td>{moneyWithCents(row.shippingPerUnit)}</td>
+                                              <td><span className={`prices-margin-pill ${row.isActive ? "positive" : ""}`}>{row.isActive ? "Activo" : "Sin activar"}</span></td>
                                               <td>{row.incoherent ? "No permitido" : row.allowedAtSameMargin ? "Mantiene margen" : `ML exige descuento · objetivo ${percent(row.targetMargin)}`}</td>
                                             </tr>
                                           );
@@ -2027,19 +2081,28 @@ export default function PricesPage() {
                                     </table>
                                   )}
                                   {wholesaleRows.length > 0 && (() => {
-                                    const groups = [...new Set(wholesaleRows.map((row) => row.itemId))]
+                                    const selectedRows = wholesaleRows.filter((row) => selectedB2bRanges[b2bRangeKey(product.sku, row.itemId, row.quantity)] && !row.incoherent && row.priceToActivate > 0);
+                                    const activationGroups = [...new Set(selectedRows.filter((row) => !row.isActive).map((row) => row.itemId))]
                                       .map((itemId) => ({
                                         itemId,
-                                        rows: wholesaleRows
-                                          .filter((row) => row.itemId === itemId && selectedB2bRanges[b2bRangeKey(product.sku, row.itemId, row.quantity)] && !row.incoherent && row.priceToActivate > 0)
+                                        rows: selectedRows
+                                          .filter((row) => row.itemId === itemId && !row.isActive)
                                           .map((row) => ({ quantity: row.quantity, price: row.priceToActivate })),
                                       }))
                                       .filter((group) => group.rows.length > 0);
-                                    const selectedCount = groups.reduce((total, group) => total + group.rows.length, 0);
+                                    const deactivationGroups = [...new Set(selectedRows.filter((row) => row.isActive).map((row) => row.itemId))]
+                                      .map((itemId) => ({ itemId, quantities: selectedRows.filter((row) => row.itemId === itemId && row.isActive).map((row) => row.quantity) }))
+                                      .filter((group) => group.quantities.length > 0);
+                                    const selectedCount = selectedRows.length;
+                                    const activationCount = activationGroups.reduce((total, group) => total + group.rows.length, 0);
+                                    const deactivationCount = deactivationGroups.reduce((total, group) => total + group.quantities.length, 0);
                                     return (
                                       <div className="prices-b2b-footer">
-                                        <span className="small">{selectedCount ? `${selectedCount} rango${selectedCount === 1 ? "" : "s"} seleccionado${selectedCount === 1 ? "" : "s"} · ${groups.length} MLA` : "Seleccioná uno o más rangos para activarlos."}</span>
-                                        <button className="button small-button" type="button" disabled={!selectedCount || Boolean(savingB2bItem)} onClick={() => activateSelectedB2bRanges(product, groups)}>
+                                        <span className="small">{selectedCount ? `${selectedCount} rango${selectedCount === 1 ? "" : "s"} seleccionado${selectedCount === 1 ? "" : "s"} · ${activationCount} para activar · ${deactivationCount} activos` : "Usá el check del encabezado para seleccionar todos los rangos."}</span>
+                                        <button className="button ghost small-button" type="button" disabled={!deactivationCount || Boolean(savingB2bItem)} onClick={() => deactivateSelectedB2bRanges(product, deactivationGroups)}>
+                                          {savingB2bItem ? "Actualizando..." : "Desactivar seleccionados"}
+                                        </button>
+                                        <button className="button small-button" type="button" disabled={!activationCount || Boolean(savingB2bItem)} onClick={() => activateSelectedB2bRanges(product, activationGroups)}>
                                           <BadgePercent aria-hidden="true" />
                                           {savingB2bItem ? "Activando..." : "Activar seleccionados"}
                                         </button>

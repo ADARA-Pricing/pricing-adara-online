@@ -22,7 +22,8 @@ type Publication = {
 type MeliPrice = {
   type?: string | null;
   amount?: number | null;
-  conditions?: { context_restrictions?: string[] | null } | null;
+  percentage?: number | null;
+  conditions?: { context_restrictions?: string[] | null; min_purchase_unit?: number | null; eligible?: boolean | null } | null;
 };
 
 function isOnePaymentPublication(publication: Publication) {
@@ -127,7 +128,12 @@ export async function POST(request: NextRequest) {
 
         const existingRanges = prices
           .filter((price) => price.conditions?.context_restrictions?.includes("user_type_business"))
-          .map((price) => ({ type: price.type || null, amount: Number(price.amount || 0), conditions: price.conditions || null }));
+          .map((price) => ({
+            type: price.type || null,
+            amount: Number(price.amount || 0),
+            percentage: Number(price.percentage || 0),
+            conditions: price.conditions || null,
+          }));
 
         const salePriceAmount = Number(recommendation.price?.sale_price_amount || standardAmount);
         return {
