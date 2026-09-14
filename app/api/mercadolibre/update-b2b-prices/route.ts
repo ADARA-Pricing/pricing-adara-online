@@ -4,9 +4,11 @@ import { createAdminClient } from "@/lib/supabaseAdmin";
 import { requireApiUser } from "@/lib/serverAuth";
 
 type MeliPrice = {
+  id?: string | null;
   type?: string | null;
   amount?: number | null;
   percentage?: number | null;
+  currency_id?: string | null;
   conditions?: {
     context_restrictions?: string[] | null;
     min_purchase_unit?: number | null;
@@ -65,12 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "MercadoLibre no devolvió versión o precio estándar para esta publicación." }, { status: 422 });
     }
 
-    // ML aplica el porcentaje de Negocios sobre el precio configurado de la
-    // publicación, que puede diferir del precio "standard" devuelto por
-    // /prices cuando hay promociones. Esta es la única base que hace que el
-    // importe final guardado sea el mismo que eligió la persona en la app.
-    const configuredPublicationPrice = Number(ownedPublication.meli_price || 0);
-    const businessDiscountBase = configuredPublicationPrice > 0 ? configuredPublicationPrice : standardAmount;
+    let currentCustomerPrice = standardAmount;
     if (requestedRanges.length) {
       const recommendation = await meliFetch("/prices-per-quantity/v1/recommendations", account, {
         method: "POST",
@@ -84,6 +81,7 @@ export async function POST(request: NextRequest) {
         price?: { sale_price_amount?: number | null } | null;
         recommendations?: Array<{ quantity?: number | null; amount?: number | null; is_incoherent_quantity?: boolean | null }> | null;
       };
+      currentCustomerPrice = Number(recommendation.price?.sale_price_amount || standardAmount);
       const recommendedByQuantity = new Map((recommendation.recommendations || []).map((entry) => [Number(entry.quantity || 0), entry]));
 
       for (const range of requestedRanges) {
@@ -94,43 +92,44 @@ export async function POST(request: NextRequest) {
         if (range.price > Number(allowed.amount || 0) + 0.01) {
           return NextResponse.json({ error: `El precio de ${range.quantity} unidades supera el máximo recomendado por MercadoLibre (${Number(allowed.amount || 0).toFixed(2)}).` }, { status: 422 });
         }
-        if (range.price >= businessDiscountBase - 0.01) {
-          return NextResponse.json({ error: `El precio mayorista de ${range.quantity} unidades debe ser menor al precio final actual (${businessDiscountBase.toFixed(2)}).` }, { status: 422 });
+        if (range.price >= currentCustomerPrice - 0.01) {
+          return NextResponse.json({ error: `El precio mayorista de ${range.quantity} unidades debe ser menor al precio final actual (${currentCustomerPrice.toFixed(2)}).` }, { status: 422 });
         }
       }
     }
 
     const nextRanges = new Map<number, {
-      type: string;
-      percentage: number;
-      conditions: { context_restrictions: string[]; min_purchase_unit: number; eligible: boolean };
+      type: "standard";
+      amount: number;
+      currency_id: string;
+      conditions: { context_restrictions: string[]; min_purchase_unit: number };
     }>();
     prices.forEach((price) => {
       const quantity = Number(price.conditions?.min_purchase_unit || 0);
       if (!price.conditions?.context_restrictions?.includes("user_type_business") || quantity <= 1) return;
-      const percentage = Number(price.percentage || 0);
-      if (percentage <= 0 || percentage >= 100) return;
+      const amount = Number(price.amount || 0);
+      if (amount <= 0) return;
       nextRanges.set(quantity, {
-        type: "discount_percentage",
-        percentage,
+        type: "standard",
+        amount,
+        currency_id: price.currency_id || ownedPublication.meli_currency_id || "ARS",
         conditions: {
           context_restrictions: ["channel_marketplace", "user_type_business"],
           min_purchase_unit: quantity,
-          eligible: true,
         },
       });
     });
-    // La API recibe porcentaje, pero la pantalla trabaja con el importe final
-    // por unidad. Se transforma usando el precio configurado de ESTA MLA para
-    // que Mercado Libre muestre exactamente el importe solicitado.
+    // El endpoint legacy B2B permite enviar el importe final de cada rango.
+    // Usarlo evita que una promoción cambie la base sobre la que ML aplicaría
+    // un porcentaje y garantiza que se guarde el mismo número de la app.
     requestedRanges.forEach((range) => {
       nextRanges.set(range.quantity, {
-        type: "discount_percentage",
-        percentage: Number(((1 - range.price / businessDiscountBase) * 100).toFixed(4)),
+        type: "standard",
+        amount: Number(range.price.toFixed(2)),
+        currency_id: ownedPublication.meli_currency_id || "ARS",
         conditions: {
           context_restrictions: ["channel_marketplace", "user_type_business"],
           min_purchase_unit: range.quantity,
-          eligible: true,
         },
       });
     });
@@ -143,10 +142,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "MercadoLibre permite hasta 5 rangos mayoristas por publicación." }, { status: 422 });
     }
 
-    await meliFetch(`/items/${itemId}/prices/price-per-quantity`, account, {
+    const currentPriceReferences = prices
+      .filter((price) => !price.conditions?.context_restrictions?.includes("user_type_business"))
+      .map((price) => price.id ? { id: price.id } : null)
+      .filter((price): price is { id: string } => Boolean(price));
+
+    await meliFetch(`/items/${itemId}/prices/standard/quantity`, account, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Version": String(priceData.version) },
-      body: JSON.stringify({ price_per_quantity: pricePerQuantity }),
+      body: JSON.stringify({ prices: [...currentPriceReferences, ...pricePerQuantity] }),
     });
 
     return NextResponse.json({ ok: true, itemId, ranges: pricePerQuantity, removed_quantities: removeQuantities });
