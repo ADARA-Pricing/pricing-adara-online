@@ -15,6 +15,7 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "sharp": "0.34.5",
     "xlsx": "latest"
   },
   "devDependencies": {

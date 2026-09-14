@@ -819,7 +819,7 @@ export default function TiendaNubePage() {
       if (!response.ok) throw new Error(data?.error || "No se pudo crear la publicación.");
       const extras = [
         data?.categoryId ? "categoría asignada" : "sin categoría equivalente",
-        data?.imageUrl ? "imagen cargada" : "sin imagen",
+        `${data.imagesUploaded || 0} de ${data.imagesTotal || 0} fotos cargadas en 1024 × 1024 px`,
         data?.warning ? `aviso: ${data.warning}` : "",
       ].filter(Boolean);
       await syncProducts(`${row.sku}: producto creado en Tienda Nube como oculto (${extras.join(" · ")}).`);

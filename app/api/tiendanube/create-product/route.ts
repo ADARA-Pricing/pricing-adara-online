@@ -3,6 +3,11 @@ import { createAdminClient } from "@/lib/supabaseAdmin";
 import { requireApiUser } from "@/lib/serverAuth";
 import { getConnectedTiendanubeAccount, tiendanubeFetch } from "@/lib/tiendanube";
 import type { MercadoLibreShippingCost, Product } from "@/lib/types";
+import { getConnectedMeliAccount, meliFetch } from "@/lib/mercadolibre";
+import { downloadProductImage, mercadoLibreImageUrls, type MeliImageItem } from "@/lib/tiendanubeProductImages";
+
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type TnLocalized = string | Record<string, string | null | undefined> | null | undefined;
 type TnCategory = {
@@ -66,9 +71,25 @@ function stockFromMercadoLibre(publications: MercadoLibreShippingCost[], fallbac
     : numberOrZero(fallback);
 }
 
-function imageFromMercadoLibre(publications: MercadoLibreShippingCost[]) {
-  const image = publications.find((publication) => Boolean(publication.meli_thumbnail))?.meli_thumbnail || null;
-  return image ? image.replace(/^http:\/\//i, "https://") : null;
+async function imagesFromMercadoLibre(publications: MercadoLibreShippingCost[], sku: string) {
+  const account = await getConnectedMeliAccount();
+  if (!account) throw new Error("Conectá Mercado Libre para importar todas las fotos.");
+  const candidates = [...publications].sort((a, b) =>
+    Number(b.meli_status === "active") - Number(a.meli_status === "active")
+    || String(b.meli_last_sync_at || "").localeCompare(String(a.meli_last_sync_at || "")),
+  );
+  const itemIds = [...new Set(candidates.map((row) => row.meli_item_id).filter((id): id is string => /^MLA\d+$/.test(id || "")))];
+  let lastError = "No se encontró una publicación de Mercado Libre con fotos.";
+  for (const itemId of itemIds) {
+    try {
+      const item = await meliFetch(`/items/${itemId}?include_attributes=all`, account) as MeliImageItem;
+      const urls = mercadoLibreImageUrls(item, sku);
+      if (urls.length) return { itemId, urls };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : lastError;
+    }
+  }
+  throw new Error(lastError);
 }
 
 function standardProductName(product: Product) {
@@ -166,7 +187,13 @@ export async function POST(request: NextRequest) {
 
     const mlRows = (meliPublications || []) as MercadoLibreShippingCost[];
     const categoryId = findCategoryId(categoriesResult.categories, localProduct.category);
-    const imageUrl = imageFromMercadoLibre(mlRows);
+    const sourceImages = await imagesFromMercadoLibre(mlRows, normalizedSku);
+    // Preparar toda la galería antes de crear evita productos incompletos por
+    // errores de descarga o procesamiento. Concurrencia acotada para la memoria.
+    const images: Buffer[] = [];
+    for (let offset = 0; offset < sourceImages.urls.length; offset += 3) {
+      images.push(...await Promise.all(sourceImages.urls.slice(offset, offset + 3).map(downloadProductImage)));
+    }
     const stock = stockFromMercadoLibre(mlRows, localProduct.stock);
     const payload = {
       name: { es: standardProductName(localProduct) },
@@ -193,16 +220,25 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(payload),
     });
 
-    let imageWarning: string | null = null;
+    const imageWarnings: string[] = [];
+    let imagesUploaded = 0;
+    let imageUrl: string | null = null;
     const createdId = Number((created as { id?: number | string | null })?.id);
-    if (imageUrl && Number.isFinite(createdId) && createdId > 0) {
+    if (!Number.isFinite(createdId) || createdId <= 0) throw new Error("Tiendanube no devolvió el ID del producto creado.");
+    for (const [index, image] of images.entries()) {
       try {
-        await tiendanubeFetch(`/products/${createdId}/images`, account, {
+        const uploaded = await tiendanubeFetch(`/products/${createdId}/images`, account, {
           method: "POST",
-          body: JSON.stringify({ src: imageUrl }),
+          body: JSON.stringify({
+            attachment: image.toString("base64"),
+            filename: `${normalizedSku.replace(/[^a-zA-Z0-9_-]/g, "-")}-${index + 1}.jpg`,
+            position: index + 1,
+          }),
         });
+        imagesUploaded += 1;
+        imageUrl ||= uploaded?.src || null;
       } catch (imageError) {
-        imageWarning = imageError instanceof Error ? imageError.message : "No se pudo cargar la imagen.";
+        imageWarnings.push(`Foto ${index + 1}: ${imageError instanceof Error ? imageError.message : "No se pudo cargar."}`);
       }
     }
 
@@ -211,8 +247,11 @@ export async function POST(request: NextRequest) {
       product: created,
       categoryId,
       imageUrl,
+      imagesUploaded,
+      imagesTotal: images.length,
+      sourceItemId: sourceImages.itemId,
       stock,
-      warning: categoriesResult.error || imageWarning,
+      warning: [categoriesResult.error, ...imageWarnings].filter(Boolean).join(" · ") || null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo crear el producto.";
