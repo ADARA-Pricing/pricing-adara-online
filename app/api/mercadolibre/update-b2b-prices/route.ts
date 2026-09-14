@@ -90,6 +90,9 @@ export async function POST(request: NextRequest) {
         if (range.price > Number(allowed.amount || 0) + 0.01) {
           return NextResponse.json({ error: `El precio de ${range.quantity} unidades supera el máximo recomendado por MercadoLibre (${Number(allowed.amount || 0).toFixed(2)}).` }, { status: 422 });
         }
+        if (range.price >= businessDiscountBase - 0.01) {
+          return NextResponse.json({ error: `El precio mayorista de ${range.quantity} unidades debe ser menor al precio final actual (${businessDiscountBase.toFixed(2)}).` }, { status: 422 });
+        }
       }
     }
 

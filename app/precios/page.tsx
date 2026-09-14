@@ -1400,6 +1400,8 @@ export default function PricesPage() {
         : Number(mc.result.marginOnNetSale || 0);
       const target = { ...targetBase, desiredMarginRate: targetMargin };
       const sameMarginResult = calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, target) as any;
+      // El límite de ML y el precio final pertenecen a esta MLA. No se mezcla
+      // con publicaciones espejo: pueden tener promo, aporte y márgenes propios.
       const maximumMeliPrice = Number(recommendation.amount || 0);
       const meliPromoContribution = Number(publication.meliPromoContributionAmount || 0);
       const recommendedResult = maximumMeliPrice > 0
