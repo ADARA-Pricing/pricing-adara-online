@@ -121,7 +121,8 @@ export default function PricesPage() {
   const [b2bPublications, setB2bPublications] = useState<B2BPublication[] | null>(null);
   const [loadingB2b, setLoadingB2b] = useState(false);
   const [b2bError, setB2bError] = useState<string | null>(null);
-  const [expandedPricingTabs, setExpandedPricingTabs] = useState<Record<string, "channels" | "wholesale">>({});
+  const [expandedPricingTabs, setExpandedPricingTabs] = useState<Record<string, "compare" | "channels" | "real" | "wholesale">>({});
+  const [expandedComparisonRows, setExpandedComparisonRows] = useState<Record<string, boolean>>({});
   const [b2bBySku, setB2bBySku] = useState<Record<string, B2BPublication[]>>({});
   const [b2bErrorBySku, setB2bErrorBySku] = useState<Record<string, string>>({});
   const [loadingB2bSku, setLoadingB2bSku] = useState<string | null>(null);
@@ -1246,6 +1247,28 @@ export default function PricesPage() {
       });
   }
 
+  function comparisonRowsForProduct(configuredRows: any[], liveRows: ReturnType<typeof activePublicationRowsForProduct>) {
+    return configuredRows.map((configured) => {
+      const publications = liveRows.filter((row) => row.option.code === configured.option.code);
+      const configuredPrice = configured.result?.valid ? Number(configured.result.roundedPrice || 0) : null;
+      const listPrices = publications.map((row) => Number(row.publication.meli_price || 0)).filter(Boolean);
+      const customerPrices = publications.map((row) => Number(row.customerPrice || 0)).filter(Boolean);
+      const margins = publications.map((row) => row.actualMargin).filter((value): value is number => value !== null);
+      const promotionCount = publications.filter((row) => row.meliContribution > 0 || Number(row.publication.meli_promo_price || 0) > 0).length;
+      const listMismatch = configuredPrice !== null && listPrices.some((price) => Math.abs(price - configuredPrice) > 1);
+      return {
+        ...configured,
+        publications,
+        configuredPrice,
+        listPriceRange: listPrices.length ? { min: Math.min(...listPrices), max: Math.max(...listPrices) } : null,
+        customerPriceRange: customerPrices.length ? { min: Math.min(...customerPrices), max: Math.max(...customerPrices) } : null,
+        marginRange: margins.length ? { min: Math.min(...margins), max: Math.max(...margins) } : null,
+        promotionCount,
+        listMismatch,
+      };
+    });
+  }
+
   function b2bRowsForProduct(product: Product, productRows: any[], publications: B2BPublication[]) {
     const mc = productRows.find((row) => row.option.code === "MC");
     if (!mc?.result?.valid) return [];
@@ -1615,7 +1638,10 @@ export default function PricesPage() {
                   const livePublicationRows = isExpanded
                     ? activePublicationRowsForProduct(product, productRows)
                     : [];
-                  const activeExpandedTab = expandedPricingTabs[key] || "channels";
+                  const comparisonRows = isExpanded
+                    ? comparisonRowsForProduct(productRows, livePublicationRows)
+                    : [];
+                  const activeExpandedTab = expandedPricingTabs[key] || "compare";
                   const wholesalePublications = b2bBySku[product.sku] || [];
                   const wholesaleRows = activeExpandedTab === "wholesale"
                     ? b2bRowsForProduct(product, productRows, wholesalePublications)
@@ -1668,8 +1694,8 @@ export default function PricesPage() {
                             <div className="channel-breakdown">
                               <SectionHeader
                                 icon={<SlidersHorizontal aria-hidden="true" />}
-                                title={activeExpandedTab === "wholesale" ? "Mercado Libre Negocios" : "Condiciones de venta"}
-                                description={activeExpandedTab === "wholesale" ? "Precios por cantidad, envío bonificado y rentabilidad neta por unidad." : "Precios y rentabilidad por canal para este producto."}
+                                title={activeExpandedTab === "wholesale" ? "Mercado Libre Negocios" : activeExpandedTab === "compare" ? "Comparar y actuar" : activeExpandedTab === "real" ? "Precio real en Mercado Libre" : "Configurar precios"}
+                                description={activeExpandedTab === "wholesale" ? "Precios por cantidad, envío bonificado y rentabilidad neta por unidad." : activeExpandedTab === "compare" ? "Compará lo configurado contra cada cuota publicada y tomá acciones." : activeExpandedTab === "real" ? "Resultado vigente por publicación, promociones y aporte de Mercado Libre." : "Precios objetivo por canal para cargar en Mercado Libre."}
                                 actions={
                                   activeExpandedTab === "channels" ? <>
                                     <button className="button small-button prices-publish-all-button" onClick={() => publishAllPricesToMercadoLibre(product, productRows)} disabled={publishingPriceChannel === `${product.sku}-all`}>
@@ -1680,21 +1706,27 @@ export default function PricesPage() {
                                       <BadgePercent aria-hidden="true" />
                                       {refreshingAdaraSku === product.sku ? "Activando Adara..." : "Activar promo Adara"}
                                     </button>
-                                  </> : <button className="button small-button" onClick={() => loadB2bForProduct(product)} disabled={loadingB2bSku === product.sku}>
+                                  </> : activeExpandedTab === "wholesale" ? <button className="button small-button" onClick={() => loadB2bForProduct(product)} disabled={loadingB2bSku === product.sku}>
                                     <RefreshCw aria-hidden="true" />
                                     {loadingB2bSku === product.sku ? "Consultando ML..." : "Actualizar mayorista"}
-                                  </button>
+                                  </button> : null
                                 }
                               />
                               <div className="row-actions" style={{ marginBottom: 14 }}>
+                                <button className={`button ghost small-button ${activeExpandedTab === "compare" ? "active" : ""}`} type="button" onClick={() => setExpandedPricingTabs((current) => ({ ...current, [key]: "compare" }))}>
+                                  Comparar y actuar
+                                </button>
                                 <button className={`button ghost small-button ${activeExpandedTab === "channels" ? "active" : ""}`} type="button" onClick={() => setExpandedPricingTabs((current) => ({ ...current, [key]: "channels" }))}>
-                                  Condiciones de venta
+                                  Configurar precios
+                                </button>
+                                <button className={`button ghost small-button ${activeExpandedTab === "real" ? "active" : ""}`} type="button" onClick={() => setExpandedPricingTabs((current) => ({ ...current, [key]: "real" }))}>
+                                  Precio real ML
                                 </button>
                                 <button className={`button ghost small-button ${activeExpandedTab === "wholesale" ? "active" : ""}`} type="button" onClick={() => { setExpandedPricingTabs((current) => ({ ...current, [key]: "wholesale" })); loadB2bForProduct(product); }}>
                                   Mayorista
                                 </button>
                               </div>
-                              {activeExpandedTab === "channels" && (
+                              {activeExpandedTab === "real" && (
                               <>
                               <div className="prices-live-publications">
                                 <div className="prices-live-publications-head">
@@ -1738,6 +1770,10 @@ export default function PricesPage() {
                                   </table>
                                 ) : <p className="small">No hay publicaciones activas sincronizadas para este SKU.</p>}
                               </div>
+                              </>
+                              )}
+                              {activeExpandedTab === "channels" && (
+                              <>
                               <p className="prices-configured-prices-label">Precios configurados para cargar en Mercado Libre</p>
                               <table className="nested-table">
                                 <thead>
@@ -1820,6 +1856,97 @@ export default function PricesPage() {
                                 </tbody>
                               </table>
                               </>
+                              )}
+                              {activeExpandedTab === "compare" && (
+                                <div className="prices-comparison">
+                                  <p className="small prices-comparison-intro">Una fila por cuota. Abrí el detalle sólo cuando necesitás revisar las MLA, promos, Full y stock.</p>
+                                  <table className="nested-table prices-comparison-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Cuota</th>
+                                        <th>Configurado</th>
+                                        <th>Precio cliente ML</th>
+                                        <th>Margen real</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {comparisonRows.map((row) => {
+                                        const comparisonKey = `${key}-${row.option.code}`;
+                                        const expandedComparison = Boolean(expandedComparisonRows[comparisonKey]);
+                                        const priceRange = row.customerPriceRange;
+                                        const marginRange = row.marginRange;
+                                        return (
+                                          <Fragment key={comparisonKey}>
+                                            <tr>
+                                              <td><strong>{row.option.code}</strong><br /><span className="small">{row.option.name}</span></td>
+                                              <td><strong>{row.configuredPrice ? moneyWithCents(row.configuredPrice) : "-"}</strong></td>
+                                              <td>
+                                                {priceRange
+                                                  ? priceRange.min === priceRange.max
+                                                    ? moneyWithCents(priceRange.min)
+                                                    : `${moneyWithCents(priceRange.min)} a ${moneyWithCents(priceRange.max)}`
+                                                  : "-"}
+                                              </td>
+                                              <td>
+                                                <span className={`prices-margin-pill ${marginRange ? marginClass(marginRange.min) : ""}`}>
+                                                  {marginRange
+                                                    ? marginRange.min === marginRange.max
+                                                      ? percent(marginRange.min)
+                                                      : `${percent(marginRange.min)} a ${percent(marginRange.max)}`
+                                                    : "-"}
+                                                </span>
+                                              </td>
+                                              <td>
+                                                {!row.publications.length
+                                                  ? <span className="negative">Sin publicación activa</span>
+                                                  : row.listMismatch
+                                                    ? <span className="negative">Precio lista distinto · {row.publications.length} MLA</span>
+                                                    : <span className="positive">En línea · {row.publications.length} MLA{row.promotionCount ? ` · ${row.promotionCount} con promo` : ""}</span>}
+                                              </td>
+                                              <td className="prices-comparison-actions">
+                                                <button className="button ghost small-button" type="button" onClick={() => setExpandedComparisonRows((current) => ({ ...current, [comparisonKey]: !current[comparisonKey] }))}>
+                                                  {expandedComparison ? "Ocultar" : "Ver MLA"}
+                                                </button>
+                                                <button className="button ghost small-button" type="button" onClick={() => setExpandedPricingTabs((current) => ({ ...current, [key]: "channels" }))}>
+                                                  Configurar
+                                                </button>
+                                                {row.option.code === "MC" && (
+                                                  <button className="button ghost small-button" type="button" onClick={() => { setExpandedPricingTabs((current) => ({ ...current, [key]: "wholesale" })); loadB2bForProduct(product); }}>
+                                                    Mayorista
+                                                  </button>
+                                                )}
+                                              </td>
+                                            </tr>
+                                            {expandedComparison && (
+                                              <tr className="prices-comparison-detail-row">
+                                                <td colSpan={6}>
+                                                  {row.publications.length ? (
+                                                    <table className="nested-table prices-comparison-detail-table">
+                                                      <thead><tr><th>MLA</th><th>Lista ML</th><th>Cliente</th><th>Aporte ML</th><th>Venta real</th><th>Margen</th><th>Logística / stock</th></tr></thead>
+                                                      <tbody>{row.publications.map((publicationRow) => (
+                                                        <tr key={publicationRow.publication.meli_item_id}>
+                                                          <td><strong>{publicationRow.publication.meli_item_id}</strong></td>
+                                                          <td>{moneyWithCents(publicationRow.publication.meli_price || null)}</td>
+                                                          <td>{moneyWithCents(publicationRow.customerPrice || null)}</td>
+                                                          <td className="positive">{publicationRow.meliContribution ? `+${moneyWithCents(publicationRow.meliContribution)}` : "-"}</td>
+                                                          <td><strong>{moneyWithCents(publicationRow.actualSale || null)}</strong></td>
+                                                          <td>{publicationRow.actualMargin === null ? "-" : percent(publicationRow.actualMargin)}</td>
+                                                          <td>{publicationRow.publication.meli_logistic_type === "fulfillment" ? "Full · " : ""}{Number(publicationRow.publication.meli_stock || 0)} u.</td>
+                                                        </tr>
+                                                      ))}</tbody>
+                                                    </table>
+                                                  ) : <span className="small">No hay MLA activa sincronizada para esta condición.</span>}
+                                                </td>
+                                              </tr>
+                                            )}
+                                          </Fragment>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
                               )}
                               {activeExpandedTab === "wholesale" && (
                                 <>

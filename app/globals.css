@@ -12177,6 +12177,36 @@ textarea:focus,
   color: #526580;
 }
 
+.prices-comparison-intro {
+  margin: 0 0 10px;
+}
+
+.prices-comparison-table td {
+  vertical-align: middle;
+}
+
+.prices-comparison-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.prices-comparison-detail-row td {
+  padding: 10px 14px !important;
+  background: #f8fbff !important;
+}
+
+.prices-comparison-detail-table {
+  border-color: #dbe6f5 !important;
+  background: #fff;
+}
+
+.prices-comparison-detail-table th {
+  background: #f2f6fc !important;
+}
+
 .prices-page .nested-table td:first-child strong {
   display: block;
   color: #0f172a;
