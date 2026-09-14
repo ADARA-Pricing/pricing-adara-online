@@ -44,6 +44,16 @@ async function main() {
   const { channels } = await sharp(await squareProductImage(transparent)).stats();
   assert.equal(channels.length, 4);
   assert.equal(channels[3].max, 0);
+  for (const background of ['#ffffff', '#f8f8f8', '#d0d0d0']) {
+    // Un producto con contorno oscuro e interior blanco: el interior debe quedar.
+    const fixture = Buffer.from(`<svg width="400" height="400"><rect width="400" height="400" fill="${background}"/><rect x="100" y="100" width="200" height="200" fill="white" stroke="black" stroke-width="20"/></svg>`);
+    const source = await sharp(fixture).png().toBuffer();
+    const { data, info } = await sharp(await squareProductImage(source)).raw().toBuffer({ resolveWithObject: true });
+    const alpha = (x, y) => data[(y * info.width + x) * info.channels + 3];
+    assert.equal(alpha(20, 20), background === '#d0d0d0' ? 255 : 0);
+    assert.equal(alpha(512, 512), 255, 'Conservar blanco interior del producto');
+    assert.equal(alpha(256, 512), 255, 'Conservar contorno oscuro');
+  }
   console.log('OK: galería completa, orden, variantes, URL, tamaño, centrado y transparencia.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
