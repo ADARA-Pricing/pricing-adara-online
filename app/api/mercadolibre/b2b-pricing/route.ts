@@ -79,13 +79,13 @@ export async function POST(request: NextRequest) {
       .filter((publication) => /^MLA\d+$/i.test(String(publication.meli_item_id || "")))
       .filter(isOnePaymentPublication)
       // Negocios se calcula sobre una condición de venta. Para evitar repetir
-      // el mismo SKU en MLA espejo, priorizamos stock, Full y un orden estable.
+      // el mismo SKU en MLA espejo, las ordenamos por stock y Full. Se devuelven
+      // todas porque cada publicación puede tener su propio envío y propuesta.
       .sort((a, b) =>
         Number(b.meli_stock || 0) - Number(a.meli_stock || 0)
         || Number(b.meli_logistic_type === "fulfillment") - Number(a.meli_logistic_type === "fulfillment")
         || String(a.meli_item_id || "").localeCompare(String(b.meli_item_id || "")),
-      )
-      .slice(0, 1);
+      );
 
     if (!publications.length) {
       return NextResponse.json({ error: "No hay una publicación activa de 1 pago para este SKU." }, { status: 404 });

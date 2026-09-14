@@ -12138,6 +12138,45 @@ textarea:focus,
   cursor: pointer;
 }
 
+.prices-live-publications {
+  margin: 0 0 16px;
+  border: 1px solid #dbe6f5;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fbfdff;
+}
+
+.prices-live-publications-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e4ecf7;
+  background: #f3f7ff;
+}
+
+.prices-live-publications-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.prices-live-publications-table {
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+.prices-live-publications-table th {
+  background: #f8fbff !important;
+}
+
+.prices-configured-prices-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #526580;
+}
+
 .prices-page .nested-table td:first-child strong {
   display: block;
   color: #0f172a;

@@ -1181,6 +1181,71 @@ export default function PricesPage() {
     });
   }
 
+  function meliContributionForPublication(publication: MercadoLibreShippingCost) {
+    const explicitAmount = Number(publication.meli_promo_meli_amount || 0);
+    if (explicitAmount > 0) return explicitAmount;
+    const customerPrice = Number(publication.meli_promo_price || 0);
+    const originalPrice = Number(publication.meli_original_price || publication.meli_price || 0);
+    const meliRate = Number(publication.meli_promo_meli_rate || 0);
+    const sellerRate = Number(publication.meli_promo_seller_rate || 0);
+    const totalDiscount = Math.max(originalPrice - customerPrice, 0);
+    return totalDiscount > 0 && meliRate > 0 && meliRate + sellerRate > 0
+      ? (totalDiscount * meliRate) / (meliRate + sellerRate)
+      : 0;
+  }
+
+  function activePublicationRowsForProduct(product: Product, configuredRows: any[]) {
+    const categoryFee = categoryFees.find(
+      (item) => item.category?.toLowerCase() === (product.category || "").toLowerCase(),
+    ) || null;
+    return shippingsForProduct(product)
+      .filter((publication) => publication.active !== false && publication.meli_status === "active" && publication.meli_item_id)
+      .sort((a, b) => {
+        const installments = Number(publicationInstallmentCount(a) || 99) - Number(publicationInstallmentCount(b) || 99);
+        if (installments) return installments;
+        return String(a.meli_item_id || "").localeCompare(String(b.meli_item_id || ""));
+      })
+      .map((publication) => {
+        const option = configuredRows.find((row) => optionMatchesPublication(row.option, publication))?.option || mercadoLibreClassicOption();
+        const setting = getChannelSetting(product.id, option.code);
+        const promoActive = Number(publication.meli_promo_price || 0) > 0 && /started|active|vigente/.test(String(publication.meli_promo_status || "").toLowerCase());
+        const customerPrice = Number((promoActive ? publication.meli_promo_price : publication.meli_price) || 0);
+        const meliContribution = promoActive ? meliContributionForPublication(publication) : 0;
+        const actualSale = customerPrice + meliContribution;
+        const actualResult = actualSale > 0
+          ? calculatePriceSummary(
+            product,
+            option,
+            option.applies_marketplace_fee ? categoryFee : null,
+            taxes,
+            option.applies_shipping ? publication : null,
+            {
+              desiredMarginRate: 0,
+              desiredNetProfit: null,
+              structureAmount: Number(setting?.structure_amount || 0),
+              manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
+              salesCommissionRate: allowsExtraSalesCommission(option) ? Number(setting?.sales_commission_rate || 0) : 0,
+              saleAppliesVat: setting?.sale_applies_vat ?? Boolean(option.applies_vat),
+              costVatRate: Number(setting?.cost_vat_rate || 0),
+              salePrice: actualSale,
+              roundTo: 1,
+              roundingMode: "nearest",
+            },
+          ) as any
+          : null;
+        const configured = configuredRows.find((row) => row.option.code === option.code);
+        return {
+          publication,
+          option,
+          configuredPrice: configured?.result?.valid ? Number(configured.result.roundedPrice || 0) : null,
+          customerPrice,
+          meliContribution,
+          actualSale,
+          actualMargin: actualResult?.valid ? Number(actualResult.marginOnNetSale || 0) : null,
+        };
+      });
+  }
+
   function b2bRowsForProduct(product: Product, productRows: any[], publications: B2BPublication[]) {
     const mc = productRows.find((row) => row.option.code === "MC");
     if (!mc?.result?.valid) return [];
@@ -1547,6 +1612,9 @@ export default function PricesPage() {
                   const productRows = isExpanded
                     ? calculateRowsForProduct(product)
                     : [];
+                  const livePublicationRows = isExpanded
+                    ? activePublicationRowsForProduct(product, productRows)
+                    : [];
                   const activeExpandedTab = expandedPricingTabs[key] || "channels";
                   const wholesalePublications = b2bBySku[product.sku] || [];
                   const wholesaleRows = activeExpandedTab === "wholesale"
@@ -1627,6 +1695,50 @@ export default function PricesPage() {
                                 </button>
                               </div>
                               {activeExpandedTab === "channels" && (
+                              <>
+                              <div className="prices-live-publications">
+                                <div className="prices-live-publications-head">
+                                  <div>
+                                    <strong>Publicaciones activas en Mercado Libre</strong>
+                                    <span className="small">Resultado real por MLA. El precio configurado se mantiene separado del precio vigente y de los aportes de ML.</span>
+                                  </div>
+                                  <span className="small">{livePublicationRows.length} publicación{livePublicationRows.length === 1 ? "" : "es"}</span>
+                                </div>
+                                {livePublicationRows.length ? (
+                                  <table className="nested-table prices-live-publications-table">
+                                    <thead>
+                                      <tr>
+                                        <th>MLA / condición</th>
+                                        <th>Precio configurado</th>
+                                        <th>Precio lista ML</th>
+                                        <th>Precio cliente</th>
+                                        <th>Aporte ML</th>
+                                        <th>Venta real</th>
+                                        <th>Margen real</th>
+                                        <th>Stock</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {livePublicationRows.map((row) => (
+                                        <tr key={row.publication.meli_item_id}>
+                                          <td>
+                                            <strong>{row.publication.meli_item_id}</strong><br />
+                                            <span className="small">{row.option.name}{row.publication.meli_logistic_type === "fulfillment" ? " · Full" : ""}</span>
+                                          </td>
+                                          <td>{row.configuredPrice ? moneyWithCents(row.configuredPrice) : "-"}</td>
+                                          <td>{moneyWithCents(row.publication.meli_price || null)}</td>
+                                          <td><strong>{row.customerPrice ? moneyWithCents(row.customerPrice) : "-"}</strong></td>
+                                          <td className="positive">{row.meliContribution > 0 ? `+${moneyWithCents(row.meliContribution)}` : "-"}</td>
+                                          <td><strong>{row.actualSale ? moneyWithCents(row.actualSale) : "-"}</strong></td>
+                                          <td><span className={`prices-margin-pill ${row.actualMargin === null ? "" : marginClass(row.actualMargin)}`}>{row.actualMargin === null ? "-" : percent(row.actualMargin)}</span></td>
+                                          <td>{Number(row.publication.meli_stock || 0)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                ) : <p className="small">No hay publicaciones activas sincronizadas para este SKU.</p>}
+                              </div>
+                              <p className="prices-configured-prices-label">Precios configurados para cargar en Mercado Libre</p>
                               <table className="nested-table">
                                 <thead>
                                   <tr>
@@ -1707,6 +1819,7 @@ export default function PricesPage() {
                                   )}
                                 </tbody>
                               </table>
+                              </>
                               )}
                               {activeExpandedTab === "wholesale" && (
                                 <>
