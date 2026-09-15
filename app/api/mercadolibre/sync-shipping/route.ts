@@ -3,9 +3,12 @@ import { createAdminClient } from "@/lib/supabaseAdmin";
 import { getConnectedMeliAccount, meliFetch } from "@/lib/mercadolibre";
 import { pauseB2bRangesWithoutContribution } from "@/lib/mercadolibreB2bGuard";
 import type { Product } from "@/lib/types";
+import { relatedItemSkus } from "@/lib/mercadolibreRelatedSku";
 
 type MeliItem = {
   id: string;
+  seller_id?: number;
+  item_relations?: Array<{ id?: string; variation_id?: number | null }>;
   title?: string;
   thumbnail?: string | null;
   pictures?: Array<{ secure_url?: string | null; url?: string | null }>;
@@ -1444,6 +1447,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Incluir el espejo aunque la búsqueda por SKU solo encuentre catálogo.
+    const initialIds = new Set(items.map((item) => item.id));
+    const relatedIds = [...new Set(items.flatMap((item) => (item.item_relations || []).map((relation) => relation.id || "")))]
+      .filter((id) => /^MLA\d+$/.test(id) && !initialIds.has(id));
+    for (const ids of chunk(relatedIds, 20)) {
+      const data = await meliFetch(`/items?ids=${ids.join(",")}`, account);
+      for (const entry of Array.isArray(data) ? data : []) {
+        if (entry?.body?.id && Number(entry.body.seller_id) === Number(account.meli_user_id)) items.push(entry.body as MeliItem);
+      }
+    }
+    const itemsById = new Map(items.map((item) => [item.id, item]));
+    const resolvedSkus = (item: MeliItem) => relatedItemSkus(item, itemsById, getItemSkus);
+
     const shippingCostsByItem = new Map<string, { cost: number; source: string | null }>();
     const promotionsByItem = new Map<string, PromotionSummary>();
     const detailedItemsByItem = new Map<string, MeliItem>();
@@ -1525,7 +1541,7 @@ export async function POST(request: NextRequest) {
     }
 
     const matchedItemsForFetch = items.filter((item) =>
-      getItemSkus(item).some((sku) => Boolean(productsBySku.get(sku)?.id)),
+      resolvedSkus(item).some((sku) => Boolean(productsBySku.get(sku)?.id)),
     );
     const matchedItemIds = new Set(matchedItemsForFetch.map((item) => item.id));
 
@@ -1689,7 +1705,7 @@ export async function POST(request: NextRequest) {
 
       const matchedProductIds = [...new Set(
         matchedItemsForFetch.flatMap((item) =>
-          getItemSkus(item)
+          resolvedSkus(item)
             .map((sku) => productsBySku.get(sku)?.id)
             .filter((id): id is string => Boolean(id)),
         ),
@@ -1765,7 +1781,7 @@ export async function POST(request: NextRequest) {
       for (const item of matchedItemsForFetch) {
         const promotionResult = await promotionForMatchedItem(item);
 
-        for (const sku of getItemSkus(item)) {
+        for (const sku of resolvedSkus(item)) {
           const product = productsBySku.get(sku);
           if (!product?.id) continue;
 
@@ -1878,7 +1894,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
 
     for (const item of items) {
-      const skus = getItemSkus(item);
+      const skus = resolvedSkus(item);
 
       if (!skus.length) {
         withoutSku += 1;
