@@ -782,12 +782,12 @@ export default function TiendaNubePage() {
           productId: row.publication.tiendanube_product_id,
           variantId: row.publication.tiendanube_variant_id,
           price: row.suggestedPrice,
+          desiredMargin: row.desiredMargin,
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "No se pudo actualizar el precio.");
-      setMessage(`${row.sku}: precio actualizado en Tienda Nube.`);
-      await syncProducts();
+      await syncProducts(`${row.sku}: precio confirmado en Tienda Nube ${moneyWithCents(row.suggestedPrice)} · objetivo ${row.desiredMargin}%.`);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "No se pudo actualizar el precio.");
     } finally {
