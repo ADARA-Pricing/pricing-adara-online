@@ -1,4 +1,9 @@
 "use client";
+import { usePricingLoad } from "@/lib/usePricingLoad";
+import { PricingDataStatus } from "@/components/PricingDataStatus";
+import { useDialogFocus } from "@/lib/useDialogFocus";
+import { freshness } from "@/lib/pricingData";
+import { categoryOptions, normalizeFilter } from "@/lib/pricingData";
 
 import { ChangeEvent, FormEvent, Fragment, KeyboardEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
@@ -473,6 +478,7 @@ function sortPublicationsByInstallments(shippings: MercadoLibreShippingCost[]) {
 export default function ProductsPage() {
   const router = useRouter();
   const supabase = createClient();
+  const dataLoad = usePricingLoad('productos', supabase);
   const [products, setProducts] = useState<Product[]>([]);
   const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
   const [form, setForm] = useState<Product>(emptyProduct);
@@ -499,6 +505,7 @@ export default function ProductsPage() {
   const [meliImportKindFilter, setMeliImportKindFilter] = useState("missing");
   const [meliImportRecentFilter, setMeliImportRecentFilter] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
+  const editorRef = useDialogFocus<HTMLElement>(editorOpen, closeEditorModal);
 
   const costWithVatPreview = useMemo(() => {
     const cost = Number(form.cost_without_vat || 0);
@@ -547,29 +554,10 @@ export default function ProductsPage() {
     if (!data.session) router.push("/login");
   }
 
-  async function loadProducts() {
+  async function loadProducts(options: {quiet?: boolean; initial?: boolean} = {}) {
     setLoading(true);
-    setError(null);
-
-    const [productsResponse, shippingResponse] = await Promise.all([
-      supabase.from("products").select("*").order("updated_at", { ascending: false }),
-      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
-    ]);
-
-    setLoading(false);
-
-    if (productsResponse.error) {
-      setError(productsResponse.error.message);
-      return;
-    }
-
-    if (shippingResponse.error) {
-      setError(shippingResponse.error.message);
-      return;
-    }
-
-    setProducts((productsResponse.data || []) as Product[]);
-    setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
+    try { await dataLoad.run({"products":{"table":"products","order":"updated_at","ascending":false},"publications":{"table":"mercadolibre_shipping_costs","filters":[["eq","active",true]]}}, data => { setProducts(data.products); setShippingCosts(data.publications); }, !options.initial); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
@@ -931,10 +919,7 @@ export default function ProductsPage() {
     }
   }
 
-  const categories = useMemo(() => {
-    const values = new Set(products.map((product) => product.category).filter(Boolean) as string[]);
-    return [...values].sort((a, b) => a.localeCompare(b, "es"));
-  }, [products]);
+  const categories = useMemo(() => categoryOptions(products.map(product => product.category)), [products]);
 
   const enriched = useMemo(() => {
     const groupedProducts = new Map<string, Product[]>();
@@ -985,7 +970,7 @@ export default function ProductsPage() {
         .toLowerCase();
 
       const matchesQuery = !normalized || text.includes(normalized);
-      const matchesCategory = !categoryFilter || product.category === categoryFilter;
+      const matchesCategory = !categoryFilter || normalizeFilter(product.category) === normalizeFilter(categoryFilter);
       const matchesMlStatus = !meliStatusFilter || (meliStatusFilter === "none" ? shippings.length === 0 : shippings.some((shipping) => shipping?.meli_status === meliStatusFilter));
       return matchesQuery && matchesCategory && matchesMlStatus;
     });
@@ -1023,6 +1008,7 @@ export default function ProductsPage() {
         onRefresh={loadProducts}
         icon={<Package aria-hidden="true" />}
       />
+      <PricingDataStatus state={dataLoad.state} publications={shippingCosts} onRefresh={() => loadProducts()} />
 
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}
@@ -1038,7 +1024,7 @@ export default function ProductsPage() {
           </div>
           <div className="field">
             <label>Categoría</label>
-            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <select aria-label="Categoría" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
               <option value="">Todas las categorías</option>
               {categories.map((category) => (
                 <option key={category} value={category}>{category}</option>
@@ -1076,28 +1062,28 @@ export default function ProductsPage() {
         <div className="kpi-card product-kpi-card">
           <div>
             <p>Total productos</p>
-            <strong>{metrics.total}</strong>
+            <strong>{dataLoad.initial ? "—" : metrics.total}</strong>
             <small>100% del catálogo</small>
           </div>
         </div>
         <div className="kpi-card product-kpi-card">
           <div>
             <p>Con ML</p>
-            <strong>{metrics.withMl}</strong>
+            <strong>{dataLoad.initial ? "—" : metrics.withMl}</strong>
             <small>{metrics.total ? `${Math.round((metrics.withMl / metrics.total) * 100)}% del catálogo` : "0% del catálogo"}</small>
           </div>
         </div>
         <div className="kpi-card product-kpi-card">
           <div>
             <p>Activas</p>
-            <strong>{metrics.activePublications}</strong>
+            <strong>{dataLoad.initial ? "—" : metrics.activePublications}</strong>
             <small>{metrics.pausedPublications} pausadas</small>
           </div>
         </div>
         <div className="kpi-card product-kpi-card">
           <div>
             <p>Sin ML</p>
-            <strong>{metrics.withoutMl}</strong>
+            <strong>{dataLoad.initial ? "—" : metrics.withoutMl}</strong>
             <small>{metrics.total ? `${Math.round((metrics.withoutMl / metrics.total) * 100)}% del catálogo` : "0% del catálogo"}</small>
           </div>
         </div>
@@ -1106,16 +1092,16 @@ export default function ProductsPage() {
       <section className="card products-sync-summary">
         <div className="products-sync-status">
           <CircleCheck aria-hidden="true" />
-          <strong>MercadoLibre sincronizado</strong>
+          <strong>Datos guardados de Mercado Libre</strong>
           <span>
-            Última actualización: {formatDateTime(metrics.latestSync)} · {metrics.syncedToday} productos actualizados · {metrics.activePublications + metrics.pausedPublications} publicaciones vinculadas
+            Actualización más reciente: {formatDateTime(metrics.latestSync)} · {metrics.syncedToday} productos actualizados · {metrics.activePublications + metrics.pausedPublications} publicaciones vinculadas · {freshness(shippingCosts).stale} con más de 24 h · {freshness(shippingCosts).unknown} sin fecha; no implica cobertura completa
           </span>
         </div>
       </section>
 
       {editorOpen && (
         <div className="modal-backdrop" onClick={closeEditorModal}>
-          <section className="modal-card product-editor-modal" onClick={(event) => event.stopPropagation()}>
+          <section ref={editorRef} role="dialog" aria-modal="true" aria-label="Editor de productos" tabIndex={-1} className="modal-card product-editor-modal" onClick={(event) => event.stopPropagation()}>
             <div className="header product-editor-header" style={{ alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
               <div>
                 <h2 style={{ marginTop: 0, marginBottom: 8 }}>
@@ -1431,7 +1417,7 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        {loading ? (
+        {dataLoad.initial ? (
           <section className="card"><p>Cargando productos...</p></section>
         ) : (
           <div className="products-advanced-list">

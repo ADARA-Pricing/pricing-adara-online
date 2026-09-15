@@ -1,4 +1,6 @@
 ﻿"use client";
+import { usePricingLoad } from "@/lib/usePricingLoad";
+import { PricingDataStatus } from "@/components/PricingDataStatus";
 
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -200,6 +202,7 @@ function defaultFlag(value: boolean | null | undefined, fallback = false) {
 export default function MercadoLibrePage() {
   const router = useRouter();
   const supabase = createClient();
+  const dataLoad = usePricingLoad('mercadolibre', supabase);
   const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
   const [categories, setCategories] = useState<MercadoLibreCategoryFee[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -248,42 +251,10 @@ export default function MercadoLibrePage() {
     router.push("/login");
   }
 
-  async function loadData() {
+  async function loadData(options: {quiet?: boolean; initial?: boolean} = {}) {
     setLoading(true);
-    const [
-      installmentsResponse,
-      categoriesResponse,
-      taxesResponse,
-      productsResponse,
-      shippingResponse,
-      marginsResponse,
-    ] = await Promise.all([
-      supabase.from("mercadolibre_installment_fees").select("*").order("code", { ascending: true }),
-      supabase.from("mercadolibre_category_fees").select("*").order("category", { ascending: true }),
-      supabase.from("tax_settings").select("*").eq("key", "default").maybeSingle(),
-      supabase.from("products").select("*").eq("status", "active"),
-      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
-      supabase.from("product_channel_margins").select("*"),
-    ]);
-    setLoading(false);
-
-    if (installmentsResponse.error) setError(installmentsResponse.error.message);
-    else setInstallments((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]);
-
-    if (categoriesResponse.error) setError(categoriesResponse.error.message);
-    else setCategories((categoriesResponse.data || []) as MercadoLibreCategoryFee[]);
-
-    if (taxesResponse.error) setError(taxesResponse.error.message);
-    else if (taxesResponse.data) setTaxes(taxesResponse.data as TaxSettings);
-
-    if (productsResponse.error) setError(productsResponse.error.message);
-    else setProducts((productsResponse.data || []) as Product[]);
-
-    if (shippingResponse.error) setError(shippingResponse.error.message);
-    else setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
-
-    if (marginsResponse.error) setError(marginsResponse.error.message);
-    else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
+    try { await dataLoad.run({"installments":{"table":"mercadolibre_installment_fees"},"categories":{"table":"mercadolibre_category_fees"},"taxes":{"table":"tax_settings","filters":[["eq","key","default"]]},"products":{"table":"products","filters":[["eq","status","active"]]},"publications":{"table":"mercadolibre_shipping_costs","filters":[["eq","active",true]]},"margins":{"table":"product_channel_margins"}}, data => { setInstallments(data.installments); setCategories(data.categories); if (data.taxes[0]) setTaxes(data.taxes[0]); setProducts(data.products); setShippingCosts(data.publications); setMarginSettings(data.margins); }, !options.initial); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
@@ -1015,12 +986,13 @@ export default function MercadoLibrePage() {
               <RefreshCw aria-hidden="true" />
               {syncingMeli ? "Actualizando cuotas..." : "Actualizar cuotas ML"}
             </button>
-            <button type="button" className="button ghost" onClick={loadData} disabled={loading}>
+            <button type="button" className="button ghost" onClick={() => loadData()} disabled={loading}>
               Actualizar
             </button>
           </>
         )}
       />
+      <PricingDataStatus state={dataLoad.state} publications={shippingCosts} onRefresh={() => loadData()} />
 
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}
@@ -1069,7 +1041,7 @@ export default function MercadoLibrePage() {
             )}
           </div>
 
-          {loading ? (
+          {dataLoad.initial ? (
             <div className="cost-channel-skeleton"><span /><span /><span /></div>
           ) : (
             <div className="table-wrap cost-config-table-wrap">
@@ -1174,7 +1146,7 @@ export default function MercadoLibrePage() {
             )}
           </div>
 
-          {loading ? (
+          {dataLoad.initial ? (
             <div className="cost-channel-skeleton"><span /><span /><span /></div>
           ) : (
             <div className="table-wrap cost-config-table-wrap">
@@ -1385,7 +1357,7 @@ export default function MercadoLibrePage() {
           <div className="section-title-row">
             <div>
               <h2 style={{ marginTop: 0, marginBottom: 6 }}>Comisiones por categoría / canal</h2>
-              <p className="small" style={{ marginBottom: 0 }}>Esta comisión cambia según la categoría del producto y se usa solo en canales que tengan activo "Aplica comisión ML por categoría".</p>
+              <p className="small" style={{ marginBottom: 0 }}>Esta comisión cambia según la categoría del producto y se usa solo en canales que tengan activo &quot;Aplica comisión ML por categoría&quot;.</p>
             </div>
             <button
               type="button"

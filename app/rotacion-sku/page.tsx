@@ -4,6 +4,11 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Check, ChartNoAxesCombined, Database, Filter, RefreshCw, Search } from "lucide-react";
+import { usePricingLoad } from '@/lib/usePricingLoad';
+import { PricingDataStatus, PricingPagination } from '@/components/PricingDataStatus';
+import { normalizeFilter, categoryOptions } from '@/lib/pricingData';
+import { CategoryFilter, PricingSearch } from '@/components/PricingFilters';
+import { useRememberedView } from '@/lib/useRememberedView';
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import { moneyWithCents } from "@/lib/pricing";
@@ -126,7 +131,8 @@ function productInitial(name: string, sku: string) {
 export default function RotacionSkuPage() {
   const router = useRouter();
   const supabase = createClient();
-  const autoSalesSyncStarted = useRef(false);
+  const dataLoad = usePricingLoad('rotacion-sku', supabase);
+  const [listPage, setListPage] = useState(1);
   const urlFilterApplied = useRef(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
@@ -151,63 +157,16 @@ export default function RotacionSkuPage() {
     if (!data.session) router.push("/login");
   }
 
-  async function fetchSalesSince(sinceIso: string) {
-    const pageSize = 1000;
-    const result: MercadoLibreOrderItem[] = [];
-
-    for (let from = 0; from < 20000; from += pageSize) {
-      const to = from + pageSize - 1;
-      const response = await supabase
-        .from("mercadolibre_order_items")
-        .select("*")
-        .gte("order_date", sinceIso)
-        .neq("status", "cancelled")
-        .order("order_date", { ascending: false })
-        .range(from, to);
-
-      if (response.error) return response;
-      const page = (response.data || []) as MercadoLibreOrderItem[];
-      result.push(...page);
-      if (page.length < pageSize) break;
-    }
-
-    return { data: result, error: null };
-  }
-
-  async function loadData() {
+  async function loadData(options: { quiet?: boolean; initial?: boolean } = {}) {
+    const since = new Date(); since.setHours(0,0,0,0); since.setDate(since.getDate() - 65);
     setLoading(true);
-    setError(null);
-    const since = new Date();
-    since.setDate(since.getDate() - 65);
-
-    const [productsResponse, publicationsResponse, imagePublicationsResponse, salesResponse] = await Promise.all([
-      supabase.from("products").select("*").order("sku", { ascending: true }),
-      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true).eq("meli_status", "active"),
-      supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
-      fetchSalesSince(since.toISOString()),
-    ]);
-
-    setLoading(false);
-    if (productsResponse.error) setError(productsResponse.error.message);
-    else setProducts((productsResponse.data || []) as Product[]);
-    if (publicationsResponse.error) setError(publicationsResponse.error.message);
-    else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
-    if (imagePublicationsResponse.error) setError(imagePublicationsResponse.error.message);
-    else setImagePublications((imagePublicationsResponse.data || []) as MercadoLibreShippingCost[]);
-    if (salesResponse.error) {
-      setError(
-        salesResponse.error.message.includes("mercadolibre_order_items")
-          ? "Falta aplicar la migracion de ventas ML. Ejecuta database/036_meli_order_items.sql en Supabase."
-          : salesResponse.error.message,
-      );
-    } else {
-      setSales((salesResponse.data || []) as MercadoLibreOrderItem[]);
-    }
+    try { await dataLoad.run({ products: { table: 'products', filters: [['neq','status','discontinued']] }, publications: { table: 'mercadolibre_shipping_costs', columns: 'id,product_id,sku,meli_item_id,meli_stock,meli_status,meli_catalog_listing,meli_thumbnail,meli_last_sync_at,updated_at', filters: [['eq','active',true]] }, sales: { table: 'mercadolibre_order_items', columns: 'id,order_id,order_date,status,meli_item_id,variation_id,sku,product_id,title,quantity,unit_price,total_amount,updated_at', filters: [['gte','order_date',since.toISOString()],['neq','status','cancelled']], order: 'order_date', ascending: false } }, data => { setProducts(data.products); setPublications(data.publications.filter(item => item.meli_status === 'active')); setImagePublications(data.publications); setSales(data.sales); }, !options.initial); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
     checkSession();
-    loadData();
+    loadData({ initial: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -377,13 +336,13 @@ export default function RotacionSkuPage() {
   const activeColumnFilterCount = Object.values(columnFilters).filter(columnFilterIsActive).length;
 
   const filteredRows = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = normalizeFilter(query);
     const multiplier = sortDirection === "asc" ? 1 : -1;
 
     return rows
       .filter((row) => {
-        if (needle && !`${row.sku} ${row.productName} ${row.itemIds.join(" ")}`.toLowerCase().includes(needle)) return false;
-        if (categoryFilter && row.category !== categoryFilter) return false;
+        if (needle && !normalizeFilter(`${row.sku} ${row.productName} ${row.itemIds.join(" ")}`).includes(needle)) return false;
+        if (categoryFilter && normalizeFilter(row.category) !== normalizeFilter(categoryFilter)) return false;
         if (rotationFilter === "no_sales" && row.units30 > 0) return false;
         if (rotationFilter === "slow" && !(row.stock > 0 && (row.units30 <= 2 || row.stockDays === null || row.stockDays > 60))) return false;
         if (rotationFilter === "capital_idle" && !(row.stockValue >= 100000 && (row.units30 === 0 || row.stockDays === null || row.stockDays > 60))) return false;
@@ -410,6 +369,7 @@ export default function RotacionSkuPage() {
       });
   }, [categoryFilter, columnFilters, onlyLowStock, onlyWithSales, query, rotationFilter, rows, sortDirection, sortKey]);
 
+  useRememberedView(supabase, 'rotacion-sku', [query, categoryFilter, sortKey, sortDirection, columnFilters, onlyWithSales, onlyLowStock, listPage, rotationFilter], (values) => { setQuery(values[0]); setCategoryFilter(values[1]); setSortKey(values[2]); setSortDirection(values[3]); setColumnFilters(values[4]); setOnlyWithSales(values[5]); setOnlyLowStock(values[6]); setListPage(values[7]); setRotationFilter(values[8]); }, !dataLoad.incomplete);
   const totals = useMemo(() => {
     const units30 = rows.reduce((total, row) => total + row.units30, 0);
     const revenue30 = rows.reduce((total, row) => total + row.revenue30, 0);
@@ -422,7 +382,7 @@ export default function RotacionSkuPage() {
   }, [rows]);
 
   const categories = useMemo(() => {
-    return [...new Set(rows.map((row) => row.category).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "es"));
+    return categoryOptions(rows.map((row) => row.category));
   }, [rows]);
 
   const sortLabels: Record<SortKey, string> = {
@@ -630,12 +590,7 @@ export default function RotacionSkuPage() {
   }, [sales]);
   const salesSyncIsStale = salesCoverage?.syncedAt ? hoursBetween(salesCoverage.syncedAt) > 6 : !loading;
 
-  useEffect(() => {
-    if (loading || syncing || autoSalesSyncStarted.current || !salesSyncIsStale) return;
-    autoSalesSyncStarted.current = true;
-    syncSales();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, syncing, salesSyncIsStale]);
+  // La sincronización externa se inicia exclusivamente desde su botón.
 
   return (
     <main className="page rotation-page">
@@ -654,6 +609,7 @@ export default function RotacionSkuPage() {
         )}
       />
 
+      <PricingDataStatus state={dataLoad.state} publications={imagePublications} onRefresh={() => loadData()} />
       {error && <div className="alert error">{error}</div>}
       {(syncInfo || salesCoverage) && (
         <div className="rotation-sync-info">
@@ -671,52 +627,46 @@ export default function RotacionSkuPage() {
       <section className="rotation-summary">
         <article className="kpi-card">
           <span className="kpi-label">Unidades 30 dias</span>
-          <strong className="kpi-value">{totals.units30}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : totals.units30}</strong>
           <small className="kpi-meta">Vendidas</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Venta 30 dias</span>
-          <strong className="kpi-value">{moneyWithCents(totals.revenue30)}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : moneyWithCents(totals.revenue30)}</strong>
           <small className="kpi-meta">Facturacion ML</small>
         </article>
         <article className="kpi-card rotation-kpi-good">
           <span className="kpi-label">SKU con venta</span>
-          <strong className="kpi-value">{totals.activeSkus}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : totals.activeSkus}</strong>
           <small className="kpi-meta">Ultimos 30 dias</small>
         </article>
         <article className="kpi-card rotation-kpi-warning">
           <span className="kpi-label">Stock bajo</span>
-          <strong className="kpi-value">{totals.lowStock}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : totals.lowStock}</strong>
           <small className="kpi-meta">Menos de 25 dias</small>
         </article>
         <article className="kpi-card rotation-kpi-warning">
           <span className="kpi-label">Rotacion lenta</span>
-          <strong className="kpi-value">{totals.slowRotation}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : totals.slowRotation}</strong>
           <small className="kpi-meta">Stock con baja salida</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Capital stock</span>
-          <strong className="kpi-value">{moneyWithCents(totals.stockValue)}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : moneyWithCents(totals.stockValue)}</strong>
           <small className="kpi-meta">Costo sin IVA inmovilizado</small>
         </article>
         <article className="kpi-card rotation-kpi-warning">
           <span className="kpi-label">Quiebre cercano</span>
-          <strong className="kpi-value">{totals.breakRisk}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : totals.breakRisk}</strong>
           <small className="kpi-meta">Venden rapido y quedan pocos dias</small>
         </article>
       </section>
 
       <section className="card rotation-card">
         <div className="rotation-toolbar">
-          <label className="search-control">
-            <Search aria-hidden="true" />
-            <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o MLA" />
-          </label>
-          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-            <option value="">Todas las categorias</option>
-            {categories.map((category) => <option key={category} value={category}>{category}</option>)}
-          </select>
-          <select value={rotationFilter} onChange={(event) => setRotationFilter(event.target.value)}>
+          <PricingSearch value={query} onChange={setQuery} />
+          <CategoryFilter value={categoryFilter} onChange={setCategoryFilter} categories={categories} />
+          <select aria-label="Estado de rotación" value={rotationFilter} onChange={(event) => setRotationFilter(event.target.value)}>
             <option value="">Todos los estados</option>
             <option value="slow">Rotacion lenta</option>
             <option value="capital_idle">Capital quieto</option>
@@ -767,7 +717,7 @@ export default function RotacionSkuPage() {
         )}
         <div className="rotation-table-status">
           <div className="rotation-active-context">
-            <span>{filteredRows.length} de {rows.length} SKU</span>
+            <span>{dataLoad.initial ? "—" : filteredRows.length} de {dataLoad.initial ? "—" : rows.length} SKU</span>
             {activeQuickFilterEntries.map((filter) => (
               <button className="rotation-active-filter" type="button" key={filter.key} onClick={filter.clear}>
                 {filter.label} <span aria-hidden="true">x</span>
@@ -786,13 +736,14 @@ export default function RotacionSkuPage() {
           </div>
         </div>
 
-        {loading ? (
+        {dataLoad.initial ? (
           <div className="rotation-skeleton">
             <span />
             <span />
             <span />
           </div>
         ) : (
+          <> <PricingPagination page={listPage} total={dataLoad.initial ? 0 : filteredRows.length} onPage={setListPage} />
           <div className="rotation-table-wrap">
             <table className="rotation-table">
               <colgroup>
@@ -832,7 +783,7 @@ export default function RotacionSkuPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => (
+                {filteredRows.slice((Math.min(listPage, Math.max(1, Math.ceil(filteredRows.length / 40))) - 1) * 40, Math.min(listPage, Math.max(1, Math.ceil(filteredRows.length / 40))) * 40).map((row) => (
                   <tr key={row.sku}>
                     <td>
                       <div className="rotation-product-cell">
@@ -865,7 +816,7 @@ export default function RotacionSkuPage() {
                     <td className="date-cell">{shortDate(row.lastSale)}</td>
                   </tr>
                 ))}
-                {!filteredRows.length && (
+                {!dataLoad.incomplete && !filteredRows.length && (
                   <tr>
                     <td colSpan={13}>
                       <div className="empty-state">No hay SKU para los filtros actuales.</div>
@@ -874,7 +825,7 @@ export default function RotacionSkuPage() {
                 )}
               </tbody>
             </table>
-          </div>
+          </div></>
         )}
       </section>
 

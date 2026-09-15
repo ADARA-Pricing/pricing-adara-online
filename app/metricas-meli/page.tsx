@@ -1,4 +1,6 @@
 "use client";
+import { profitabilityTotals } from "@/lib/profitability";
+import { readPages } from "@/lib/pricingData";
 
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -20,7 +22,7 @@ type DailyMetric = {
   orders: number;
   units: number;
   revenue: number;
-  netProfit: number;
+  netProfit: number | null;
   netSale: number;
   normalizedNetSale: number;
   costBasis: number;
@@ -32,6 +34,7 @@ type DailyMetric = {
 };
 
 const salesSelectColumns = [
+  "normalized_profit_error",
   "id",
   "order_id",
   "order_date",
@@ -58,7 +61,7 @@ const metricLabels: Record<MetricKey, string> = {
 };
 
 const metricHelp: Partial<Record<MetricKey, string>> = {
-  grossProfitRate: "Ganancia neta real dividida por facturación bruta ML.",
+  grossProfitRate: "Ganancia guardada / facturación bruta de las mismas ventas con cálculo válido; excluye ventas sin cálculo.",
   realMargin: "Ganancia neta real dividida por venta neta real.",
   normalizedMargin: "Ganancia neta real dividida por venta neta normalizada a 1 pago.",
   marginOnCost: "Ganancia neta real dividida por costo usado para el cálculo.",
@@ -158,22 +161,8 @@ export default function MetricasMeliPage() {
   }
 
   async function fetchSalesSince(sinceIso: string) {
-    const pageSize = 1000;
-    const result: MercadoLibreOrderItem[] = [];
-    for (let from = 0; from < 30000; from += pageSize) {
-      const response = await supabase
-        .from("mercadolibre_order_items")
-        .select(salesSelectColumns)
-        .gte("order_date", sinceIso)
-        .neq("status", "cancelled")
-        .order("order_date", { ascending: false })
-        .range(from, from + pageSize - 1);
-      if (response.error) return response;
-      const page = (response.data || []) as unknown as MercadoLibreOrderItem[];
-      result.push(...page);
-      if (page.length < pageSize) break;
-    }
-    return { data: result, error: null };
+    try { const result = await readPages(supabase, { table: 'mercadolibre_order_items', columns: salesSelectColumns, filters: [['gte','order_date',sinceIso],['neq','status','cancelled']], order: 'order_date', ascending: false }, new AbortController().signal); return { data: result.rows, error: null }; }
+    catch (error) { return { data: null, error: { message: error instanceof Error ? error.message : 'Error de lectura' } }; }
   }
 
   async function loadData(retriedSession = false) {
@@ -265,10 +254,10 @@ export default function MetricasMeliPage() {
       const row = byKey.get(key);
       if (!row) return;
       const units = numberValue(sale.quantity);
-      const realProfit = numberValue(sale.real_total_net_profit ?? sale.normalized_total_net_profit);
+
       row.units += units;
       row.revenue += numberValue(sale.total_amount);
-      row.netProfit += realProfit;
+
       row.netSale += numberValue(sale.real_net_sale_price ?? sale.normalized_net_sale_price) * units;
       row.normalizedNetSale += numberValue(sale.normalized_net_sale_price) * units;
       row.costBasis += numberValue(sale.normalized_cost_for_profit) * units;
@@ -278,14 +267,14 @@ export default function MetricasMeliPage() {
 
     return days.map((row) => {
       const orders = orderIdsByDay.get(row.key)?.size || 0;
+      const summary = profitabilityTotals(sales.filter(sale => sale.status !== "cancelled" && dateKey(sale.order_date) === row.key));
       return {
         ...row,
         orders,
         avgTicket: orders > 0 ? row.revenue / orders : null,
-        grossProfitRate: row.revenue > 0 ? (row.netProfit / row.revenue) * 100 : null,
-        realMargin: row.netSale > 0 ? (row.netProfit / row.netSale) * 100 : null,
-        normalizedMargin: row.normalizedNetSale > 0 ? (row.netProfit / row.normalizedNetSale) * 100 : null,
-        marginOnCost: row.costBasis > 0 ? (row.netProfit / row.costBasis) * 100 : null,
+        ...summary,
+        grossProfitRate: summary.netProfit !== null && summary.coveredRevenue > 0 ? summary.netProfit / summary.coveredRevenue * 100 : null,
+        realMargin: summary.margin,
       };
     });
   }, [period, sales]);
@@ -294,7 +283,8 @@ export default function MetricasMeliPage() {
     const orders = dailyRows.reduce((total, row) => total + row.orders, 0);
     const units = dailyRows.reduce((total, row) => total + row.units, 0);
     const revenue = dailyRows.reduce((total, row) => total + row.revenue, 0);
-    const netProfit = dailyRows.reduce((total, row) => total + row.netProfit, 0);
+    const keys = new Set(dailyRows.map(row => row.key));
+    const summary = profitabilityTotals(sales.filter(sale => sale.status !== "cancelled" && keys.has(dateKey(sale.order_date))));
     const netSale = dailyRows.reduce((total, row) => total + row.netSale, 0);
     const normalizedNetSale = dailyRows.reduce((total, row) => total + row.normalizedNetSale, 0);
     const costBasis = dailyRows.reduce((total, row) => total + row.costBasis, 0);
@@ -302,14 +292,12 @@ export default function MetricasMeliPage() {
       orders,
       units,
       revenue,
-      netProfit,
+      ...summary,
       avgTicket: orders > 0 ? revenue / orders : null,
-      grossProfitRate: revenue > 0 ? (netProfit / revenue) * 100 : null,
-      realMargin: netSale > 0 ? (netProfit / netSale) * 100 : null,
-      normalizedMargin: normalizedNetSale > 0 ? (netProfit / normalizedNetSale) * 100 : null,
-      marginOnCost: costBasis > 0 ? (netProfit / costBasis) * 100 : null,
+      grossProfitRate: summary.netProfit !== null && summary.coveredRevenue > 0 ? summary.netProfit / summary.coveredRevenue * 100 : null,
+      realMargin: summary.margin,
     };
-  }, [dailyRows]);
+  }, [dailyRows, sales]);
 
   const sortedDailyRows = useMemo(() => {
     const multiplier = sortDirection === "asc" ? 1 : -1;
@@ -410,32 +398,32 @@ export default function MetricasMeliPage() {
       <section className="metricas-summary-grid">
         <article className="kpi-card">
           <span className="kpi-label">Facturación</span>
-          <strong className="kpi-value">{moneyWithCents(totals.revenue)}</strong>
+          <strong className="kpi-value">{loading && !sales.length ? "—" : moneyWithCents(totals.revenue)}</strong>
           <small className="kpi-meta">{periodLabel(period)}</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Ganancia neta</span>
-          <strong className="kpi-value">{moneyWithCents(totals.netProfit)}</strong>
-          <small className="kpi-meta">Suma real del periodo</small>
+          <strong className="kpi-value">{loading && !sales.length ? "—" : moneyWithCents(totals.netProfit)}</strong>
+          <small className="kpi-meta">Ganancia guardada · {totals.errors} sin cálculo</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Ganancia / facturación <MetricHelp metricKey="grossProfitRate" /></span>
-          <strong className="kpi-value">{percent(totals.grossProfitRate)}</strong>
+          <strong className="kpi-value">{loading && !sales.length ? "—" : percent(totals.grossProfitRate)}</strong>
           <small className="kpi-meta">Neta sobre bruto ML</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Margen real <MetricHelp metricKey="realMargin" /></span>
-          <strong className="kpi-value">{percent(totals.realMargin)}</strong>
+          <strong className="kpi-value">{loading && !sales.length ? "—" : percent(totals.realMargin)}</strong>
           <small className="kpi-meta">Sobre neto real</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Unidades</span>
-          <strong className="kpi-value">{formatMetric(totals.units, "units")}</strong>
+          <strong className="kpi-value">{loading && !sales.length ? "—" : formatMetric(totals.units, "units")}</strong>
           <small className="kpi-meta">{totals.orders} ventas</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Ticket promedio</span>
-          <strong className="kpi-value">{formatMetric(totals.avgTicket, "avgTicket")}</strong>
+          <strong className="kpi-value">{loading && !sales.length ? "—" : formatMetric(totals.avgTicket, "avgTicket")}</strong>
           <small className="kpi-meta">Facturación / ventas</small>
         </article>
       </section>

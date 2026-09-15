@@ -1,4 +1,7 @@
 "use client";
+import { usePricingLoad } from "@/lib/usePricingLoad";
+import { PricingDataStatus } from "@/components/PricingDataStatus";
+import { categoryOptions, normalizeFilter } from "@/lib/pricingData";
 
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -96,6 +99,7 @@ type B2BPublication = {
 export default function PricesPage() {
   const router = useRouter();
   const supabase = createClient();
+  const dataLoad = usePricingLoad('precios', supabase);
   const [products, setProducts] = useState<Product[]>([]);
   const [installments, setInstallments] = useState<
     MercadoLibreInstallmentFee[]
@@ -167,71 +171,15 @@ export default function PricesPage() {
     router.push("/login");
   }
 
-  async function loadData(options?: { quiet?: boolean }) {
-    if (!options?.quiet) setLoading(true);
-    setError(null);
-    const [
-      productsResponse,
-      installmentsResponse,
-      categoryFeesResponse,
-      taxesResponse,
-      shippingResponse,
-      marginsResponse,
-    ] = await Promise.all([
-      supabase
-        .from("products")
-        .select("*")
-        .neq("status", "discontinued")
-        .order("name", { ascending: true }),
-      supabase
-        .from("mercadolibre_installment_fees")
-        .select("*")
-        .eq("active", true)
-        .order("code", { ascending: true }),
-      supabase
-        .from("mercadolibre_category_fees")
-        .select("*")
-        .eq("active", true),
-      supabase.from("tax_settings").select("*").eq("key", "default").single(),
-      supabase
-        .from("mercadolibre_shipping_costs")
-        .select("*")
-        .eq("active", true),
-      supabase.from("product_channel_margins").select("*"),
-    ]);
-    if (!options?.quiet) setLoading(false);
-
-    if (productsResponse.error) setError(productsResponse.error.message);
-    else setProducts((productsResponse.data || []) as Product[]);
-    if (installmentsResponse.error)
-      setError(installmentsResponse.error.message);
-    else
-      setInstallments(
-        (
-          (installmentsResponse.data || []) as MercadoLibreInstallmentFee[]
-        ).filter((item) => item.code !== "MC"),
-      );
-    if (categoryFeesResponse.error)
-      setError(categoryFeesResponse.error.message);
-    else
-      setCategoryFees(
-        (categoryFeesResponse.data || []) as MercadoLibreCategoryFee[],
-      );
-    if (taxesResponse.error) setError(taxesResponse.error.message);
-    else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
-    if (shippingResponse.error) setError(shippingResponse.error.message);
-    else
-      setShippingCosts(
-        (shippingResponse.data || []) as MercadoLibreShippingCost[],
-      );
-    if (marginsResponse.error) setError(marginsResponse.error.message);
-    else
-      setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
+  async function loadData(options: {quiet?: boolean; initial?: boolean} = {}) {
+    setLoading(true);
+    try { await dataLoad.run({"installments":{"table":"mercadolibre_installment_fees","filters":[["eq","active",true]],"order":"code"},"categories":{"table":"mercadolibre_category_fees","filters":[["eq","active",true]]},"taxes":{"table":"tax_settings","filters":[["eq","key","default"]]},"products":{"table":"products","filters":[["neq","status","discontinued"]],"order":"name"},"publications":{"table":"mercadolibre_shipping_costs","filters":[["eq","active",true]]},"margins":{"table":"product_channel_margins"}}, data => { setProducts(data.products); setInstallments(data.installments.filter(item => item.code !== "MC")); setCategoryFees(data.categories); setTaxes(data.taxes[0] || defaultTaxSettings()); setShippingCosts(data.publications); setMarginSettings(data.margins); }, !options.initial); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
     checkSession();
-    loadData();
+    loadData({ initial: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -268,12 +216,7 @@ export default function PricesPage() {
     return sortPricingOptions(options);
   }, [installments]);
 
-  const categories = useMemo(() => {
-    const values = products
-      .map((product) => product.category || "")
-      .filter(Boolean);
-    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "es"));
-  }, [products]);
+  const categories = useMemo(() => categoryOptions(products.map(product => product.category)), [products]);
 
   const productStatuses = useMemo(() => {
     const values = products.map((product) => product.status || "").filter(Boolean);
@@ -321,7 +264,7 @@ export default function PricesPage() {
         `${product.sku} ${product.name} ${product.brand || ""} ${product.model || ""} ${product.category || ""} ${publicationText}`.toLowerCase();
       const matchesQuery = !q || text.includes(q);
       const matchesCategory =
-        !categoryFilter || (product.category || "") === categoryFilter;
+        !categoryFilter || normalizeFilter(product.category) === normalizeFilter(categoryFilter);
       const matchesStatus = !statusFilter || product.status === statusFilter;
       return matchesQuery && matchesCategory && matchesStatus;
     });
@@ -1669,6 +1612,7 @@ export default function PricesPage() {
         onRefresh={loadData}
         onLogout={logout}
       />
+      <PricingDataStatus state={dataLoad.state} publications={shippingCosts} onRefresh={() => loadData()} />
 
       {error && <div className="message error">{error}</div>}
       {message && <div className="message success">{message}</div>}
@@ -1676,12 +1620,12 @@ export default function PricesPage() {
       <section className="prices-kpi-grid">
         <article className="kpi-card">
           <span className="kpi-label">Productos</span>
-          <strong className="kpi-value">{priceKpis.total}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : priceKpis.total}</strong>
           <small className="kpi-meta">Cargados</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Con precio</span>
-          <strong className="kpi-value">{priceKpis.priced}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : priceKpis.priced}</strong>
           <small className="kpi-meta">Precio MC calculable</small>
         </article>
         <article className="kpi-card">
@@ -1691,7 +1635,7 @@ export default function PricesPage() {
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Sin costo</span>
-          <strong className="kpi-value">{priceKpis.withoutCost}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : priceKpis.withoutCost}</strong>
           <small className="kpi-meta">Requieren dato base</small>
         </article>
       </section>
@@ -1750,7 +1694,7 @@ export default function PricesPage() {
             </button>
           )}
         </div>
-        {loading ? (
+        {dataLoad.initial ? (
           <p>Cargando productos...</p>
         ) : (
           <div className="table-wrap">

@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Database, RefreshCcw, Search, ShieldCheck } from "lucide-react";
+import { usePricingLoad } from '@/lib/usePricingLoad';
+import { PricingDataStatus, PricingPagination } from '@/components/PricingDataStatus';
+import { normalizeFilter, categoryOptions } from '@/lib/pricingData';
+import { groupAlerts, resolutionHref } from '@/lib/accountAlerts';
+import { promotionCoverage } from '@/lib/promotionState';
+import { useRememberedView } from '@/lib/useRememberedView';
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -300,6 +306,8 @@ function actionTone(type: ActionType) {
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = createClient();
+  const dataLoad = usePricingLoad('dashboard', supabase);
+  const [listPage, setListPage] = useState(1);
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [opportunities, setOpportunities] = useState<MercadoLibrePromotionOpportunity[]>([]);
@@ -324,128 +332,11 @@ export default function DashboardPage() {
     if (!data.session) router.push("/login");
   }
 
-  async function fetchSalesSince(sinceIso: string) {
-    const pageSize = 1000;
-    const result: MercadoLibreOrderItem[] = [];
-    for (let from = 0; from < 20000; from += pageSize) {
-      const response = await supabase
-        .from("mercadolibre_order_items")
-        .select("*")
-        .gte("order_date", sinceIso)
-        .neq("status", "cancelled")
-        .order("order_date", { ascending: false })
-        .range(from, from + pageSize - 1);
-      if (response.error) return response;
-      const page = (response.data || []) as MercadoLibreOrderItem[];
-      result.push(...page);
-      if (page.length < pageSize) break;
-    }
-    return { data: result, error: null };
-  }
-
-  async function fetchOpportunities() {
-    const result: MercadoLibrePromotionOpportunity[] = [];
-    for (let from = 0; from < 20000; from += 1000) {
-      const response = await supabase
-        .from("mercadolibre_promotion_opportunities")
-        .select("*")
-        .order("meli_amount", { ascending: false })
-        .range(from, from + 999);
-      if (response.error) return response;
-      const rows = (response.data || []) as MercadoLibrePromotionOpportunity[];
-      result.push(...rows);
-      if (rows.length < 1000) break;
-    }
-    return { data: result, error: null };
-  }
-
-  async function loadData(retriedSession = false) {
+  async function loadData(options: { quiet?: boolean; initial?: boolean } = {}) {
+    const since = new Date(); since.setHours(0,0,0,0); since.setDate(since.getDate() - 65);
     setLoading(true);
-    setError(null);
-    const since = new Date();
-    since.setDate(since.getDate() - 65);
-
-    try {
-      const [
-        productsResponse,
-        publicationsResponse,
-        opportunitiesResponse,
-        salesResponse,
-        installmentsResponse,
-        categoryFeesResponse,
-        taxesResponse,
-        marginsResponse,
-        syncLogsResponse,
-        b2bGuardsResponse,
-      ] = await Promise.all([
-        // Un producto local pausado puede seguir teniendo stock en una
-        // publicación pausada de ML; excluirlo haría desaparecer una alerta
-        // justamente cuando hay que actuar.
-        supabase.from("products").select("*").neq("status", "discontinued").order("sku", { ascending: true }),
-        supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
-        fetchOpportunities(),
-        fetchSalesSince(since.toISOString()),
-        supabase.from("mercadolibre_installment_fees").select("*").eq("active", true).order("code", { ascending: true }),
-        supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
-        supabase.from("tax_settings").select("*").eq("key", "default").single(),
-        supabase.from("product_channel_margins").select("*"),
-        supabase
-          .from("mercadolibre_shipping_sync_logs")
-          .select("sku,meli_item_id,status,message,created_at")
-          .eq("status", "sku_not_found")
-          .order("created_at", { ascending: false })
-          .limit(2000),
-        supabase
-          .from("mercadolibre_b2b_margin_guard")
-          .select("meli_item_id,minimum_purchase_unit,sku,target_margin_rate,required_meli_contribution,active,last_checked_at,paused_at,paused_reason"),
-      ]);
-
-      const responseErrors = [
-        productsResponse.error,
-        publicationsResponse.error,
-        opportunitiesResponse.error,
-        salesResponse.error,
-        installmentsResponse.error,
-        categoryFeesResponse.error,
-        taxesResponse.error,
-        marginsResponse.error,
-        syncLogsResponse.error,
-        b2bGuardsResponse.error,
-      ].filter(Boolean);
-
-      if (!retriedSession && responseErrors.some((item) => isJwtClockError(item?.message))) {
-        const { error: refreshError } = await supabase.auth.refreshSession();
-        if (!refreshError) {
-          await loadData(true);
-          return;
-        }
-      }
-
-      if (productsResponse.error) setError(productsResponse.error.message);
-      else setProducts((productsResponse.data || []) as Product[]);
-      if (publicationsResponse.error) setError(publicationsResponse.error.message);
-      else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
-      if (opportunitiesResponse.error) setError(opportunitiesResponse.error.message);
-      else setOpportunities((opportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]);
-      if (salesResponse.error) setError(salesResponse.error.message);
-      else setSales((salesResponse.data || []) as MercadoLibreOrderItem[]);
-      if (installmentsResponse.error) setError(installmentsResponse.error.message);
-      else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
-      if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
-      else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
-      if (taxesResponse.error) setError(taxesResponse.error.message);
-      else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
-      if (marginsResponse.error) setError(marginsResponse.error.message);
-      else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
-      if (syncLogsResponse.error) setError(syncLogsResponse.error.message);
-      else setSyncLogs((syncLogsResponse.data || []) as MercadoLibreSyncLog[]);
-      if (b2bGuardsResponse.error) setError(b2bGuardsResponse.error.message);
-      else setB2bGuards((b2bGuardsResponse.data || []) as B2BMarginGuard[]);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "No se pudo cargar el dashboard.");
-    } finally {
-      setLoading(false);
-    }
+    try { await dataLoad.run({ products: { table: 'products', filters: [['neq','status','discontinued']] }, publications: { table: 'mercadolibre_shipping_costs', filters: [['eq','active',true]] }, opportunities: { table: 'mercadolibre_promotion_opportunities' }, installments: { table: 'mercadolibre_installment_fees', filters: [['eq','active',true]] }, categories: { table: 'mercadolibre_category_fees', filters: [['eq','active',true]] }, taxes: { table: 'tax_settings', filters: [['eq','key','default']] }, margins: { table: 'product_channel_margins' }, sales: { table: 'mercadolibre_order_items', columns: 'id,order_id,order_date,status,meli_item_id,variation_id,sku,product_id,title,quantity,unit_price,total_amount,updated_at', filters: [['gte','order_date',since.toISOString()],['neq','status','cancelled']], order: 'order_date', ascending: false }, logs: { table: 'mercadolibre_shipping_sync_logs', columns: 'id,sku,meli_item_id,status,message,created_at', filters: [['eq','status','sku_not_found']] }, guards: { table: 'mercadolibre_b2b_margin_guard' } }, data => { setProducts(data.products); setPublications(data.publications); setOpportunities(data.opportunities); setInstallments(data.installments.filter(item => item.code !== 'MC')); setCategoryFees(data.categories); setTaxes(data.taxes[0] || defaultTaxSettings()); setMarginSettings(data.margins); setSales(data.sales); setSyncLogs(data.logs); setB2bGuards(data.guards); }, !options.initial); }
+    finally { setLoading(false); }
   }
 
   async function syncAccount() {
@@ -564,7 +455,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     checkSession();
-    loadData();
+    loadData({ initial: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -844,7 +735,7 @@ export default function DashboardPage() {
         });
       }
 
-      if (!activePromoKeys.has(`${product.sku}|${installment}`)) {
+      if (promotionCoverage(publication).known && !dataLoad.incomplete && !activePromoKeys.has(`${product.sku}|${installment}`)) {
         actions.push({
           key: `missing-promo-${publication.id || publication.meli_item_id}`,
           type: "missing_promo",
@@ -1048,7 +939,7 @@ export default function DashboardPage() {
       sales30: [...rotationBySku.values()].reduce((total, item) => total + item.units30, 0),
       revenue30: [...rotationBySku.values()].reduce((total, item) => total + item.revenue30, 0),
     };
-  }, [products, productsById, publications, opportunities, sales, pricingOptions, categoryFees, taxes, marginSettings, syncLogs, b2bGuards]);
+  }, [products, productsById, publications, opportunities, sales, pricingOptions, categoryFees, taxes, marginSettings, syncLogs, b2bGuards, dataLoad.incomplete]);
 
   const filteredActions = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -1060,23 +951,26 @@ export default function DashboardPage() {
     });
   }, [account.actions, priorityFilter, query, typeFilter]);
 
+  const alertGroups = useMemo(() => groupAlerts(filteredActions), [filteredActions]);
+  useRememberedView(supabase, 'dashboard', [query, typeFilter, priorityFilter, listPage], (values) => { setQuery(values[0]); setTypeFilter(values[1]); setPriorityFilter(values[2]); setListPage(values[3]); }, !dataLoad.incomplete);
   return (
     <main className="container wide dashboard-page opportunities-page">
       <PageHero
         title="Control de cuenta"
         description="Detectá y resolvé primero los problemas que pueden afectar margen, stock o precios mayoristas."
         icon={<ShieldCheck aria-hidden="true" />}
-        onRefresh={loadData}
-        refreshLabel={loading ? "Actualizando..." : "Actualizar"}
+        onRefresh={() => loadData()}
+        refreshLabel={loading ? "Actualizando..." : "Actualizar vista"}
         refreshDisabled={loading || syncing}
         actions={
           <button className="button" type="button" onClick={syncAccount} disabled={loading || syncing}>
             <RefreshCcw aria-hidden="true" />
-            {syncing ? "Sincronizando..." : "Sync completa"}
+            {syncing ? "Sincronizando..." : "Sincronizar con Mercado Libre"}
           </button>
         }
       />
 
+      <PricingDataStatus state={dataLoad.state} publications={publications} onRefresh={() => loadData()} />
       {error && <div className="message error">{error}</div>}
       {syncInfo && <div className="message success">{syncInfo}</div>}
       {syncProgress && (
@@ -1095,22 +989,22 @@ export default function DashboardPage() {
       <section className="dashboard-account-score-grid">
         <article className={`card dashboard-kpi dashboard-kpi-primary ${account.pausedWithStock ? "danger" : "success"}`}>
           <span>Pausadas con stock</span>
-          <strong>{account.pausedWithStock}</strong>
+          <strong>{dataLoad.initial ? "—" : account.pausedWithStock}</strong>
           <small>Se pueden estar perdiendo ventas</small>
         </article>
         <article className={`card dashboard-kpi dashboard-kpi-primary ${(account.typeCounts.low_margin || 0) ? "danger" : "success"}`}>
           <span>Margen real bajo objetivo</span>
-          <strong>{account.typeCounts.low_margin || 0}</strong>
+          <strong>{dataLoad.initial ? "—" : account.typeCounts.low_margin || 0}</strong>
           <small>Publicaciones activas debajo de su margen configurado</small>
         </article>
         <article className={`card dashboard-kpi dashboard-kpi-primary ${account.b2bLowMargin ? "danger" : "success"}`}>
           <span>Mayorista a revisar</span>
-          <strong>{account.b2bLowMargin}</strong>
+          <strong>{dataLoad.initial ? "—" : account.b2bLowMargin}</strong>
           <small>Rangos B2B activos debajo de 5%</small>
         </article>
         <article className={`card dashboard-kpi dashboard-kpi-primary ${account.actions.filter((action) => action.priority === "critica").length ? "danger" : "success"}`}>
           <span>Alertas críticas</span>
-          <strong>{account.actions.filter((action) => action.priority === "critica").length}</strong>
+          <strong>{dataLoad.initial ? "—" : account.actions.filter((action) => action.priority === "critica").length}</strong>
           <small>Resolver antes de ajustar promociones</small>
         </article>
       </section>
@@ -1118,13 +1012,13 @@ export default function DashboardPage() {
       <section className="opportunity-summary-grid dashboard-action-summary">
         <button className={`kpi-card opportunity-summary ${typeFilter === "all" ? "active" : ""}`} type="button" onClick={() => setTypeFilter("all")}>
           <span className="kpi-label">Todas las alertas</span>
-          <strong className="kpi-value">{account.actions.length}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : account.actions.length}</strong>
           <small className="kpi-meta">Ordenadas por impacto</small>
         </button>
         {(["paused_stock", "low_margin", "b2b_margin", "data_issue", "stock_risk"] as ActionType[]).map((type) => (
           <button className={`kpi-card opportunity-summary ${typeFilter === type ? "active" : ""}`} type="button" onClick={() => setTypeFilter(type)} key={type}>
             <span className="kpi-label">{typeLabel(type)}</span>
-            <strong className="kpi-value">{account.typeCounts[type] || 0}</strong>
+            <strong className="kpi-value">{dataLoad.initial ? "—" : account.typeCounts[type] || 0}</strong>
             <small className="kpi-meta">Ver casos</small>
           </button>
         ))}
@@ -1133,7 +1027,7 @@ export default function DashboardPage() {
       <section className="card toolbar-card opportunity-toolbar">
         <label className="search-control">
           <Search aria-hidden="true" />
-          <input className="form-control search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, MLA, producto o alerta" />
+          <input className="form-control search-field" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Buscar alertas" placeholder="Buscar SKU, MLA, producto o alerta" />
         </label>
         <select className="form-control" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}>
           <option value="all">Todas las prioridades</option>
@@ -1163,7 +1057,7 @@ export default function DashboardPage() {
           <div className="opportunity-list-head">
             <div>
             <h2>Problemas para actuar</h2>
-            <p>{filteredActions.length} resultado(s). Cada caso usa datos reales de la última sincronización.</p>
+            <p>{filteredActions.length} resultado(s). Casos calculados sobre los datos guardados; verificar fecha y cobertura antes de actuar.</p>
           </div>
           <div className="dashboard-last-sync">
             <Database aria-hidden="true" />
@@ -1171,8 +1065,14 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <PricingPagination page={listPage} total={dataLoad.initial ? 0 : alertGroups.length} onPage={setListPage} />
+        <p>{dataLoad.initial ? '—' : alertGroups.length} productos afectados · {dataLoad.initial ? '—' : new Set(filteredActions.map(item => item.itemId).filter(Boolean)).size} publicaciones · {dataLoad.initial ? '—' : filteredActions.length} alertas. Las ventas se cuentan por SKU; margen y precio corresponden al MLA.</p>
+        <details className="pricing-explanation"><summary>Severidad y alcance</summary><p>Regla existente: margen negativo, cero o menor al 5% se clasifica crítico. Un desvío de más de 0,1 puntos frente al objetivo es alto si el margen alcanza 5%. Por eso una diferencia pequeña puede ser crítica cuando el margen absoluto es menor al 5%. No se cambiaron estos umbrales de negocio.</p><p>Revisar antes de actuar si faltan datos o las publicaciones están atrasadas. Actualizar vista sólo consulta la base. Sincronizar con Mercado Libre actualiza la integración y puede ejecutar las protecciones mayoristas configuradas.</p></details>
         <div className="opportunity-action-list">
-          {filteredActions.map((item) => (
+          {alertGroups.slice((Math.min(listPage, Math.max(1, Math.ceil(alertGroups.length / 40))) - 1) * 40, Math.min(listPage, Math.max(1, Math.ceil(alertGroups.length / 40))) * 40).map((group) => (
+            <details className="pricing-alert-group" key={group.sku}>
+              <summary><strong>{group.sku} · {group.alerts[0].productName}</strong><span>{group.alerts.length} alertas · {group.publications} publicaciones · Prioridad {priorityLabel(group.alerts[0].priority)}</span><small>Ventas del SKU: {group.alerts[0].units7 ?? '—'} u. / 7 días · {group.alerts[0].units30 ?? '—'} u. / 30 días</small></summary>
+              {group.alerts.map((item) => (
             <article className={`action-card opportunity-row ${actionTone(item.type)} priority-${item.priority}`} key={item.key}>
               <div className="opportunity-row-main">
                 <div className="opportunity-row-title">
@@ -1181,7 +1081,7 @@ export default function DashboardPage() {
                   {item.startDate && <span className="badge badge-date">Desde {formatDate(item.startDate)}</span>}
                 </div>
                 <strong>{item.sku} - {item.productName}</strong>
-                <small>{item.title}: {item.detail}</small>
+                <small>{item.title}: {item.detail}</small><small>{dataLoad.incomplete || (item.itemId && (!publications.find(publication => publication.meli_item_id === item.itemId)?.meli_last_sync_at || Date.now() - Date.parse(publications.find(publication => publication.meli_item_id === item.itemId)?.meli_last_sync_at || '') > 86400000)) ? 'Requiere verificación: datos parciales o desactualizados · ' : ''}{item.itemId ? 'Dato ML: ' + formatDateTime(publications.find(publication => publication.meli_item_id === item.itemId)?.meli_last_sync_at) : 'Métrica consolidada por SKU'}</small>
                 <small>{[item.itemId, typeof item.stock === "number" ? `Stock ${item.stock}` : null].filter(Boolean).join(" | ")}</small>
               </div>
 
@@ -1191,11 +1091,11 @@ export default function DashboardPage() {
                   <strong className={item.margin === null || item.margin === undefined ? "neutral" : item.margin < 5 ? "negative" : item.margin < 10 ? "warning" : "positive"}>{item.margin === undefined || item.margin === null ? "-" : percent(item.margin)}</strong>
                 </div>
                 <div className="mini-stat">
-                  <span>Venta 7d</span>
+                  <span>Venta SKU 7d</span>
                   <strong>{item.units7 ?? 0} u.</strong>
                 </div>
                 <div className="mini-stat">
-                  <span>Venta 30d</span>
+                  <span>Venta SKU 30d</span>
                   <strong>{item.units30 ?? 0} u.</strong>
                 </div>
                 <div className="mini-stat">
@@ -1204,11 +1104,12 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <Link className="button opportunity-open-button" href={item.href}>
+              <Link className="button opportunity-open-button" href={resolutionHref(item)}>
                 {item.type === "b2b_margin" ? "Ver mayorista" : item.type === "low_margin" || item.type === "low_margin_high_rotation" ? "Revisar precio" : "Resolver"}
                 <ChevronRight aria-hidden="true" />
               </Link>
             </article>
+              ))}</details>
           ))}
 
           {loading && !filteredActions.length && (
@@ -1218,7 +1119,7 @@ export default function DashboardPage() {
               <div className="skeleton skeleton-action" />
             </>
           )}
-          {!loading && !filteredActions.length && <div className="empty-state">No hay acciones para los filtros actuales.</div>}
+          {!dataLoad.incomplete && !filteredActions.length && <div className="empty-state">No hay acciones para los filtros actuales.</div>}
         </div>
       </section>
 

@@ -1,4 +1,7 @@
 "use client";
+import { usePricingLoad } from "@/lib/usePricingLoad";
+import { PricingDataStatus } from "@/components/PricingDataStatus";
+import { useDialogFocus } from "@/lib/useDialogFocus";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -286,6 +289,7 @@ function isCurrentShippingCost(shipping: MercadoLibreShippingCost) {
 export default function SimulatorPage() {
   const router = useRouter();
   const supabase = createClient();
+  const dataLoad = usePricingLoad("simulador", supabase);
 
   const [form, setForm] = useState<SimulationForm>(initialForm);
   const [lastEdited, setLastEdited] = useState<LastEdited>("price");
@@ -299,6 +303,8 @@ export default function SimulatorPage() {
   const [savingSimulation, setSavingSimulation] = useState(false);
   const [simulationLibraryOpen, setSimulationLibraryOpen] = useState(false);
   const [baseProductPickerOpen, setBaseProductPickerOpen] = useState(false);
+  const basePickerRef = useDialogFocus<HTMLElement>(baseProductPickerOpen, () => setBaseProductPickerOpen(false));
+  const libraryRef = useDialogFocus<HTMLElement>(simulationLibraryOpen, () => setSimulationLibraryOpen(false));
   const [baseDetailsOpen, setBaseDetailsOpen] = useState(false);
   const [loadedSimulation, setLoadedSimulation] = useState<SavedSimulation | null>(null);
   const [baseProductQuery, setBaseProductQuery] = useState("");
@@ -327,66 +333,11 @@ export default function SimulatorPage() {
   }
 
   async function loadData() {
-    setLoading(true);
-    setError(null);
-
-    const [channelsResponse, categoriesResponse, taxesResponse, productsResponse, shippingResponse, savedResponse] = await Promise.all([
-      supabase
-        .from("mercadolibre_installment_fees")
-        .select("*")
-        .eq("active", true),
-      supabase
-        .from("mercadolibre_category_fees")
-        .select("*")
-        .eq("active", true)
-        .order("category", { ascending: true }),
-      supabase
-        .from("tax_settings")
-        .select("*")
-        .eq("key", "default")
-        .maybeSingle(),
-      supabase
-        .from("products")
-        .select("*")
-        .eq("status", "active"),
-      supabase
-        .from("mercadolibre_shipping_costs")
-        .select("*")
-        .eq("active", true),
-      supabase
-        .from("simulator_saved_simulations")
-        .select("*")
-        .order("updated_at", { ascending: false }),
-    ]);
-
-    setLoading(false);
-
-    if (channelsResponse.error) setError(channelsResponse.error.message);
-    else setInstallments((channelsResponse.data || []) as MercadoLibreInstallmentFee[]);
-
-    if (categoriesResponse.error) setError(categoriesResponse.error.message);
-    else setCategories((categoriesResponse.data || []) as MercadoLibreCategoryFee[]);
-
-    if (taxesResponse.error) setError(taxesResponse.error.message);
-    else if (taxesResponse.data) {
-      const loadedTaxes = taxesResponse.data as TaxSettings;
-      setTaxes(loadedTaxes);
-      setForm((current) => ({
-        ...current,
-        iibbRate: current.iibbRate || formatPercentInput(loadedTaxes.iibb_rate),
-        idcRate: current.idcRate || formatPercentInput(loadedTaxes.idc_rate),
-        iiggRate: current.iiggRate || formatPercentInput(loadedTaxes.iigg_rate),
-      }));
-    }
-
-    if (productsResponse.error) setError(productsResponse.error.message);
-    else setProducts((productsResponse.data || []) as Product[]);
-
-    if (shippingResponse.error) setError(shippingResponse.error.message);
-    else setShippingCosts((shippingResponse.data || []) as MercadoLibreShippingCost[]);
-
-    if (savedResponse.error) setError(savedResponse.error.message);
-    else setSavedSimulations((savedResponse.data || []) as SavedSimulation[]);
+    setLoading(true); setError(null);
+    try { await dataLoad.run({
+      installments: { table: 'mercadolibre_installment_fees', filters: [['eq','active',true]] }, categories: { table: 'mercadolibre_category_fees', filters: [['eq','active',true]] }, taxes: { table: 'tax_settings', filters: [['eq','key','default']] }, products: { table: 'products', filters: [['eq','status','active']] }, publications: { table: 'mercadolibre_shipping_costs', filters: [['eq','active',true]] }, saved: { table: 'simulator_saved_simulations', order: 'updated_at', ascending: false },
+    }, data => { setInstallments(data.installments); setCategories(data.categories); setProducts(data.products); setShippingCosts(data.publications); setSavedSimulations(data.saved); if (data.taxes[0]) { const loadedTaxes = data.taxes[0] as TaxSettings; setTaxes(loadedTaxes); setForm(current => ({...current, iibbRate: current.iibbRate || formatPercentInput(loadedTaxes.iibb_rate), idcRate: current.idcRate || formatPercentInput(loadedTaxes.idc_rate), iiggRate: current.iiggRate || formatPercentInput(loadedTaxes.iigg_rate)})); } }); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
@@ -955,6 +906,7 @@ export default function SimulatorPage() {
         onRefresh={loadData}
         onLogout={logout}
       />
+      <PricingDataStatus state={dataLoad.state} publications={shippingCosts} onRefresh={() => loadData()} />
 
       {error && <div className="message error">{error}</div>}
       {message && <div className="message success">{message}</div>}
@@ -1157,7 +1109,7 @@ export default function SimulatorPage() {
               <strong>{moneyWithCents(simulation.summary?.valid ? simulation.summary.netProfit : 0)}</strong>
             </div>
             <div className={`simulator-result-metric main ${summaryStatus.className}`}>
-              <span>Rentabilidad real</span>
+              <span>Rentabilidad estimada</span>
               <strong>{simulation.summary?.valid ? percent(simulation.summary.marginOnNetSale) : "-"}</strong>
               <em className={`badge simulator-status-badge ${summaryStatus.className}`}>{summaryStatus.label}</em>
             </div>
@@ -1272,7 +1224,7 @@ export default function SimulatorPage() {
           description="Compará la rentabilidad estimada según el canal de venta."
         />
 
-        {loading ? (
+        {dataLoad.initial ? (
           <p>Cargando canales...</p>
         ) : (
           <div className="table-wrap">
@@ -1329,7 +1281,7 @@ export default function SimulatorPage() {
 
       {baseProductPickerOpen && (
         <div className="modal-backdrop simulator-library-backdrop" onClick={() => setBaseProductPickerOpen(false)}>
-          <section className="modal-card simulator-library-modal simulator-base-product-modal" onClick={(event) => event.stopPropagation()}>
+          <section ref={basePickerRef} role="dialog" aria-modal="true" aria-label="Buscar producto base" tabIndex={-1} className="modal-card simulator-library-modal simulator-base-product-modal" onClick={(event) => event.stopPropagation()}>
             <div className="simulator-library-header">
               <div>
                 <h2>Elegir producto base</h2>
@@ -1434,7 +1386,7 @@ export default function SimulatorPage() {
 
       {simulationLibraryOpen && (
         <div className="modal-backdrop simulator-library-backdrop" onClick={() => setSimulationLibraryOpen(false)}>
-          <section className="modal-card simulator-library-modal" onClick={(event) => event.stopPropagation()}>
+          <section ref={libraryRef} role="dialog" aria-modal="true" aria-label="Simulaciones guardadas" tabIndex={-1} className="modal-card simulator-library-modal" onClick={(event) => event.stopPropagation()}>
             <div className="simulator-library-header">
               <div>
                 <h2>Cargar simulación</h2>

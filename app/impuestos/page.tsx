@@ -1,4 +1,6 @@
 "use client";
+import { usePricingLoad } from "@/lib/usePricingLoad";
+import { PricingDataStatus } from "@/components/PricingDataStatus";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -29,6 +31,7 @@ function formatDateTime(value?: string | null) {
 export default function TaxesPage() {
   const router = useRouter();
   const supabase = createClient();
+  const dataLoad = usePricingLoad("impuestos", supabase);
   const [form, setForm] = useState<TaxSettings>(defaultTaxSettings());
   const [previewCost, setPreviewCost] = useState("10000");
   const [previewSalePrice, setPreviewSalePrice] = useState("21000");
@@ -43,24 +46,7 @@ export default function TaxesPage() {
     if (!data.session) router.push("/login");
   }
 
-  async function loadData() {
-    setLoading(true);
-    setError(null);
-    const { data, error } = await supabase
-      .from("tax_settings")
-      .select("*")
-      .eq("key", "default")
-      .maybeSingle();
-
-    setLoading(false);
-
-    if (error) {
-      setError(error.message);
-      return;
-    }
-
-    setForm((data || defaultTaxSettings()) as TaxSettings);
-  }
+  async function loadData() { setLoading(true); setError(null); try { await dataLoad.run({ taxes: { table: 'tax_settings', filters: [['eq','key','default']] } }, data => setForm(data.taxes[0] || defaultTaxSettings())); } finally { setLoading(false); } }
 
   useEffect(() => {
     checkSession();
@@ -141,6 +127,7 @@ export default function TaxesPage() {
         onRefresh={loadData}
         icon="▤"
       />
+      <PricingDataStatus state={dataLoad.state} onRefresh={() => loadData()} />
 
       {message && <div className="message success">{message}</div>}
       {error && <div className="message error">{error}</div>}
@@ -162,7 +149,7 @@ export default function TaxesPage() {
             </button>
           </div>
 
-          {loading ? (
+          {dataLoad.initial ? (
             <p>Cargando...</p>
           ) : (
             <>

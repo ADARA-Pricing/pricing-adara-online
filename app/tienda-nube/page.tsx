@@ -1,6 +1,10 @@
 "use client";
+import { LatestRequest } from "@/lib/pricingData";
+import { usePricingLoad } from "@/lib/usePricingLoad";
+import { PricingDataStatus } from "@/components/PricingDataStatus";
+import { categoryOptions, normalizeFilter } from "@/lib/pricingData";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Check, Clock3, ExternalLink, Globe2, Image as ImageIcon, Monitor, Plus, RefreshCw, Save, Search, Smartphone, Store, Trash2, Upload } from "lucide-react";
 import { PageHero } from "@/components/PageHero";
@@ -371,6 +375,9 @@ function imageSize(file: File) {
 export default function TiendaNubePage() {
   const router = useRouter();
   const supabase = createClient();
+  const dataLoad = usePricingLoad("tienda-nube", supabase);
+  const statusRequests = useRef(new LatestRequest());
+  useEffect(() => { const requests = statusRequests.current; return () => requests.cancel(); }, []);
   const [activeTab, setActiveTab] = useState<TiendaNubeTab>("prices");
   const [status, setStatus] = useState<TnStatus | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -407,66 +414,36 @@ export default function TiendaNubePage() {
   }
 
   async function loadData() {
-    setLoading(true);
-    setError(null);
+    const ticket = statusRequests.current.begin();
+    setLoading(true); setError(null);
+    const savedData = dataLoad.run({
+      products: { table: 'products', filters: [['in','status',['active','paused']]] },
+      publications: { table: 'tiendanube_publications', filters: [['eq','active',true]] },
+      meli: { table: 'mercadolibre_shipping_costs', filters: [['eq','active',true]] },
+      installments: { table: 'mercadolibre_installment_fees', filters: [['eq','active',true]] },
+      categories: { table: 'mercadolibre_category_fees', filters: [['eq','active',true]] },
+      margins: { table: 'product_channel_margins' }, taxes: { table: 'tax_settings', filters: [['eq','key','default']] },
+    }, data => { setProducts(data.products); setPublications(data.publications); setMeliPublications(data.meli); setOptions(data.installments); setCategoryFees(data.categories); setMargins(data.margins); if (data.taxes[0]) setTaxes(data.taxes[0]); });
     try {
-      const [
-        statusResponse,
-        productsResponse,
-        publicationsResponse,
-        meliPublicationsResponse,
-        optionsResponse,
-        categoryFeesResponse,
-        marginsResponse,
-        taxesResponse,
-        bannersResponse,
-        diagnosticsResponse,
-      ] = await Promise.all([
-        fetchJsonSafe<TnStatus>("/api/tiendanube/status", "Estado Tienda Nube"),
-        supabase.from("products").select("*").in("status", ["active", "paused"]).order("sku", { ascending: true }),
-        supabase.from("tiendanube_publications").select("*").eq("active", true).order("sku", { ascending: true }),
-        supabase.from("mercadolibre_shipping_costs").select("*").eq("active", true),
-        supabase.from("mercadolibre_installment_fees").select("*").eq("active", true),
-        supabase.from("mercadolibre_category_fees").select("*").eq("active", true),
-        supabase.from("product_channel_margins").select("*"),
-        supabase.from("tax_settings").select("*").eq("key", "default").maybeSingle(),
-        fetchJsonSafe<{ banners?: TiendanubeWebBanner[] }>("/api/tiendanube/web-banners", "Banners Tienda Nube"),
-        fetchJsonSafe<WebScriptDiagnostics>("/api/tiendanube/install-web-script", "Diagnóstico web Tienda Nube"),
+      const [statusResponse, bannersResponse, diagnosticsResponse] = await Promise.all([
+        fetchJsonSafe<TnStatus>('/api/tiendanube/status', 'Estado Tienda Nube'),
+        fetchJsonSafe<{ banners?: TiendanubeWebBanner[] }>('/api/tiendanube/web-banners', 'Banners Tienda Nube'),
+        fetchJsonSafe<WebScriptDiagnostics>('/api/tiendanube/install-web-script', 'Diagnóstico web Tienda Nube'),
       ]);
-
-      if ("error" in statusResponse && statusResponse.error) setError(statusResponse.error);
-      else setStatus(statusResponse as TnStatus);
-      if (productsResponse.error) setError(productsResponse.error.message);
-      else setProducts((productsResponse.data || []) as Product[]);
-      if (publicationsResponse.error) setError(publicationsResponse.error.message);
-      else setPublications((publicationsResponse.data || []) as TiendanubePublication[]);
-      if (meliPublicationsResponse.error) setError(meliPublicationsResponse.error.message);
-      else setMeliPublications((meliPublicationsResponse.data || []) as MercadoLibreShippingCost[]);
-      if (optionsResponse.error) setError(optionsResponse.error.message);
-      else setOptions((optionsResponse.data || []) as MercadoLibreInstallmentFee[]);
-      if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
-      else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
-      if (marginsResponse.error) setError(marginsResponse.error.message);
-      else setMargins((marginsResponse.data || []) as ProductChannelMargin[]);
-      if (!taxesResponse.error && taxesResponse.data) setTaxes(taxesResponse.data as TaxSettings);
-      if ("error" in bannersResponse && bannersResponse.error) {
-        setError(bannersResponse.error);
-      } else {
-        const bannersData = bannersResponse as { banners?: TiendanubeWebBanner[] };
-        setWebBanners((bannersData.banners || []) as TiendanubeWebBanner[]);
-      }
-      setWebDiagnostics("error" in diagnosticsResponse && diagnosticsResponse.error ? { error: diagnosticsResponse.error } : diagnosticsResponse as WebScriptDiagnostics);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "No se pudo cargar Tienda Nube.");
-    } finally {
-      setLoading(false);
-    }
+      if (!ticket.current()) return;
+      if ('error' in statusResponse && statusResponse.error) setError(statusResponse.error); else setStatus(statusResponse as TnStatus);
+      if ('error' in bannersResponse && bannersResponse.error) setError(bannersResponse.error); else setWebBanners((bannersResponse as {banners?: TiendanubeWebBanner[]}).banners || []);
+      setWebDiagnostics(diagnosticsResponse as WebScriptDiagnostics);
+    } catch (error) { setError(error instanceof Error ? error.message : 'No se pudo leer Tienda Nube'); }
+    finally { await savedData; if (ticket.current()) setLoading(false); }
   }
 
   useEffect(() => {
     checkSession();
     loadData();
     const params = new URLSearchParams(window.location.search);
+    const sku = params.get("sku");
+    if (sku) setQuery(sku);
     const connected = params.get("tn_connected");
     const tnError = params.get("tn_error");
     if (connected) setMessage("Tienda Nube conectada.");
@@ -534,10 +511,7 @@ export default function TiendaNubePage() {
     return normalizeOption(found || fallbackTiendaNubeOption());
   }, [options]);
 
-  const categories = useMemo(() => {
-    return [...new Set(products.map((product) => product.category).filter(Boolean) as string[])]
-      .sort((a, b) => a.localeCompare(b, "es"));
-  }, [products]);
+  const categories = useMemo(() => categoryOptions(products.map(product => product.category)), [products]);
 
   const rows = useMemo<Row[]>(() => {
     const productById = new Map(products.filter((product) => product.id).map((product) => [product.id as string, product]));
@@ -708,7 +682,7 @@ export default function TiendaNubePage() {
     const q = query.trim().toLowerCase();
     return rows
       .filter((row) => {
-        if (categoryFilter && row.category !== categoryFilter) return false;
+        if (categoryFilter && normalizeFilter(row.category) !== normalizeFilter(categoryFilter)) return false;
         if (statusFilter && row.filterStatus !== statusFilter) return false;
         if (onlyWithStock && row.stock <= 0) return false;
         if (!q) return true;
@@ -1054,6 +1028,7 @@ export default function TiendaNubePage() {
           </>
         }
       />
+      <PricingDataStatus state={dataLoad.state} publications={meliPublications} onRefresh={() => loadData()} />
 
       {error && <div className="alert error">{error}</div>}
       {message && <div className="alert success">{message}</div>}
@@ -1080,22 +1055,22 @@ export default function TiendaNubePage() {
       <section className="rentabilidad-kpi-grid tn-kpis">
         <article className="card rentabilidad-kpi-card promo">
           <span>Cuenta</span>
-          <strong>{status?.connected ? `Store ${status.account?.store_id}` : "Sin conectar"}</strong>
+          <strong>{status ? (status.connected ? `Store ${status.account?.store_id}` : "Sin conectar") : "Sin verificar"}</strong>
           <small>{status?.account?.scope || "Permisos pendientes"}</small>
         </article>
         <article className="card rentabilidad-kpi-card">
           <span>OK</span>
-          <strong>{metrics.ok}</strong>
+          <strong>{dataLoad.initial ? "—" : metrics.ok}</strong>
           <small>Dentro de tolerancia</small>
         </article>
         <article className="card rentabilidad-kpi-card warning">
           <span>Revisar precio</span>
-          <strong>{metrics.needsPrice}</strong>
+          <strong>{dataLoad.initial ? "—" : metrics.needsPrice}</strong>
           <small>Diferencia mayor a 1%</small>
         </article>
         <article className="card rentabilidad-kpi-card missing">
           <span>Faltan en TN</span>
-          <strong>{metrics.missing}</strong>
+          <strong>{dataLoad.initial ? "—" : metrics.missing}</strong>
           <small>{metrics.unlinked} sin producto local</small>
         </article>
       </section>
@@ -1106,7 +1081,7 @@ export default function TiendaNubePage() {
             <Search aria-hidden="true" />
             <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o ID Tienda Nube" />
           </label>
-          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+          <select aria-label="Categoría" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
             <option value="">Todas las categorías</option>
             {categories.map((category) => <option value={category} key={category}>{category}</option>)}
           </select>
@@ -1137,7 +1112,7 @@ export default function TiendaNubePage() {
               <span className="critical">Sin producto local</span>
             </div>
           </div>
-          <span className="badge tn-sync-badge">Últ. sync {shortDate(publications[0]?.tn_last_sync_at)}</span>
+          <span className="badge tn-sync-badge">Última actualización visible {shortDate(publications.map(item => item.tn_last_sync_at).filter(Boolean).sort().at(-1))} · no implica cobertura completa</span>
         </div>
         <div className="tn-table-wrap">
           <table className="rentabilidad-table tn-table">

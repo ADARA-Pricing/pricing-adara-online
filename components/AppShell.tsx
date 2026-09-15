@@ -169,7 +169,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={`sidebar-link ${active ? "active" : ""}`}
-                title={collapsed ? item.label : undefined}
+                title={item.label}
+                aria-label={item.label}
+                aria-current={active ? "page" : undefined}
               >
                 <span className="sidebar-icon"><SidebarIcon icon={item.icon} active={active} /></span>
                 <span className="sidebar-label">{item.label}</span>
@@ -181,7 +183,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
             className={`sidebar-link sidebar-section ${metricsActive ? "active-section" : ""}`}
             onClick={toggleMetricsOpen}
-            aria-expanded={showMetrics}
+            aria-label="Métricas ML" title="Métricas ML" aria-expanded={showMetrics}
           >
             <span className="sidebar-icon"><SidebarIcon icon={ChartColumnIncreasing} active={metricsActive} /></span>
             <span className="sidebar-label">Metricas ML</span>
@@ -196,7 +198,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={`sidebar-sublink ${active ? "active" : ""}`}
-                  title={collapsed ? item.label : undefined}
+                  title={item.label}
+                aria-label={item.label}
+                aria-current={active ? "page" : undefined}
                 >
                   <span className="sidebar-icon sidebar-subicon"><SidebarIcon icon={item.icon} active={active} sub /></span>
                   <span className="sidebar-label">{item.label}</span>
@@ -209,7 +213,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
             className={`sidebar-link sidebar-section ${configActive ? "active-section" : ""}`}
             onClick={toggleConfigOpen}
-            aria-expanded={showConfig}
+            aria-label="Configuración" title="Configuración" aria-expanded={showConfig}
           >
             <span className="sidebar-icon"><SidebarIcon icon={Settings} active={configActive} /></span>
             <span className="sidebar-label">Configuracion</span>
@@ -224,7 +228,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={`sidebar-sublink ${active ? "active" : ""}`}
-                  title={collapsed ? item.label : undefined}
+                  title={item.label}
+                aria-label={item.label}
+                aria-current={active ? "page" : undefined}
                 >
                   <span className="sidebar-icon sidebar-subicon"><SidebarIcon icon={item.icon} active={active} sub /></span>
                   <span className="sidebar-label">{item.label}</span>
@@ -235,7 +241,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="sidebar-bottom">
-          <button className="sidebar-link sidebar-logout" type="button" onClick={logout}>
+          <button className="sidebar-link sidebar-logout" type="button" onClick={logout} aria-label="Salir" title="Salir">
             <span className="sidebar-icon"><SidebarIcon icon={LogOut} /></span>
             <span className="sidebar-label">Salir</span>
           </button>

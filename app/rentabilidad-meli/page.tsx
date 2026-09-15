@@ -3,8 +3,14 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChartNoAxesCombined, Filter, RefreshCw, Search } from "lucide-react";
+import { usePricingLoad } from '@/lib/usePricingLoad';
+import { PricingDataStatus, PricingPagination } from '@/components/PricingDataStatus';
+import { normalizeFilter, categoryOptions } from '@/lib/pricingData';
+import { CategoryFilter, PricingSearch } from '@/components/PricingFilters';
+import { useRememberedView } from '@/lib/useRememberedView';
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
+import { profitabilityTotals } from '@/lib/profitability';
 import { moneyWithCents, percent } from "@/lib/pricing";
 import type { MercadoLibreOrderItem, MercadoLibreShippingCost, Product } from "@/lib/types";
 
@@ -30,11 +36,15 @@ type ProfitabilityRow = {
   activePublications: number;
   units: number;
   revenue: number;
-  netProfit: number;
+  netProfit: number | null;
+  costProfit?: number;
+  coveredRevenue?: number;
+  calculatedSales?: number;
+  itemIds?: string[];
   netSale: number;
   margin: number | null;
   normalizedNetSale: number;
-  normalizedProfit: number;
+  normalizedProfit: number | null;
   normalizedMargin: number | null;
   costBasis: number;
   marginOnCost: number | null;
@@ -68,8 +78,8 @@ function isToday(value?: string | null) {
   if (!value) return false;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return false;
-  const now = new Date();
-  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  return formatter.format(date) === formatter.format(new Date());
 }
 
 function formatUnits(value: number) {
@@ -118,10 +128,11 @@ const sortLabels: Record<SortKey, string> = {
   marginOnCost: "Margen s/costo",
   stock: "Stock",
   lastSale: "Última venta",
-  activePublications: "MLA",
+  activePublications: "Publicaciones activas",
 };
 
 const salesSelectColumns = [
+  "updated_at",
   "id",
   "order_id",
   "order_date",
@@ -145,6 +156,7 @@ const salesSelectColumns = [
 ].join(",");
 
 const publicationSelectColumns = [
+  "id", "meli_last_sync_at", "updated_at",
   "product_id",
   "sku",
   "active",
@@ -166,6 +178,8 @@ function RentabilityThumbnail({ src, label }: { src: string | null; label: strin
 export default function RentabilidadMeliPage() {
   const router = useRouter();
   const supabase = createClient();
+  const dataLoad = usePricingLoad('rentabilidad-meli', supabase);
+  const [listPage, setListPage] = useState(1);
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [sales, setSales] = useState<MercadoLibreOrderItem[]>([]);
@@ -191,63 +205,16 @@ export default function RentabilidadMeliPage() {
     if (!data.session) router.push("/login");
   }
 
-  async function fetchSalesSince(sinceIso: string) {
-    const pageSize = 500;
-    const result: MercadoLibreOrderItem[] = [];
-
-    for (let from = 0; from < 20000; from += pageSize) {
-      const to = from + pageSize - 1;
-      const response = await supabase
-        .from("mercadolibre_order_items")
-        .select(salesSelectColumns)
-        .gte("order_date", sinceIso)
-        .order("order_date", { ascending: false })
-        .range(from, to);
-
-      if (response.error) return response;
-      const page = (response.data || []) as unknown as MercadoLibreOrderItem[];
-      result.push(...page);
-      if (page.length < pageSize) break;
-    }
-
-    return { data: result, error: null };
-  }
-
-  async function loadData(options: { quiet?: boolean } = {}) {
-    if (!options.quiet) {
-      setLoading(true);
-      setLoadingInfo("Cargando productos, publicaciones y ventas...");
-    }
-    setError(null);
-    const since = new Date();
-    since.setDate(since.getDate() - 65);
-
-    try {
-      const [productsResponse, publicationsResponse, salesResponse] = await Promise.all([
-        supabase.from("products").select("*").eq("status", "active").order("sku", { ascending: true }),
-        supabase.from("mercadolibre_shipping_costs").select(publicationSelectColumns).eq("active", true),
-        fetchSalesSince(since.toISOString()),
-      ]);
-
-      if (productsResponse.error) setError(productsResponse.error.message);
-      else setProducts((productsResponse.data || []) as Product[]);
-      if (publicationsResponse.error) setError(publicationsResponse.error.message);
-      else setPublications((publicationsResponse.data || []) as unknown as MercadoLibreShippingCost[]);
-      if (salesResponse.error) setError(salesResponse.error.message);
-      else setSales((salesResponse.data || []) as MercadoLibreOrderItem[]);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar los datos de rentabilidad ML.");
-    } finally {
-      if (!options.quiet) {
-        setLoading(false);
-        setLoadingInfo(null);
-      }
-    }
+  async function loadData(options: { quiet?: boolean; initial?: boolean } = {}) {
+    const since = new Date(); since.setHours(0,0,0,0); since.setDate(since.getDate() - 65);
+    setLoading(true);
+    try { await dataLoad.run({ products: { table: 'products', filters: [['neq','status','discontinued']] }, publications: { table: 'mercadolibre_shipping_costs', columns: publicationSelectColumns, filters: [['eq','active',true]] }, sales: { table: 'mercadolibre_order_items', columns: salesSelectColumns, filters: [['gte','order_date',since.toISOString()]], order: 'order_date', ascending: false } }, data => { setProducts(data.products); setPublications(data.publications); setSales(data.sales); }, !options.initial); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
     checkSession();
-    loadData();
+    loadData({ initial: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -349,7 +316,8 @@ export default function RentabilidadMeliPage() {
           avgPrice: units > 0 ? revenue / units : null,
           stockDays: null,
           lastSale: sale.order_date,
-          errors: sale.normalized_profit_error ? 1 : 0,
+          ...profitabilityTotals([sale]),
+          itemIds: [sale.meli_item_id],
         };
       });
     }
@@ -358,9 +326,9 @@ export default function RentabilidadMeliPage() {
     periodSales.forEach((sale) => {
         const skuKeys = new Set<string>();
         const saleSku = (sale.sku || "").toUpperCase();
-        if (saleSku) skuKeys.add(saleSku);
+
         const productSku = sale.product_id ? productById.get(sale.product_id)?.sku?.toUpperCase() : "";
-        if (productSku) skuKeys.add(productSku);
+        if (productSku || saleSku) skuKeys.add(productSku || saleSku);
         skuKeys.forEach((sku) => salesBySku.set(sku, [...(salesBySku.get(sku) || []), sale]));
       });
 
@@ -411,13 +379,14 @@ export default function RentabilidadMeliPage() {
         avgPrice: units > 0 ? revenue / units : null,
         stockDays,
         lastSale,
-        errors,
+        ...profitabilityTotals(skuSales),
+        itemIds: [...new Set(skuSales.map(sale => sale.meli_item_id).filter(Boolean))],
       };
     });
   }, [products, publications, sales, period]);
 
   const categories = useMemo(() => {
-    return [...new Set(rows.map((row) => row.category).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "es"));
+    return categoryOptions(rows.map((row) => row.category));
   }, [rows]);
 
   function columnFilterIsActive(filter?: ColumnFilter) {
@@ -452,12 +421,12 @@ export default function RentabilidadMeliPage() {
   const activeColumnFilterCount = Object.values(columnFilters).filter(columnFilterIsActive).length;
 
   const filteredRows = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = normalizeFilter(query);
     const multiplier = sortDirection === "asc" ? 1 : -1;
     return rows
       .filter((row) => {
-        if (needle && !`${row.sku} ${row.productName} ${row.category || ""} ${row.orderId || ""} ${row.meliItemId || ""}`.toLowerCase().includes(needle)) return false;
-        if (categoryFilter && row.category !== categoryFilter) return false;
+        if (needle && !normalizeFilter(`${row.sku} ${row.productName} ${row.category || ""} ${row.orderId || ""} ${row.meliItemId || ""}`).includes(needle)) return false;
+        if (categoryFilter && normalizeFilter(row.category) !== normalizeFilter(categoryFilter)) return false;
         if (statusFilter === "with_sales" && row.units <= 0) return false;
         if (statusFilter === "no_sales" && row.units > 0) return false;
         if (statusFilter === "low_stock" && !(row.stockDays !== null && row.stockDays < 25)) return false;
@@ -480,10 +449,15 @@ export default function RentabilidadMeliPage() {
       });
   }, [categoryFilter, columnFilters, onlyLowStock, onlyWithSales, query, rows, sortDirection, sortKey, statusFilter]);
 
+  useRememberedView(supabase, 'rentabilidad-meli', [query, categoryFilter, sortKey, sortDirection, columnFilters, onlyWithSales, onlyLowStock, listPage, period, statusFilter], (values) => { setQuery(values[0]); setCategoryFilter(values[1]); setSortKey(values[2]); setSortDirection(values[3]); setColumnFilters(values[4]); setOnlyWithSales(values[5]); setOnlyLowStock(values[6]); setListPage(values[7]); setPeriod(values[8]); setStatusFilter(values[9]); }, !dataLoad.incomplete);
   const totals = useMemo(() => {
     const units = filteredRows.reduce((total, row) => total + row.units, 0);
     const revenue = filteredRows.reduce((total, row) => total + row.revenue, 0);
-    const netProfit = filteredRows.reduce((total, row) => total + row.netProfit, 0);
+    const calculatedSales = filteredRows.reduce((total, row) => total + (row.calculatedSales || 0), 0);
+    const netProfit = calculatedSales ? filteredRows.reduce((total, row) => total + (row.netProfit ?? 0), 0) : null;
+    const normalizedProfit = filteredRows.reduce((total, row) => total + (row.normalizedProfit ?? 0), 0);
+    const costProfit = filteredRows.reduce((total, row) => total + (row.costProfit || 0), 0);
+    const coveredRevenue = filteredRows.reduce((total, row) => total + (row.coveredRevenue || 0), 0);
     const netSale = filteredRows.reduce((total, row) => total + row.netSale, 0);
     const normalizedNetSale = filteredRows.reduce((total, row) => total + row.normalizedNetSale, 0);
     const costBasis = filteredRows.reduce((total, row) => total + row.costBasis, 0);
@@ -491,11 +465,11 @@ export default function RentabilidadMeliPage() {
       units,
       revenue,
       netProfit,
-      grossProfitRate: revenue > 0 ? (netProfit / revenue) * 100 : null,
-      margin: netSale > 0 ? (netProfit / netSale) * 100 : null,
-      normalizedMargin: normalizedNetSale > 0 ? (netProfit / normalizedNetSale) * 100 : null,
-      marginOnCost: costBasis > 0 ? (netProfit / costBasis) * 100 : null,
-      products: filteredRows.length,
+      grossProfitRate: netProfit !== null && coveredRevenue > 0 ? (netProfit / coveredRevenue) * 100 : null,
+      margin: netProfit !== null && netSale > 0 ? (netProfit / netSale) * 100 : null,
+      normalizedMargin: normalizedNetSale > 0 ? (normalizedProfit / normalizedNetSale) * 100 : null,
+      marginOnCost: costBasis > 0 ? (costProfit / costBasis) * 100 : null,
+      products: new Set(filteredRows.filter(row => row.units > 0).map(row => row.sku)).size,
     };
   }, [filteredRows]);
 
@@ -673,7 +647,7 @@ export default function RentabilidadMeliPage() {
           ? salesSyncProgress
             ? `Actualizando ventas en segundo plano: últimos ${salesSyncProgress.completed} de ${salesSyncProgress.total} días.`
             : "Actualizando primero las ventas más recientes..."
-          : "Margen promedio por producto normalizado a MercadoLibre 1 pago."}
+          : "Resultados históricos calculados y comparación con referencia de 1 pago. Ratios ponderados por sus bases."}
         icon={<ChartNoAxesCombined aria-hidden="true" />}
         actions={(
           <button className="button rentability-sync-button" type="button" onClick={syncSales} disabled={syncing || loading}>
@@ -684,6 +658,7 @@ export default function RentabilidadMeliPage() {
       />
 
       {loading && <div className="rotation-sync-info"><span><RefreshCw aria-hidden="true" />{loadingInfo || "Cargando datos..."}</span></div>}
+      <PricingDataStatus state={dataLoad.state} publications={publications} onRefresh={() => loadData()} />
       {error && <div className="alert error">{error}</div>}
       {syncInfo && <div className="rotation-sync-info"><span>{syncing && <RefreshCw aria-hidden="true" />}{syncInfo}</span></div>}
       {!loading && !error && (
@@ -692,62 +667,55 @@ export default function RentabilidadMeliPage() {
         </div>
       )}
 
+      <details className="pricing-explanation"><summary>Cómo se calculan estos indicadores</summary><p>Ganancia real: resultado calculado y guardado para la venta, luego de costo, comisión, envío, cargo fijo, estructura e impuestos configurados. No equivale a una liquidación bancaria confirmada. Facturación incluye IVA; margen real divide ganancia por venta neta de IVA. Ganancia/facturación usa sólo ventas con ganancia calculable en ambos lados del cociente.</p><p>Margen normalizado: conserva la ganancia guardada y la divide por la venta neta de referencia de 1 pago. Es comparativo; no es otra ganancia realizada. Margen sobre costo: ganancia normalizada / costo utilizado guardado. Los totales son cocientes de sumas, nunca promedios simples de porcentajes.</p><p>Se usa el historial de costo cuando existe; registros sin historial pueden haber usado el costo vigente al sincronizar. La base guardada no identifica esa procedencia en ventas antiguas. “—” significa dato faltante o división imposible, no cero. Los indicadores excluyen registros sin cálculo válido y muestran su cantidad por fila. Período seleccionado; zona horaria Argentina.</p></details>
       <section className="rotation-summary">
         <article className="kpi-card">
-          <span className="kpi-label">{period === "today" ? "Ventas de hoy" : "Productos vendidos"}</span>
-          <strong className="kpi-value">{formatUnits(totals.products)}</strong>
+          <span className="kpi-label">Productos vendidos</span>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : formatUnits(totals.products)}</strong>
           <small className="kpi-meta">{period === "today" ? "Ventas de hoy" : `Últimos ${period} días`}</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Unidades</span>
-          <strong className="kpi-value">{formatUnits(totals.units)}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : formatUnits(totals.units)}</strong>
           <small className="kpi-meta">Vendidas</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Facturacion</span>
-          <strong className="kpi-value">{moneyWithCents(totals.revenue)}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : moneyWithCents(totals.revenue)}</strong>
           <small className="kpi-meta">ML</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Ganancia real</span>
-          <strong className="kpi-value">{moneyWithCents(totals.netProfit)}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : moneyWithCents(totals.netProfit)}</strong>
           <small className="kpi-meta">{period === "today" ? "Ganancia del dia" : `Últimos ${period} días`}</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Ganancia / facturacion</span>
-          <strong className="kpi-value">{percent(totals.grossProfitRate)}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : percent(totals.grossProfitRate)}</strong>
           <small className="kpi-meta">Sobre venta bruta ML</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Margen real</span>
-          <strong className="kpi-value">{percent(totals.margin)}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : percent(totals.margin)}</strong>
           <small className="kpi-meta">Sobre ventas reales</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Margen normalizado</span>
-          <strong className="kpi-value">{percent(totals.normalizedMargin)}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : percent(totals.normalizedMargin)}</strong>
           <small className="kpi-meta">Base comparable 1 pago</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Margen sobre costo</span>
-          <strong className="kpi-value">{percent(totals.marginOnCost)}</strong>
+          <strong className="kpi-value">{dataLoad.initial ? "—" : percent(totals.marginOnCost)}</strong>
           <small className="kpi-meta">Ganancia / costo usado</small>
         </article>
       </section>
 
       <section className="card rotation-card">
         <div className="rotation-toolbar">
-          <label className="search-control">
-            <Search aria-hidden="true" />
-            <input className="search-field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar SKU, producto o MLA" />
-          </label>
-          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-            <option value="">Todas las categorias</option>
-            {categories.map((category) => (
-              <option value={category} key={category}>{category}</option>
-            ))}
-          </select>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ProfitabilityStatusFilter)}>
+          <PricingSearch value={query} onChange={setQuery} />
+          <CategoryFilter value={categoryFilter} onChange={setCategoryFilter} categories={categories} />
+          <select aria-label="Estado" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ProfitabilityStatusFilter)}>
             <option value="">Todos los estados</option>
             <option value="with_sales">Con ventas</option>
             <option value="no_sales">Sin ventas</option>
@@ -803,7 +771,7 @@ export default function RentabilidadMeliPage() {
 
         <div className="rotation-table-status">
           <div className="rotation-active-context">
-            <span>{filteredRows.length} de {rows.length} {period === "today" ? "ventas" : "productos"}</span>
+            <span>{dataLoad.initial ? "—" : filteredRows.length} de {dataLoad.initial ? "—" : rows.length} {period === "today" ? "ventas" : "productos"}</span>
             <span>{period === "today" ? "Periodo hoy" : `Periodo ${period} dias`}</span>
             {activeQuickFilterEntries.map((filter) => (
               <button className="rotation-active-filter" type="button" key={filter.key} onClick={filter.clear}>
@@ -823,7 +791,8 @@ export default function RentabilidadMeliPage() {
           </div>
         </div>
 
-        <div className="rotation-table-wrap">
+        <PricingPagination page={listPage} total={dataLoad.initial ? 0 : filteredRows.length} onPage={setListPage} />
+          <div className="rotation-table-wrap">
           <table className="rotation-table">
             <colgroup>
               <col className="rentability-col-product" />
@@ -850,11 +819,11 @@ export default function RentabilidadMeliPage() {
                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
                 <th className="date-header"><SortButton column="lastSale">{period === "today" ? "Hora" : "Última venta"}</SortButton></th>
-                <th className="numeric-header"><SortButton column="activePublications">MLA</SortButton></th>
+                <th className="numeric-header"><SortButton column="activePublications">Publicaciones activas</SortButton></th>
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((row) => (
+              {filteredRows.slice((Math.min(listPage, Math.max(1, Math.ceil(filteredRows.length / 40))) - 1) * 40, Math.min(listPage, Math.max(1, Math.ceil(filteredRows.length / 40))) * 40).map((row) => (
                 <tr key={row.key}>
                   <td>
                     <div className="rotation-product-cell">
@@ -883,10 +852,10 @@ export default function RentabilidadMeliPage() {
                   <td className={`numeric ${marginClass(row.normalizedMargin)}`}>{percent(row.normalizedMargin)}</td>
                   <td className={`numeric ${marginClass(row.marginOnCost)}`}>{percent(row.marginOnCost)}</td>
                   <td className="date-cell">{period === "today" ? shortDateTime(row.lastSale) : shortDate(row.lastSale)}</td>
-                  <td className="numeric">{formatUnits(row.activePublications)}</td>
+                  <td className="numeric">{formatUnits(row.activePublications)}<details><summary>MLA vendidos</summary>{row.itemIds?.map(id => <div key={id}><code>{id}</code><button className="button ghost small-button" aria-label={`Copiar ${id}`} onClick={() => navigator.clipboard.writeText(id).catch(() => setError("No se pudo copiar el MLA."))}>Copiar</button></div>)}</details></td>
                 </tr>
               ))}
-              {!filteredRows.length && (
+              {!dataLoad.incomplete && !filteredRows.length && (
                 <tr>
                   <td colSpan={10}>
                     <div className="empty-state">

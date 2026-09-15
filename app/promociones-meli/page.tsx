@@ -3,6 +3,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, CalendarClock, ChevronRight, CircleAlert, Search, TrendingUp } from "lucide-react";
+import { usePricingLoad } from '@/lib/usePricingLoad';
+import { PricingDataStatus, PricingPagination } from '@/components/PricingDataStatus';
+import { normalizeFilter, categoryOptions } from '@/lib/pricingData';
+import { comparisonPromotionKey, promotionState, promotionCoverage, promotionKey, promotionDateMs, validThresholds } from '@/lib/promotionState';
+import { useDialogFocus } from "@/lib/useDialogFocus";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
 import {
@@ -203,27 +208,15 @@ function futureStartLabel(value?: string | null) {
   return `Arranca ${formatDateTime(value)}`;
 }
 
-function isCurrentOpportunity(item: MercadoLibrePromotionOpportunity) {
-  const status = `${item.promotion_status || ""} ${item.item_promotion_status || ""}`.toLowerCase();
-  if (/finished|expired|ended|cancel|closed|inactive/.test(status)) return false;
-  const end = item.end_date ? new Date(item.end_date).getTime() : 0;
-  return !end || end > Date.now();
-}
+function isCurrentOpportunity(item: MercadoLibrePromotionOpportunity) { return ['active', 'future', 'candidate'].includes(promotionState(item)); }
 
-function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) {
-  const itemStatus = String(item.item_promotion_status || "").toLowerCase();
-  if (itemStatus) return /started|active/.test(itemStatus);
-  return /started|active/.test(String(item.promotion_status || "").toLowerCase());
-}
+function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) { return promotionState(item) === "active"; }
 
 function isActivePromotionStatus(value?: string | null) {
-  return /started|active|vigente/.test(String(value || "").toLowerCase());
+  return ["started", "active", "vigente"].includes(String(value || "").toLowerCase());
 }
 
-function isScheduledOpportunity(item: MercadoLibrePromotionOpportunity) {
-  const start = item.start_date ? new Date(item.start_date).getTime() : 0;
-  return Boolean(start && Number.isFinite(start) && start > Date.now());
-}
+function isScheduledOpportunity(item: MercadoLibrePromotionOpportunity) { return promotionState(item) === "future"; }
 
 function isJoinedOpportunity(item: MercadoLibrePromotionOpportunity) {
   const status = String(item.item_promotion_status || "").toLowerCase();
@@ -542,17 +535,7 @@ function validFinancingFeeRate(value?: number | null) {
 }
 
 function promoComparisonKey(item: PromoComparison) {
-  const name = item.name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-  return [
-    name,
-    Math.round(Number(item.promoPrice || 0) * 100),
-    Math.round(Number(item.meliAmount || 0) * 100),
-  ].join("|");
+  return comparisonPromotionKey(item);
 }
 
 function normalizePromoIdentity(value?: string | null) {
@@ -565,13 +548,11 @@ function normalizePromoIdentity(value?: string | null) {
 }
 
 function samePromotionIdentity(left: PromoComparison, right: PromoComparison) {
-  if (left.promotionId && right.promotionId && left.promotionId === right.promotionId) return true;
-  const leftName = normalizePromoIdentity(left.name);
-  const rightName = normalizePromoIdentity(right.name);
-  return Boolean(leftName && rightName && leftName === rightName);
+  return Boolean(left.promotionId && right.promotionId && left.itemId === right.itemId && left.promotionId === right.promotionId && (left.offerId || "") === (right.offerId || ""));
 }
 
 function samePromotionEconomics(left: PromoComparison, right: PromoComparison) {
+  if (left.itemId !== right.itemId || (left.promotionId && right.promotionId && left.promotionId !== right.promotionId) || (left.offerId && right.offerId && left.offerId !== right.offerId)) return false;
   return (
     samePrice(left.promoPrice, right.promoPrice) &&
     samePrice(left.meliAmount, right.meliAmount) &&
@@ -655,14 +636,7 @@ function dedupePromoComparisons(items: PromoComparison[]) {
   return [...map.values()];
 }
 
-function opportunityKey(item: MercadoLibrePromotionOpportunity) {
-  return [
-    item.promotion_id || "",
-    item.meli_item_id || "",
-    item.offer_id || "",
-    item.item_promotion_status || "",
-  ].join("|");
-}
+function opportunityKey(item: MercadoLibrePromotionOpportunity) { return promotionKey(item); }
 
 function mergeOpportunities(
   tableOpportunities: MercadoLibrePromotionOpportunity[],
@@ -762,6 +736,9 @@ function promotionCountForPublication(
 export default function PromocionesMeliPage() {
   const router = useRouter();
   const supabase = createClient();
+  const dataLoad = usePricingLoad('promociones-meli', supabase);
+  const [listPage, setListPage] = useState(1);
+  const [trafficPages, setTrafficPages] = useState<Record<string, number>>({});
   const autoPromotionSyncStarted = useRef(false);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -786,6 +763,9 @@ export default function PromocionesMeliPage() {
   const [desktopAlertMeliRate, setDesktopAlertMeliRate] = useState(3);
   const [desktopAlertInterval, setDesktopAlertInterval] = useState(30);
   const [missingPromoModalOpen, setMissingPromoModalOpen] = useState(false);
+  const pickerRef = useDialogFocus(productPickerOpen, () => setProductPickerOpen(false));
+  const alertsRef = useDialogFocus(desktopAlertsModalOpen, () => setDesktopAlertsModalOpen(false));
+  const missingRef = useDialogFocus(missingPromoModalOpen, () => setMissingPromoModalOpen(false));
   const [redThreshold, setRedThreshold] = useState(5);
   const [yellowThreshold, setYellowThreshold] = useState(5);
   const [syncingMeli, setSyncingMeli] = useState(false);
@@ -801,119 +781,11 @@ export default function PromocionesMeliPage() {
     if (!data.session) router.push("/login");
   }
 
-  async function loadData(options: { quiet?: boolean; retried?: boolean } = {}) {
-    if (!options.quiet) setLoading(true);
-    setError(null);
-
-    const [
-      productsResponse,
-      publicationsResponse,
-      installmentsResponse,
-      categoryFeesResponse,
-      taxesResponse,
-      marginsResponse,
-    ] = await Promise.all([
-      supabase
-        .from("products")
-        .select("*")
-        .neq("status", "discontinued")
-        .order("name", { ascending: true }),
-      supabase
-        .from("mercadolibre_shipping_costs")
-        .select("*")
-        .eq("active", true)
-        .eq("meli_status", "active")
-        .order("updated_at", { ascending: false }),
-      supabase
-        .from("mercadolibre_installment_fees")
-        .select("*")
-        .eq("active", true)
-        .order("code", { ascending: true }),
-      supabase
-        .from("mercadolibre_category_fees")
-        .select("*")
-        .eq("active", true),
-      supabase.from("tax_settings").select("*").eq("key", "default").single(),
-      supabase.from("product_channel_margins").select("*"),
-    ]);
-
-    // La pantalla tenía que pedir cada página de oportunidades una después de
-    // otra. Con miles de promos eso demoraba la carga incluso antes de mostrar
-    // los datos ya sincronizados. Pedimos la primera con total y el resto en
-    // paralelo, conservando la misma información completa.
-    const firstOpportunitiesResponse = await supabase
-      .from("mercadolibre_promotion_opportunities")
-      .select("*", { count: "exact" })
-      .order("meli_amount", { ascending: false })
-      .range(0, 999);
-    const allOpportunities: MercadoLibrePromotionOpportunity[] = [
-      ...((firstOpportunitiesResponse.data || []) as MercadoLibrePromotionOpportunity[]),
-    ];
-    let opportunitiesError: string | null = firstOpportunitiesResponse.error?.message || null;
-    const opportunitiesTotal = Number(firstOpportunitiesResponse.count || allOpportunities.length);
-    if (!opportunitiesError && opportunitiesTotal > 1000) {
-      const pages = Array.from(
-        { length: Math.ceil(opportunitiesTotal / 1000) - 1 },
-        (_, index) => {
-          const from = (index + 1) * 1000;
-          return supabase
-            .from("mercadolibre_promotion_opportunities")
-            .select("*")
-            .order("meli_amount", { ascending: false })
-            .range(from, from + 999);
-        },
-      );
-      const remainingPages = await Promise.all(pages);
-      for (const response of remainingPages) {
-        if (response.error) {
-          opportunitiesError = response.error.message;
-          break;
-        }
-        allOpportunities.push(...((response.data || []) as MercadoLibrePromotionOpportunity[]));
-      }
-    }
-
-    const responsesWithErrors = [
-      productsResponse,
-      publicationsResponse,
-      installmentsResponse,
-      categoryFeesResponse,
-      taxesResponse,
-      marginsResponse,
-    ];
-    const projectConfigUnavailable = responsesWithErrors.some((response) =>
-      /failed to get project config/i.test(response.error?.message || ""),
-    ) || /failed to get project config/i.test(opportunitiesError || "");
-    // Supabase puede devolver este error de configuración de forma transitoria
-    // mientras renueva Auth en el navegador. Reintentamos una vez sin dejar la
-    // pantalla vacía ni obligar a recargar manualmente.
-    if (projectConfigUnavailable && !options.retried) {
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 1200));
-      return loadData({ ...options, retried: true });
-    }
-
-    if (!options.quiet) setLoading(false);
-
-    if (productsResponse.error) setError(productsResponse.error.message);
-    else setProducts((productsResponse.data || []) as Product[]);
-
-    if (publicationsResponse.error) setError(publicationsResponse.error.message);
-    else setPublications((publicationsResponse.data || []) as MercadoLibreShippingCost[]);
-
-    if (opportunitiesError) setError(opportunitiesError);
-    else setOpportunities(allOpportunities);
-
-    if (installmentsResponse.error) setError(installmentsResponse.error.message);
-    else setInstallments(((installmentsResponse.data || []) as MercadoLibreInstallmentFee[]).filter((item) => item.code !== "MC"));
-
-    if (categoryFeesResponse.error) setError(categoryFeesResponse.error.message);
-    else setCategoryFees((categoryFeesResponse.data || []) as MercadoLibreCategoryFee[]);
-
-    if (taxesResponse.error) setError(taxesResponse.error.message);
-    else setTaxes((taxesResponse.data || defaultTaxSettings()) as TaxSettings);
-
-    if (marginsResponse.error) setError(marginsResponse.error.message);
-    else setMarginSettings((marginsResponse.data || []) as ProductChannelMargin[]);
+  async function loadData(options: { quiet?: boolean; initial?: boolean } = {}) {
+    const since = new Date(); since.setHours(0,0,0,0); since.setDate(since.getDate() - 65);
+    setLoading(true);
+    try { await dataLoad.run({ products: { table: 'products', filters: [['neq','status','discontinued']] }, publications: { table: 'mercadolibre_shipping_costs', filters: [['eq','active',true]] }, opportunities: { table: 'mercadolibre_promotion_opportunities' }, installments: { table: 'mercadolibre_installment_fees', filters: [['eq','active',true]] }, categories: { table: 'mercadolibre_category_fees', filters: [['eq','active',true]] }, taxes: { table: 'tax_settings', filters: [['eq','key','default']] }, margins: { table: 'product_channel_margins' } }, data => { setProducts(data.products); setPublications(data.publications.filter(item => item.meli_status === 'active')); setOpportunities(data.opportunities); setInstallments(data.installments.filter(item => item.code !== 'MC')); setCategoryFees(data.categories); setTaxes(data.taxes[0] || defaultTaxSettings()); setMarginSettings(data.margins); }, !options.initial); }
+    finally { setLoading(false); }
   }
 
   async function copyItemId(itemId?: string | null) {
@@ -948,10 +820,10 @@ export default function PromocionesMeliPage() {
             signal: controller.signal,
           });
           const data = await response.json().catch(() => ({}));
-          if (response.ok) return data as { total_items?: number; totals_by_status?: Record<string, number> };
+          if (response.ok) return data as { total_items?: number; totals_by_status?: Record<string, number>; promotion_coverage?: { failed?: number } };
           // Un 502/503/504 puede ser temporal (ML o el gateway). Reintentar el
           // mismo lote es seguro porque el servidor reemplaza sus oportunidades.
-          if (![502, 503, 504].includes(response.status) || attempt === 2) {
+          if (![429, 502, 503, 504].includes(response.status) || attempt === 2) {
             throw new Error(data?.error || `No se pudo sincronizar MercadoLibre (${response.status}).`);
           }
         } finally {
@@ -978,6 +850,7 @@ export default function PromocionesMeliPage() {
       let offset = 0;
       let total = 0;
       let batchesSinceReload = 0;
+      let failedItems = 0;
 
       // Si hay un producto abierto, éste se actualiza primero para que la
       // pantalla refleje el cambio enseguida y el resto siga en segundo plano.
@@ -986,7 +859,9 @@ export default function PromocionesMeliPage() {
         await loadData({ quiet: true });
       }
       do {
-        const data = await syncBatch({ scope, offset, pageLimit, resetPromotions: false });
+        const data = await syncBatch({ scope, offset, pageLimit, resetPromotions: false, statuses: ["active"] });
+        failedItems += data.promotion_coverage?.failed || 0;
+        if (failedItems) setError(`Actualización parcial: ${failedItems} consultas de MLA fallaron. Se conservaron sus datos previos.`);
         const totals = Object.values(data.totals_by_status || {}).map((value) => Number(value || 0));
         total = Math.max(total, ...totals, Number(data.total_items || 0));
         offset += pageLimit;
@@ -1003,7 +878,7 @@ export default function PromocionesMeliPage() {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       } while (offset < total);
     } catch (syncError) {
-      if (!options.silent) {
+      {
         setError(
           syncError instanceof DOMException && syncError.name === "AbortError"
             ? "Un bloque de promociones tardó demasiado. Los bloques ya actualizados quedaron guardados; probá nuevamente para continuar."
@@ -1272,16 +1147,11 @@ export default function PromocionesMeliPage() {
     } catch {
       setBlockedActivationKeys([]);
     }
-    loadData();
+    loadData({ initial: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (loading || autoPromotionSyncStarted.current || syncingMeli) return;
-    autoPromotionSyncStarted.current = true;
-    syncMercadoLibreData({ scope: "promotions", silent: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, syncingMeli]);
+  // Navegar sólo lee la base; sincronizar requiere una acción explícita.
 
   const groups = useMemo<ProductPromoGroup[]>(() => {
     const productsById = new Map(products.map((product) => [product.id, product]));
@@ -1371,8 +1241,9 @@ export default function PromocionesMeliPage() {
     });
   }, [products, publications, opportunities]);
 
+  useEffect(() => { const sku = new URLSearchParams(window.location.search).get('sku'); const group = groups.find(group => group.product.sku.toUpperCase() === sku?.toUpperCase()); if (group) setSelectedKey(productKey(group.product)); }, [groups]);
   const filteredGroups = useMemo(() => {
-    const value = query.trim().toLowerCase();
+    const value = normalizeFilter(query);
     if (!value) return groups;
     return groups.filter((group) => {
       const haystack = [
@@ -1386,7 +1257,7 @@ export default function PromocionesMeliPage() {
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
-      return haystack.includes(value);
+      return normalizeFilter(haystack).includes(value);
     });
   }, [groups, query]);
 
@@ -2076,7 +1947,7 @@ export default function PromocionesMeliPage() {
           (isActivePromotionStatus(publication.meli_promo_status) && Number(publication.meli_promo_price || 0) > 0) ||
           rowOpportunities.some(isActiveOpportunity);
 
-        if (hasActivePromo) return;
+        if (hasActivePromo || !promotionCoverage(publication).known || dataLoad.incomplete) return;
 
         const current = result.get(group.product.sku) || {
           sku: group.product.sku,
@@ -2099,7 +1970,7 @@ export default function PromocionesMeliPage() {
         items: [...group.items].sort((a, b) => installmentCountFromLabel(a.installmentLabel) - installmentCountFromLabel(b.installmentLabel)),
       }))
       .sort((a, b) => b.items.length - a.items.length || a.sku.localeCompare(b.sku, "es"));
-  }, [groups]);
+  }, [groups, dataLoad.incomplete]);
 
   useEffect(() => {
     window.localStorage.setItem("promos-meli-alerts-meli-rate", String(desktopAlertMeliRate));
@@ -2179,7 +2050,7 @@ export default function PromocionesMeliPage() {
         title="Promociones Meli"
         description={syncingMeli
           ? promotionSyncProgress
-            ? `Actualizando promociones en segundo plano: ${promotionSyncProgress.completed} de ${promotionSyncProgress.total} publicaciones.`
+            ? `Actualizando promociones en segundo plano: ${promotionSyncProgress.completed} de ${promotionSyncProgress.total} posiciones del listado por estado; incluye espejos relacionados.`
             : "Actualizando primero las publicaciones prioritarias..."
           : "Revisa productos activos en MercadoLibre, sus publicaciones y las promociones disponibles o vigentes detectadas en la ultima sincronizacion."}
         onRefresh={() => syncMercadoLibreData()}
@@ -2187,6 +2058,7 @@ export default function PromocionesMeliPage() {
         refreshDisabled={syncingMeli}
       />
 
+      <PricingDataStatus state={dataLoad.state} publications={publications} onRefresh={() => loadData()} />
       {error && <div className="message error">{error}</div>}
 
       <section className="card promociones-workbar">
@@ -2207,16 +2079,16 @@ export default function PromocionesMeliPage() {
         <div className="promociones-workbar-actions">
           <div className="promociones-kpis compact">
             <div>
-              <span>Productos ML</span>
-              <strong>{groups.length}</strong>
+              <span>Productos únicos (cuenta)</span>
+              <strong>{dataLoad.initial ? "—" : groups.length}</strong>
             </div>
             <div>
-              <span>Publicaciones</span>
-              <strong>{selectedGroup?.publications.length || publications.length}</strong>
+              <span>Publicaciones (cuenta)</span>
+              <strong>{dataLoad.initial ? "—" : publications.length}</strong>
             </div>
             <div>
-              <span>Promos</span>
-              <strong>{selectedGroup ? selectedGroup.activePromotionCount : opportunities.filter(isCurrentOpportunity).length}</strong>
+              <span>Ofertas por MLA (cuenta)</span>
+              <strong>{dataLoad.initial ? "—" : opportunities.length}</strong>
             </div>
           </div>
           <button className="button" type="button" onClick={() => setProductPickerOpen(true)}>
@@ -2225,9 +2097,13 @@ export default function PromocionesMeliPage() {
         </div>
       </section>
 
+      <details className="pricing-explanation"><summary>Estados y cobertura por publicación</summary><p>Contadores de la cuenta: productos únicos, MLA y ofertas identificadas por campaña + MLA + oferta + estado. El progreso de sincronización cuenta posiciones del listado de publicaciones activas; no productos ni campañas. Las publicaciones relacionadas pueden ampliar ese lote.</p>
+        {selectedGroup ? <><p>SKU seleccionado: {selectedGroup.product.sku}</p>{selectedGroup.publications.map(publication => <div key={publication.id}><code>{publication.meli_item_id}</code> · {promotionCoverage(publication).state} · Última consulta de promos: {formatDateTime(promotionCoverage(publication).at)} · Última sync general: {formatDateTime(publication.meli_last_sync_at)}</div>)}</> : <p>Seleccioná un producto para ver la fecha y estado de cada MLA.</p>}
+        {['active','future','candidate','finished','unknown'].map((state, index) => <details key={state}><summary>{['Vigentes','Futuras','Candidatas','Finalizadas','Estado desconocido'][index]} ({opportunities.filter(item => promotionState(item) === state && (!selectedGroup || selectedGroup.publications.some(publication => publication.meli_item_id === item.meli_item_id))).length})</summary>{opportunities.filter(item => promotionState(item) === state && selectedGroup?.publications.some(publication => publication.meli_item_id === item.meli_item_id)).map(item => <p key={promotionKey(item)}>{item.meli_item_id} · {item.promotion_name || item.promotion_id} · {item.promotion_id} · {item.offer_id || 'Sin ID de oferta'} · {moneyWithCents(item.promo_price)}</p>)}</details>)}
+      </details>
       {productPickerOpen && (
         <div className="modal-backdrop promociones-picker-backdrop" onMouseDown={() => setProductPickerOpen(false)}>
-          <div className="promociones-picker-modal" onMouseDown={(event) => event.stopPropagation()}>
+          <div ref={pickerRef} role="dialog" aria-modal="true" aria-label="Seleccionar producto" tabIndex={-1} className="promociones-picker-modal" onMouseDown={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <div>
                 <h2>Seleccionar producto</h2>
@@ -2243,18 +2119,19 @@ export default function PromocionesMeliPage() {
                 <Search aria-hidden="true" />
                 <input
                   className="form-control search-field"
-                  autoFocus
+                  aria-label="Buscar producto"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="SKU, producto, marca, item ML..."
                 />
               </label>
             </div>
+            <PricingPagination page={listPage} total={filteredGroups.length} onPage={setListPage} />
             <div className="promociones-picker-list">
-              {loading ? (
+              {dataLoad.initial ? (
                 <p>Cargando publicaciones de MercadoLibre...</p>
               ) : (
-                filteredGroups.map((group) => {
+                filteredGroups.slice((Math.min(listPage, Math.max(1, Math.ceil(filteredGroups.length / 40))) - 1) * 40, Math.min(listPage, Math.max(1, Math.ceil(filteredGroups.length / 40))) * 40).map((group) => {
                   const selected = selectedGroup && productKey(selectedGroup.product) === productKey(group.product);
                   return (
                     <button
@@ -2559,7 +2436,7 @@ export default function PromocionesMeliPage() {
                             </div>
                             <div className="promociones-summary-values">
                               <div>
-                                <span>Sin promo</span>
+                                <span>Precio sin descuento</span>
                                 <strong>{moneyWithCents(summary.publication.meli_price || 0)}</strong>
                               </div>
                               <div>
@@ -2688,30 +2565,30 @@ export default function PromocionesMeliPage() {
         <div className="promociones-traffic-head">
           <div>
             <h2>Ajustes pendientes</h2>
-            <p>SKU/cuotas que requieren accion: promos activas con baja rentabilidad u oportunidades mejores para activar.</p>
+            <p>Intervalos: rojo por debajo de Rojo; amarillo desde Rojo hasta Amarillo sin incluir; verde desde Amarillo. Si ambos umbrales coinciden, no hay intervalo amarillo.</p>
           </div>
           <div className="promociones-traffic-actions">
             <label>
-              Rojo
+              Rojo (menor a)
               <input
                 type="number"
                 min="-100"
                 max="100"
                 step="0.5"
                 value={redThreshold}
-                onChange={(event) => setRedThreshold(Number(event.target.value) || 0)}
+                onChange={(event) => { const value = Number(event.target.value); if (validThresholds(value, yellowThreshold)) setRedThreshold(value); }}
               />
               <span>%</span>
             </label>
             <label>
-              Amarillo
+              Amarillo (hasta)
               <input
                 type="number"
                 min="-100"
                 max="100"
                 step="0.5"
                 value={yellowThreshold}
-                onChange={(event) => setYellowThreshold(Number(event.target.value) || 0)}
+                onChange={(event) => { const value = Number(event.target.value); if (validThresholds(redThreshold, value)) setYellowThreshold(value); }}
               />
               <span>%</span>
             </label>
@@ -2741,7 +2618,7 @@ export default function PromocionesMeliPage() {
             },
             {
               key: "yellow",
-              title: "Conviene activar",
+              title: "Candidatas para revisar",
               subtitle: `Publicaciones activas con mas de ${percent(yellowThreshold)}`,
               groups: trafficLights.yellow,
               Icon: TrendingUp,
@@ -2781,8 +2658,9 @@ export default function PromocionesMeliPage() {
                   {column.groups.reduce((total, group) => total + group.items.length, 0)}
                 </strong>
               </div>
+              <PricingPagination page={trafficPages[column.key] || 1} total={column.groups.length} onPage={page => setTrafficPages(previous => ({ ...previous, [column.key]: page }))} />
               {column.groups.length ? (
-                column.groups.map((group) => {
+                column.groups.slice((Math.min(trafficPages[column.key] || 1, Math.max(1, Math.ceil(column.groups.length / 40))) - 1) * 40, Math.min(trafficPages[column.key] || 1, Math.max(1, Math.ceil(column.groups.length / 40))) * 40).map((group) => {
                   const groupKey = `${column.key}-${group.sku}`;
                   const expanded = Boolean(expandedTrafficSkus[groupKey]);
                   const summary = trafficGroupSummary(group, column.key === "red" ? "worst" : "best");
@@ -2905,7 +2783,7 @@ export default function PromocionesMeliPage() {
 
       {desktopAlertsModalOpen && (
         <div className="modal-backdrop promociones-picker-backdrop" onMouseDown={() => setDesktopAlertsModalOpen(false)}>
-          <div className="promociones-picker-modal promociones-alerts-modal" onMouseDown={(event) => event.stopPropagation()}>
+          <div ref={alertsRef} role="dialog" aria-modal="true" aria-label="Alertas de promociones" tabIndex={-1} className="promociones-picker-modal promociones-alerts-modal" onMouseDown={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <div>
                 <h2>Alertas</h2>
@@ -2984,7 +2862,7 @@ export default function PromocionesMeliPage() {
 
       {missingPromoModalOpen && (
         <div className="modal-backdrop promociones-picker-backdrop" onMouseDown={() => setMissingPromoModalOpen(false)}>
-          <div className="promociones-picker-modal promociones-missing-modal" onMouseDown={(event) => event.stopPropagation()}>
+          <div ref={missingRef} role="dialog" aria-modal="true" aria-label="Publicaciones sin promoción" tabIndex={-1} className="promociones-picker-modal promociones-missing-modal" onMouseDown={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <div>
                 <h2>SKUs sin promo vigente</h2>

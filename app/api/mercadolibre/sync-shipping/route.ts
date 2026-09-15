@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { getConnectedMeliAccount, meliFetch } from "@/lib/mercadolibre";
 import { pauseB2bRangesWithoutContribution } from "@/lib/mercadolibreB2bGuard";
+import { validPromotionPayload, promotionDateMs } from '@/lib/promotionState';
 import type { Product } from "@/lib/types";
 import { relatedItemSkus } from "@/lib/mercadolibreRelatedSku";
 
@@ -155,6 +156,7 @@ type MeliPromotionItem = {
   suggested_discounted_price?: number | null;
   start_date?: string | null;
   end_date?: string | null;
+  finish_date?: string | null;
 };
 
 function chunk<T>(items: T[], size: number) {
@@ -957,10 +959,11 @@ async function getPromotionSummaryForItem(
   const rawResponses = await Promise.all(endpoints.map(async (endpoint) => {
     try {
       const data = await meliFetch(endpoint, account);
-      return { endpoint, data };
+      return { endpoint, data, checked_at: new Date().toISOString() };
     } catch (error) {
       return {
         endpoint,
+        checked_at: new Date().toISOString(),
         error: error instanceof Error ? error.message : "No se pudo consultar este endpoint de promociones.",
       };
     }
@@ -1142,7 +1145,7 @@ async function getPromotionItems(
 
 function promotionDate(value?: string | null) {
   if (!value) return null;
-  const date = new Date(value);
+  const date = new Date(promotionDateMs(value));
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
@@ -1246,7 +1249,7 @@ function promotionOpportunityRowFromItem(
     seller_amount: promotionSellerAmount(item),
     meli_amount: promotionMeliAmount(item),
     start_date: promotionDate(item.start_date || promotion?.start_date),
-    end_date: promotionDate(item.end_date || promotion?.finish_date),
+    end_date: promotionDate(item.end_date || item.finish_date || promotion?.finish_date),
     raw: promotionOpportunityRaw(item, listingPrice),
     last_sync_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -1622,44 +1625,30 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // En una sincronización paginada eliminamos solamente las promos de los
-    // MLA del lote. Así cada bloque reemplaza datos viejos (incluidos los que
-    // ya no tienen promo) sin borrar lo que falta procesar.
-    const refreshPromotionRowsByItem = targetSkus.length > 0 || (promotionsOnly && pageLimit < 1000);
-    if (!shippingOnly && !installmentsOnly && refreshPromotionRowsByItem) {
-      const idsToRefresh = [...matchedItemIds];
-      if (idsToRefresh.length) {
-        const { error: clearTargetPromotionsError } = await supabase
-          .from("mercadolibre_promotion_opportunities")
-          .delete()
-          .in("meli_item_id", idsToRefresh);
-        if (clearTargetPromotionsError) throw new Error(clearTargetPromotionsError.message);
-      }
-    } else if (!shippingOnly && !installmentsOnly && resetPromotions) {
-      const { error: clearPromotionsError } = await supabase
-        .from("mercadolibre_promotion_opportunities")
-        .delete()
-        .neq("promotion_id", "__never__");
-      if (clearPromotionsError) throw new Error(clearPromotionsError.message);
-    }
-    if (!shippingOnly && !installmentsOnly) {
-      for (const batch of chunk(promotionOpportunityRows, 200)) {
-        let { error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch);
-        // Dos syncs cercanos pueden cruzarse entre su DELETE e INSERT. Reemplazamos
-        // sólo los MLA de este lote y reintentamos una vez para no interrumpir el sync.
-        if (promoSaveError?.code === "23505") {
-          const itemIds = [...new Set(batch.map((row) => row.meli_item_id).filter(Boolean))];
-          const { error: clearConflictError } = await supabase
-            .from("mercadolibre_promotion_opportunities")
-            .delete()
-            .in("meli_item_id", itemIds);
-          if (clearConflictError) throw new Error(clearConflictError.message);
-          ({ error: promoSaveError } = await supabase.from("mercadolibre_promotion_opportunities").insert(batch));
-        }
-        if (promoSaveError) throw new Error(promoSaveError.message);
+    const successfulPromotionIds = [...matchedItemIds].filter((id) => validPromotionPayload(promotionsByItem.get(id)?.raw, id));
+    const failedPromotionIds = [...matchedItemIds].filter((id) => !successfulPromotionIds.includes(id));
+    if (!shippingOnly && !installmentsOnly && failedPromotionIds.length) {
+      const { data: previousRows, error: previousError } = await supabase
+        .from("mercadolibre_shipping_costs").select("id,meli_item_id,meli_promotions").in("meli_item_id", failedPromotionIds);
+      if (previousError) throw new Error(previousError.message);
+      for (const row of previousRows || []) {
+        const previous = Array.isArray(row.meli_promotions) ? row.meli_promotions : [];
+        const raw = promotionsByItem.get(row.meli_item_id)?.raw;
+        const attempt = Array.isArray(raw) ? raw.filter((entry: any) => entry?.error) : [];
+        const { error } = await supabase.from("mercadolibre_shipping_costs").update({
+          // Keep successful values and their timestamp; record the failed attempt separately.
+          meli_promotions: [...previous.filter((entry: any) => !entry?.error), ...attempt],
+        }).eq("id", row.id);
+        if (error) throw new Error(error.message);
       }
     }
-
+    if (!shippingOnly && !installmentsOnly && successfulPromotionIds.length) {
+      const { error: snapshotError } = await supabase.rpc("replace_meli_promotion_snapshot", {
+        p_item_ids: successfulPromotionIds,
+        p_rows: promotionOpportunityRows.filter((row) => successfulPromotionIds.includes(row.meli_item_id)),
+      });
+      if (snapshotError) throw new Error(`No se reemplazaron las promociones: ${snapshotError.message}. Verificar migración 053; los datos previos se conservan.`);
+    }
     if (installmentsOnly) {
       const now = new Date().toISOString();
       let installmentFeeUpdates = 0;
@@ -1780,6 +1769,7 @@ export async function POST(request: NextRequest) {
 
       for (const item of matchedItemsForFetch) {
         const promotionResult = await promotionForMatchedItem(item);
+        if (!validPromotionPayload(promotionResult.raw, item.id)) continue;
 
         for (const sku of resolvedSkus(item)) {
           const product = productsBySku.get(sku);
@@ -1880,6 +1870,7 @@ export async function POST(request: NextRequest) {
         promotion_queries: promotionsByItem.size,
         seller_promotions: sellerPromotions.length,
         promotion_opportunities: promotionOpportunityRows.length,
+        promotion_coverage: { queried: matchedItemIds.size, successful: successfulPromotionIds.length, failed: failedPromotionIds.length, failed_item_ids: failedPromotionIds },
       });
     }
 
@@ -1964,7 +1955,7 @@ export async function POST(request: NextRequest) {
           financingFeeObservations.set(optionCode, currentRates);
         }
 
-        const promotionPayload = promotionResult ? {
+        const promotionPayload = promotionResult && validPromotionPayload(promotionResult.raw, item.id) ? {
           meli_original_price: promotionResult.originalPrice,
           meli_promo_price: promotionResult.promoPrice,
           meli_promo_name: promotionResult.name,
@@ -2170,6 +2161,7 @@ export async function POST(request: NextRequest) {
       listing_price_queries: listingPriceByItem.size,
       seller_promotions: sellerPromotions.length,
       promotion_opportunities: promotionOpportunityRows.length,
+        promotion_coverage: { queried: matchedItemIds.size, successful: successfulPromotionIds.length, failed: failedPromotionIds.length, failed_item_ids: failedPromotionIds },
       category_fee_updates: categoryFeeRows.length,
       installment_fee_updates: installmentFeeUpdates,
       b2b_guard: b2bGuard,
