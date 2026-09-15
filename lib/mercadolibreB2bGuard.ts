@@ -1,6 +1,6 @@
 import { getConnectedMeliAccount, meliFetch } from "@/lib/mercadolibre";
 import { createAdminClient } from "@/lib/supabaseAdmin";
-import { calculatePriceSummary, defaultTaxSettings, mercadoLibreClassicOption } from "@/lib/pricing";
+import { calculateB2bPriceSummary, defaultTaxSettings, mercadoLibreClassicOption } from "@/lib/pricing";
 
 type PriceNode = {
   id?: string | null;
@@ -26,7 +26,7 @@ export async function pauseB2bRangesWithoutContribution() {
   const itemIds = [...new Set(rules.map((rule) => String(rule.meli_item_id || "")).filter(Boolean))];
   const { data: publications, error: publicationError } = await supabase
     .from("mercadolibre_shipping_costs")
-    .select("meli_item_id, meli_promo_meli_amount")
+    .select("*")
     .in("meli_item_id", itemIds);
   if (publicationError) throw new Error(publicationError.message);
   const contributionByItem = new Map((publications || []).map((publication) => [
@@ -75,11 +75,11 @@ export async function pauseB2bRangesWithoutContribution() {
         const sale = await meliFetch(`/items/${itemId}/sale_price?context=channel_marketplace,user_type_business&quantity=${quantity}`, account) as { amount?: number | null };
         const b2bPrice = Number(sale.amount || 0);
         if (!b2bPrice) continue;
-        const result: any = calculatePriceSummary(product, mercadoLibreClassicOption(), categoryFee, taxes as any, {
+        const result: any = calculateB2bPriceSummary(product, mercadoLibreClassicOption(), categoryFee, taxes as any, {
           ...publication,
           shipping_cost_amount: Number(shippingByQuantity.get(quantity) || 0),
         }, {
-          desiredMarginRate: 0,
+          desiredMarginRate: 0, meliContributionAmount: Number(contributionByItem.get(itemId) || 0),
           structureAmount: Number(setting?.structure_amount || 0),
           manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
           salesCommissionRate: Number(setting?.sales_commission_rate || 0),

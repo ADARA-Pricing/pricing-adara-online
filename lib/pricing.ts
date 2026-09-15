@@ -176,6 +176,24 @@ export function calculateMercadoLibrePrice(
   );
 }
 
+// Regla de Negocios indicada para la cuenta: exención del fijo por debajo
+// de $33.000 por unidad. El aporte de ML no integra el precio del comprador.
+export function calculateB2bPriceSummary(
+  product: Product,
+  option: MercadoLibrePriceOption,
+  categoryFee?: MercadoLibreCategoryFee | null,
+  taxes: TaxSettings = defaultTaxSettings(),
+  shippingCost?: MercadoLibreShippingCost | null,
+  target: PricingTarget & { meliContributionAmount?: number } = {},
+) {
+  const withoutFixed = calculatePriceSummary(product, option, categoryFee, taxes,
+    { ...shippingCost, fixed_fee_amount: 0 } as MercadoLibreShippingCost, target);
+  const customerPrice = Number(target.salePrice ?? (withoutFixed.valid ? withoutFixed.roundedPrice : 0))
+    - Number(target.meliContributionAmount || 0);
+  if (withoutFixed.valid && customerPrice > 0 && customerPrice < 33000) return withoutFixed;
+  return calculatePriceSummary(product, option, categoryFee, taxes, shippingCost, target);
+}
+
 export function calculatePriceSummary(
   product: Product,
   rawOption: MercadoLibrePriceOption,

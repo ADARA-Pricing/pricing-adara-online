@@ -23,6 +23,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { createClient } from "@/lib/supabase";
 import {
   calculatePriceSummary,
+  calculateB2bPriceSummary,
   defaultTaxSettings,
   mercadoLibreClassicOption,
   money,
@@ -1419,14 +1420,14 @@ export default function PricesPage() {
       const targetMargin = currentOnePay.valid
         ? Number(currentOnePay.marginOnNetSale || 0)
         : Number(mc.result.marginOnNetSale || 0);
-      const target = { ...targetBase, desiredMarginRate: targetMargin };
-      const sameMarginResult = calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, target) as any;
+      const target = { ...targetBase, desiredMarginRate: targetMargin, meliContributionAmount: Number(publication.meliPromoContributionAmount || 0) };
+      const sameMarginResult = calculateB2bPriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, target) as any;
       // El límite de ML y el precio final pertenecen a esta MLA. No se mezcla
       // con publicaciones espejo: pueden tener promo, aporte y márgenes propios.
       const maximumMeliPrice = Number(recommendation.amount || 0);
       const meliPromoContribution = Number(publication.meliPromoContributionAmount || 0);
       const recommendedResult = maximumMeliPrice > 0
-        ? calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, {
+        ? calculateB2bPriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, {
           ...target,
           salePrice: maximumMeliPrice + meliPromoContribution,
         }) as any
@@ -1439,7 +1440,7 @@ export default function PricesPage() {
       const allowedAtSameMargin = Boolean(requiredPrice && maximumMeliPrice && requiredPrice <= maximumMeliPrice);
       const priceToActivate = allowedAtSameMargin ? requiredPrice : maximumMeliPrice;
       const marginAtCustomerPrice = (customerPrice: number) => {
-        const result = calculatePriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, {
+        const result = calculateB2bPriceSummary(product, mc.option, categoryFee, taxes, b2bShipping, {
           ...target,
           salePrice: customerPrice + meliPromoContribution,
         }) as any;
@@ -1555,11 +1556,12 @@ export default function PricesPage() {
       ) as any;
       const target = {
         ...targetBase,
+        meliContributionAmount: Number(publication.meliPromoContributionAmount || 0),
         desiredMarginRate: currentOnePay.valid
           ? Number(currentOnePay.marginOnNetSale || 0)
           : Number(mcRow.result.marginOnNetSale || 0),
       };
-      const sameMargin = calculatePriceSummary(
+      const sameMargin = calculateB2bPriceSummary(
         modal.product,
         mcRow.option,
         categoryFee,
@@ -1570,7 +1572,7 @@ export default function PricesPage() {
       const maximumMeliPrice = Number(recommendation.amount || 0);
       const meliPromoContribution = Number(publication.meliPromoContributionAmount || 0);
       const atMeliRecommendation = maximumMeliPrice > 0
-        ? calculatePriceSummary(
+        ? calculateB2bPriceSummary(
           modal.product,
           mcRow.option,
           categoryFee,
