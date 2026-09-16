@@ -46,6 +46,7 @@ import type {
 
 type VatCondition = "sin_factura" | "iva_21" | "iva_105";
 type LastEdited = "margin" | "price";
+type ShippingPayer = "seller" | "customer";
 
 type SimulationForm = {
   productName: string;
@@ -57,6 +58,8 @@ type SimulationForm = {
   salePrice: string;
   vatCondition: VatCondition;
   shippingGross: string;
+  fixedFeeGross: string;
+  shippingPayer: ShippingPayer;
   iibbRate: string;
   idcRate: string;
   iiggRate: string;
@@ -73,6 +76,8 @@ type SavedSimulation = {
   sale_price: number;
   vat_condition: VatCondition;
   shipping_gross: number;
+  fixed_fee_gross?: number | null;
+  shipping_payer?: ShippingPayer | null;
   publication_url?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -88,6 +93,8 @@ const initialForm: SimulationForm = {
   salePrice: "317000",
   vatCondition: "iva_21",
   shippingGross: "0",
+  fixedFeeGross: "0",
+  shippingPayer: "seller",
   iibbRate: "",
   idcRate: "",
   iiggRate: "",
@@ -375,7 +382,7 @@ export default function SimulatorPage() {
         const matchesSku = shipping.sku && productSkus.has(shipping.sku);
         return matchesId || matchesSku;
       })
-      .map((shipping) => Number(shipping.fixed_fee_amount || 0) + Number(shipping.shipping_cost_amount || 0))
+      .map((shipping) => Number(shipping.shipping_cost_amount || 0))
       .filter((value) => Number.isFinite(value) && value > 0);
 
     if (!values.length) return null;
@@ -402,11 +409,16 @@ export default function SimulatorPage() {
         const matchesSku = product.sku && shipping.sku === product.sku;
         return matchesId || matchesSku;
       })
-      .map((shipping) => Number(shipping.fixed_fee_amount || 0) + Number(shipping.shipping_cost_amount || 0))
-      .filter((value) => Number.isFinite(value) && value > 0);
+      .map((shipping) => ({
+        fixedFeeGross: Number(shipping.fixed_fee_amount || 0),
+        shippingGross: Number(shipping.shipping_cost_amount || 0),
+      }));
 
     if (!values.length) return null;
-    return values.reduce((sum, value) => sum + value, 0) / values.length;
+    return {
+      fixedFeeGross: values.reduce((sum, value) => sum + (Number.isFinite(value.fixedFeeGross) ? value.fixedFeeGross : 0), 0) / values.length,
+      shippingGross: values.reduce((sum, value) => sum + (Number.isFinite(value.shippingGross) ? value.shippingGross : 0), 0) / values.length,
+    };
   }
 
   function currentPriceForProduct(product: Product) {
@@ -431,7 +443,7 @@ export default function SimulatorPage() {
 
     const productShipping = shippingForProduct(product);
     const categoryShipping = averageShippingForCategory(product.category || "");
-    const shippingGross = productShipping ?? categoryShipping ?? Number(toNumber(form.shippingGross) || 0);
+    const shippingGross = productShipping?.shippingGross ?? categoryShipping ?? Number(toNumber(form.shippingGross) || 0);
     const currentMeliPrice = currentPriceForProduct(product);
 
     setForm((current) => ({
@@ -442,6 +454,7 @@ export default function SimulatorPage() {
       costWithoutVat: String(Math.round(Number(product.cost_without_vat || 0))),
       vatCondition: vatConditionFromProduct(product),
       shippingGross: String(Math.round(shippingGross)),
+      fixedFeeGross: String(Math.round(productShipping?.fixedFeeGross || 0)),
       salePrice: currentMeliPrice !== null ? String(Math.round(currentMeliPrice)) : current.salePrice,
     }));
     setLoadedSimulation(null);
@@ -472,6 +485,8 @@ export default function SimulatorPage() {
       salePrice: "",
       vatCondition: "iva_21",
       shippingGross: "0",
+      fixedFeeGross: "0",
+      shippingPayer: "seller",
       iibbRate: formatPercentInput(taxes.iibb_rate),
       idcRate: formatPercentInput(taxes.idc_rate),
       iiggRate: formatPercentInput(taxes.iigg_rate),
@@ -509,6 +524,8 @@ export default function SimulatorPage() {
       sale_price: Number(simulation.grossSalePrice || 0),
       vat_condition: form.vatCondition,
       shipping_gross: Number(toNumber(form.shippingGross) || 0),
+      fixed_fee_gross: Number(toNumber(form.fixedFeeGross) || 0),
+      shipping_payer: form.shippingPayer,
       updated_at: new Date().toISOString(),
     };
 
@@ -540,6 +557,8 @@ export default function SimulatorPage() {
       salePrice: String(Math.round(currentMeliPrice ?? Number(item.sale_price || 0))),
       vatCondition: item.vat_condition || "iva_21",
       shippingGross: String(Math.round(Number(item.shipping_gross || 0))),
+      fixedFeeGross: String(Math.round(Number(item.fixed_fee_gross || 0))),
+      shippingPayer: item.shipping_payer === "customer" ? "customer" : "seller",
       iibbRate: formatPercentInput(taxes.iibb_rate),
       idcRate: formatPercentInput(taxes.idc_rate),
       iiggRate: formatPercentInput(taxes.iigg_rate),
@@ -749,7 +768,9 @@ export default function SimulatorPage() {
     const productVatRate = vatRateFromCondition(form.vatCondition);
     const appliesVat = saleAppliesVat(form.vatCondition);
     const shippingGross = Number(toNumber(form.shippingGross) || 0);
-    const shippingNet = shippingGross / 1.21;
+    const fixedFeeGross = Number(toNumber(form.fixedFeeGross) || 0);
+    const sellerPaysShipping = form.shippingPayer === "seller";
+    const shippingNet = sellerPaysShipping ? shippingGross / 1.21 : 0;
     const simulationTaxes: TaxSettings = {
       ...taxes,
       iibb_rate: Number(toNumber(form.iibbRate) || 0),
@@ -786,9 +807,9 @@ export default function SimulatorPage() {
     const shippingCost = {
       product_id: "SIM",
       sku: "SIM",
-      fixed_fee_amount: 0,
-      shipping_cost_amount: shippingGross,
-      free_shipping: true,
+      fixed_fee_amount: fixedFeeGross,
+      shipping_cost_amount: sellerPaysShipping ? shippingGross : 0,
+      free_shipping: sellerPaysShipping,
       shipping_method: "manual",
       active: true,
     };
@@ -883,6 +904,8 @@ export default function SimulatorPage() {
       simulationTaxes,
       shippingGross,
       shippingNet,
+      fixedFeeGross,
+      sellerPaysShipping,
       structureAmount,
       averageShippingForSelectedCategory,
       categoryFee,
@@ -1066,6 +1089,30 @@ export default function SimulatorPage() {
                 Se completa con el promedio de envío de la categoría, pero podés modificarlo.
               </span>
             </div>
+
+            <div className="field">
+              <label>Costo fijo ML c/IVA</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.fixedFeeGross}
+                onChange={(event) => update("fixedFeeGross", event.target.value)}
+                placeholder="0"
+              />
+              <span className="small">Se carga por separado del envío y se puede ajustar manualmente.</span>
+            </div>
+
+            <div className="field">
+              <label>Quién paga el envío</label>
+              <select
+                value={form.shippingPayer}
+                onChange={(event) => update("shippingPayer", event.target.value as ShippingPayer)}
+              >
+                <option value="seller">Lo absorbe el vendedor</option>
+                <option value="customer">Lo paga el cliente</option>
+              </select>
+              <span className="small">Si lo paga el cliente, el envío no se descuenta de tu ganancia.</span>
+            </div>
           </div>
 
           <div className="simulator-linked-note">
@@ -1137,7 +1184,11 @@ export default function SimulatorPage() {
             </div>
             <div>
               <span>Envío c/IVA</span>
-              <strong>{moneyWithCents(simulation.shippingGross)}</strong>
+              <strong>{simulation.sellerPaysShipping ? moneyWithCents(simulation.shippingGross) : "A cargo del cliente"}</strong>
+            </div>
+            <div>
+              <span>Costo fijo ML c/IVA</span>
+              <strong>{moneyWithCents(simulation.fixedFeeGross)}</strong>
             </div>
             <div>
               <span>Margen bruto</span>
@@ -1364,7 +1415,7 @@ export default function SimulatorPage() {
                           <td>{product.supplier || "Sin proveedor"}</td>
                           <td className="numeric">{moneyWithCents(cost)}</td>
                           <td className="numeric">{price ? moneyWithCents(price) : "-"}</td>
-                          <td className="numeric">{shipping ? moneyWithCents(shipping) : "-"}</td>
+                          <td className="numeric">{shipping ? moneyWithCents(shipping.shippingGross + shipping.fixedFeeGross) : "-"}</td>
                           <td>
                             <button className="item-action" type="button" onClick={(event) => {
                               event.stopPropagation();
