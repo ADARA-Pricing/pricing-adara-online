@@ -766,7 +766,9 @@ export default function PromocionesMeliPage() {
   const pickerRef = useDialogFocus(productPickerOpen, () => setProductPickerOpen(false));
   const alertsRef = useDialogFocus(desktopAlertsModalOpen, () => setDesktopAlertsModalOpen(false));
   const missingRef = useDialogFocus(missingPromoModalOpen, () => setMissingPromoModalOpen(false));
-  const [redThreshold, setRedThreshold] = useState(5);
+  // El objetivo habitual es 5%, pero una promo apenas debajo del objetivo no
+  // tiene la misma urgencia que una que ya pierde dinero.
+  const [redThreshold, setRedThreshold] = useState(0);
   const [yellowThreshold, setYellowThreshold] = useState(5);
   const [syncingMeli, setSyncingMeli] = useState(false);
   const [promotionSyncProgress, setPromotionSyncProgress] = useState<{ completed: number; total: number } | null>(null);
@@ -1674,6 +1676,7 @@ export default function PromocionesMeliPage() {
           };
 
           if (margin < redThreshold) addItem(red, item);
+          else if (margin < yellowThreshold) addItem(yellow, item);
         });
 
         const shouldSurfaceScheduled = (item: { promo: PromoComparison; margin: number }) =>
@@ -1827,10 +1830,15 @@ export default function PromocionesMeliPage() {
     }
 
     function groupYellowBySku(items: PromoTrafficLightItem[]) {
-      const selected: PromoTrafficLightItem[] = [];
+      // Las vigentes que casi alcanzan el objetivo no son una sugerencia: hay
+      // que conservarlas siempre para que se puedan explorar. Las candidatas
+      // siguen usando la selección compacta de alternativas por cuota.
+      const selected: PromoTrafficLightItem[] = items.filter((item) => item.status === "Vigente");
       const bySkuInstallment = new Map<string, PromoTrafficLightItem[]>();
 
-      items.filter((item) => !hasFutureStart(item.startDate)).forEach((item) => {
+      items
+        .filter((item) => item.status === "Para activar" && !hasFutureStart(item.startDate))
+        .forEach((item) => {
         const key = `${item.sku}|${item.itemId}|${item.installmentLabel}`;
         bySkuInstallment.set(key, [...(bySkuInstallment.get(key) || []), item]);
       });
@@ -2565,7 +2573,7 @@ export default function PromocionesMeliPage() {
         <div className="promociones-traffic-head">
           <div>
             <h2>Ajustes pendientes</h2>
-            <p>Intervalos: rojo por debajo de Rojo; amarillo desde Rojo hasta Amarillo sin incluir; verde desde Amarillo. Si ambos umbrales coinciden, no hay intervalo amarillo.</p>
+            <p>Intervalos de margen: rojo por debajo de Rojo; amarillo desde Rojo hasta Amarillo sin incluir; verde desde Amarillo. Por defecto, rojo es negativo y amarillo reúne promos vigentes que quedan por poco debajo del 5%.</p>
           </div>
           <div className="promociones-traffic-actions">
             <label>
@@ -2618,8 +2626,8 @@ export default function PromocionesMeliPage() {
             },
             {
               key: "yellow",
-              title: "Candidatas para revisar",
-              subtitle: `Publicaciones activas con mas de ${percent(yellowThreshold)}`,
+              title: "Cerca del objetivo",
+              subtitle: `Vigentes entre ${percent(redThreshold)} y ${percent(yellowThreshold)}; también candidatas rentables`,
               groups: trafficLights.yellow,
               Icon: TrendingUp,
             },
@@ -2731,7 +2739,7 @@ export default function PromocionesMeliPage() {
                             <div className="promociones-traffic-item">
                               <div className="promociones-traffic-main">
                                 <strong>{item.installmentLabel}</strong>
-                                {column.key === "yellow" && <span className="promo-date-badge">Sugerida</span>}
+                                {column.key === "yellow" && <span className="promo-date-badge">{item.status === "Vigente" ? "Vigente" : "Sugerida"}</span>}
                                 <span>
                                   {item.promotionName}
                                   {column.key === "yellow" && validity ? ` | ${validity}` : ""}
