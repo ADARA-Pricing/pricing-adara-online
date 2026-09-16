@@ -43,5 +43,5 @@ export function validPromotionPayload(raw: unknown, itemId: string) {
     promo && typeof promo === 'object' && (promo.id || promo.type) && typeof promo.status === 'string'));
 }
 export function validThresholds(red: number, yellow: number) {
-  return Number.isFinite(red) && Number.isFinite(yellow) && red >= -100 && yellow <= 100 && red <= yellow;
+  return Number.isFinite(red) && Number.isFinite(yellow) && red <= yellow;
 }

@@ -1740,10 +1740,9 @@ export default function PromocionesMeliPage() {
 
         if (isActivePublication) {
           candidatePromos
-            // Esta columna sirve para decidir una activación. Incluye también
-            // candidatas que quedan cerca del objetivo (0–<5% por defecto),
-            // pero no muestra una vigente si no hay alternativa que comparar.
-            .filter((candidate) => candidate.margin >= redThreshold)
+            // El umbral amarillo es la rentabilidad mínima que el usuario
+            // acepta para una candidata. Las vigentes sólo son referencia.
+            .filter((candidate) => candidate.margin >= yellowThreshold)
             .sort((a, b) => {
               const priceA = Number(a.promo.effectiveSalePrice || a.promo.promoPrice || 0);
               const priceB = Number(b.promo.effectiveSalePrice || b.promo.promoPrice || 0);
@@ -2587,9 +2586,7 @@ export default function PromocionesMeliPage() {
               Rojo (menor a)
               <input
                 type="number"
-                min="-100"
-                max="100"
-                step="0.5"
+                step="0.1"
                 value={redThreshold}
                 onChange={(event) => { const value = Number(event.target.value); if (validThresholds(value, yellowThreshold)) setRedThreshold(value); }}
               />
@@ -2599,9 +2596,7 @@ export default function PromocionesMeliPage() {
               Amarillo (hasta)
               <input
                 type="number"
-                min="-100"
-                max="100"
-                step="0.5"
+                step="0.1"
                 value={yellowThreshold}
                 onChange={(event) => { const value = Number(event.target.value); if (validThresholds(redThreshold, value)) setYellowThreshold(value); }}
               />
@@ -2634,7 +2629,7 @@ export default function PromocionesMeliPage() {
             {
               key: "yellow",
               title: "Candidatas para activar",
-              subtitle: `Rentables desde ${percent(redThreshold)}; amarillo hasta ${percent(yellowThreshold)}`,
+              subtitle: `Rentabilidad mínima ${percent(yellowThreshold)} (configurable)`,
               groups: trafficLights.yellow,
               Icon: TrendingUp,
             },
