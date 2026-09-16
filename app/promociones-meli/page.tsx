@@ -1683,7 +1683,6 @@ export default function PromocionesMeliPage() {
           };
 
           if (margin < redThreshold) addItem(red, item);
-          else if (margin < yellowThreshold) addItem(yellow, item);
         });
 
         const shouldSurfaceScheduled = (item: { promo: PromoComparison; margin: number }) =>
@@ -1741,7 +1740,10 @@ export default function PromocionesMeliPage() {
 
         if (isActivePublication) {
           candidatePromos
-            .filter((candidate) => candidate.margin > yellowThreshold)
+            // Esta columna sirve para decidir una activación. Incluye también
+            // candidatas que quedan cerca del objetivo (0–<5% por defecto),
+            // pero no muestra una vigente si no hay alternativa que comparar.
+            .filter((candidate) => candidate.margin >= redThreshold)
             .sort((a, b) => {
               const priceA = Number(a.promo.effectiveSalePrice || a.promo.promoPrice || 0);
               const priceB = Number(b.promo.effectiveSalePrice || b.promo.promoPrice || 0);
@@ -1837,14 +1839,11 @@ export default function PromocionesMeliPage() {
     }
 
     function groupYellowBySku(items: PromoTrafficLightItem[]) {
-      // Las vigentes que casi alcanzan el objetivo no son una sugerencia: hay
-      // que conservarlas siempre para que se puedan explorar. Las candidatas
-      // siguen usando la selección compacta de alternativas por cuota.
-      const selected: PromoTrafficLightItem[] = items.filter((item) => item.status === "Vigente");
+      const selected: PromoTrafficLightItem[] = [];
       const bySkuInstallment = new Map<string, PromoTrafficLightItem[]>();
 
       items
-        .filter((item) => item.status === "Para activar" && !hasFutureStart(item.startDate))
+        .filter((item) => !hasFutureStart(item.startDate))
         .forEach((item) => {
         const key = `${item.sku}|${item.itemId}|${item.installmentLabel}`;
         bySkuInstallment.set(key, [...(bySkuInstallment.get(key) || []), item]);
@@ -2581,7 +2580,7 @@ export default function PromocionesMeliPage() {
         <div className="promociones-traffic-head">
           <div>
             <h2>Ajustes pendientes</h2>
-            <p>Intervalos de margen: rojo por debajo de Rojo; amarillo desde Rojo hasta Amarillo sin incluir; verde desde Amarillo. Por defecto, rojo es negativo y amarillo reúne promos vigentes que quedan por poco debajo del 5%.</p>
+            <p>Intervalos de margen: rojo por debajo de Rojo; amarillo desde Rojo hasta Amarillo sin incluir; verde desde Amarillo. Esta vista muestra candidatas para activar y futuras; una vigente sólo aparece como referencia al comparar una candidata.</p>
           </div>
           <div className="promociones-traffic-actions">
             <label>
@@ -2634,8 +2633,8 @@ export default function PromocionesMeliPage() {
             },
             {
               key: "yellow",
-              title: "Cerca del objetivo",
-              subtitle: `Vigentes entre ${percent(redThreshold)} y ${percent(yellowThreshold)}; también candidatas rentables`,
+              title: "Candidatas para activar",
+              subtitle: `Rentables desde ${percent(redThreshold)}; amarillo hasta ${percent(yellowThreshold)}`,
               groups: trafficLights.yellow,
               Icon: TrendingUp,
             },
