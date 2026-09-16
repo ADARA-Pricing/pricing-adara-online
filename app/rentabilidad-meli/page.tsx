@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChartNoAxesCombined, Filter, RefreshCw, Search } from "lucide-react";
 import { usePricingLoad } from '@/lib/usePricingLoad';
 import { PricingDataStatus, PricingPagination } from '@/components/PricingDataStatus';
-import { normalizeFilter, categoryOptions } from '@/lib/pricingData';
+import { normalizeFilter, categoryOptions, readPages } from '@/lib/pricingData';
 import { CategoryFilter, PricingSearch } from '@/components/PricingFilters';
 import { useRememberedView } from '@/lib/useRememberedView';
 import { PageHero } from "@/components/PageHero";
@@ -80,6 +80,17 @@ function isToday(value?: string | null) {
   if (Number.isNaN(date.getTime())) return false;
   const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
   return formatter.format(date) === formatter.format(new Date());
+}
+
+function argentinaTodayStart() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: string) => parts.find((entry) => entry.type === type)?.value || "";
+  return new Date(`${part("year")}-${part("month")}-${part("day")}T00:00:00-03:00`);
 }
 
 function formatUnits(value: number) {
@@ -199,6 +210,7 @@ export default function RentabilidadMeliPage() {
   const [error, setError] = useState<string | null>(null);
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
   const [loadingInfo, setLoadingInfo] = useState<string | null>("Cargando rentabilidad ML...");
+  const [todayReady, setTodayReady] = useState(false);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -212,9 +224,29 @@ export default function RentabilidadMeliPage() {
     finally { setLoading(false); }
   }
 
+  async function loadTodayThenHistory() {
+    setLoadingInfo("Cargando primero las ventas de hoy...");
+    try {
+      const today = argentinaTodayStart();
+      const result = await readPages(
+        supabase,
+        { table: "mercadolibre_order_items", columns: salesSelectColumns, filters: [["gte", "order_date", today.toISOString()]], order: "order_date", ascending: false },
+        new AbortController().signal,
+      );
+      setSales(result.rows);
+      setTodayReady(true);
+      setLoadingInfo("Mostrando las ventas de hoy; completando el historial en segundo plano...");
+    } catch {
+      // La carga completa conserva su manejo de errores y puede recuperar la
+      // vista aunque la consulta prioritaria haya fallado de forma transitoria.
+      setLoadingInfo("Cargando el historial de rentabilidad...");
+    }
+    await loadData({ initial: true });
+  }
+
   useEffect(() => {
     checkSession();
-    loadData({ initial: true });
+    loadTodayThenHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -384,6 +416,8 @@ export default function RentabilidadMeliPage() {
       };
     });
   }, [products, publications, sales, period]);
+
+  const hasVisibleData = todayReady || !dataLoad.initial;
 
   const categories = useMemo(() => {
     return categoryOptions(rows.map((row) => row.category));
@@ -671,42 +705,42 @@ export default function RentabilidadMeliPage() {
       <section className="rotation-summary">
         <article className="kpi-card">
           <span className="kpi-label">Productos vendidos</span>
-          <strong className="kpi-value">{dataLoad.initial ? "—" : formatUnits(totals.products)}</strong>
+          <strong className="kpi-value">{hasVisibleData ? formatUnits(totals.products) : "—"}</strong>
           <small className="kpi-meta">{period === "today" ? "Ventas de hoy" : `Últimos ${period} días`}</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Unidades</span>
-          <strong className="kpi-value">{dataLoad.initial ? "—" : formatUnits(totals.units)}</strong>
+          <strong className="kpi-value">{hasVisibleData ? formatUnits(totals.units) : "—"}</strong>
           <small className="kpi-meta">Vendidas</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Facturacion</span>
-          <strong className="kpi-value">{dataLoad.initial ? "—" : moneyWithCents(totals.revenue)}</strong>
+          <strong className="kpi-value">{hasVisibleData ? moneyWithCents(totals.revenue) : "—"}</strong>
           <small className="kpi-meta">ML</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Ganancia real</span>
-          <strong className="kpi-value">{dataLoad.initial ? "—" : moneyWithCents(totals.netProfit)}</strong>
+          <strong className="kpi-value">{hasVisibleData ? moneyWithCents(totals.netProfit) : "—"}</strong>
           <small className="kpi-meta">{period === "today" ? "Ganancia del dia" : `Últimos ${period} días`}</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Ganancia / facturacion</span>
-          <strong className="kpi-value">{dataLoad.initial ? "—" : percent(totals.grossProfitRate)}</strong>
+          <strong className="kpi-value">{hasVisibleData ? percent(totals.grossProfitRate) : "—"}</strong>
           <small className="kpi-meta">Sobre venta bruta ML</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Margen real</span>
-          <strong className="kpi-value">{dataLoad.initial ? "—" : percent(totals.margin)}</strong>
+          <strong className="kpi-value">{hasVisibleData ? percent(totals.margin) : "—"}</strong>
           <small className="kpi-meta">Sobre ventas reales</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Margen normalizado</span>
-          <strong className="kpi-value">{dataLoad.initial ? "—" : percent(totals.normalizedMargin)}</strong>
+          <strong className="kpi-value">{hasVisibleData ? percent(totals.normalizedMargin) : "—"}</strong>
           <small className="kpi-meta">Base comparable 1 pago</small>
         </article>
         <article className="kpi-card">
           <span className="kpi-label">Margen sobre costo</span>
-          <strong className="kpi-value">{dataLoad.initial ? "—" : percent(totals.marginOnCost)}</strong>
+          <strong className="kpi-value">{hasVisibleData ? percent(totals.marginOnCost) : "—"}</strong>
           <small className="kpi-meta">Ganancia / costo usado</small>
         </article>
       </section>
@@ -771,7 +805,7 @@ export default function RentabilidadMeliPage() {
 
         <div className="rotation-table-status">
           <div className="rotation-active-context">
-            <span>{dataLoad.initial ? "—" : filteredRows.length} de {dataLoad.initial ? "—" : rows.length} {period === "today" ? "ventas" : "productos"}</span>
+            <span>{hasVisibleData ? filteredRows.length : "—"} de {hasVisibleData ? rows.length : "—"} {period === "today" ? "ventas" : "productos"}</span>
             <span>{period === "today" ? "Periodo hoy" : `Periodo ${period} dias`}</span>
             {activeQuickFilterEntries.map((filter) => (
               <button className="rotation-active-filter" type="button" key={filter.key} onClick={filter.clear}>
@@ -791,7 +825,7 @@ export default function RentabilidadMeliPage() {
           </div>
         </div>
 
-        <PricingPagination page={listPage} total={dataLoad.initial ? 0 : filteredRows.length} onPage={setListPage} />
+        <PricingPagination page={listPage} total={hasVisibleData ? filteredRows.length : 0} onPage={setListPage} />
           <div className="rotation-table-wrap">
           <table className="rotation-table">
             <colgroup>
