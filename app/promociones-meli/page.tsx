@@ -777,6 +777,7 @@ export default function PromocionesMeliPage() {
   const [blockedActivationKeys, setBlockedActivationKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
   async function checkSession() {
     const { data } = await supabase.auth.getSession();
@@ -808,7 +809,10 @@ export default function PromocionesMeliPage() {
     const scope = options.scope || "promotions";
     setSyncingMeli(true);
     setPromotionSyncProgress(null);
-    if (!options.silent) setError(null);
+    if (!options.silent) {
+      setError(null);
+      setSyncNotice(null);
+    }
 
     async function syncBatch(payload: Record<string, unknown>) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -822,7 +826,7 @@ export default function PromocionesMeliPage() {
             signal: controller.signal,
           });
           const data = await response.json().catch(() => ({}));
-          if (response.ok) return data as { total_items?: number; totals_by_status?: Record<string, number>; promotion_coverage?: { failed?: number } };
+          if (response.ok) return data as { total_items?: number; totals_by_status?: Record<string, number>; promotion_coverage?: { failed?: number; skipped?: number } };
           // Un 502/503/504 puede ser temporal (ML o el gateway). Reintentar el
           // mismo lote es seguro porque el servidor reemplaza sus oportunidades.
           if (![429, 502, 503, 504].includes(response.status) || attempt === 2) {
@@ -853,6 +857,7 @@ export default function PromocionesMeliPage() {
       let total = 0;
       let batchesSinceReload = 0;
       let failedItems = 0;
+      let skippedItems = 0;
 
       // Si hay un producto abierto, éste se actualiza primero para que la
       // pantalla refleje el cambio enseguida y el resto siga en segundo plano.
@@ -863,7 +868,9 @@ export default function PromocionesMeliPage() {
       do {
         const data = await syncBatch({ scope, offset, pageLimit, resetPromotions: false, statuses: ["active"] });
         failedItems += data.promotion_coverage?.failed || 0;
+        skippedItems += data.promotion_coverage?.skipped || 0;
         if (failedItems) setError(`Actualización parcial: ${failedItems} consultas de MLA fallaron. Se conservaron sus datos previos.`);
+        if (skippedItems) setSyncNotice(`${skippedItems} publicaciones en revisión de Mercado Libre se omitieron: ese estado no admite consultas de promociones. Se conservaron sus datos previos.`);
         const totals = Object.values(data.totals_by_status || {}).map((value) => Number(value || 0));
         total = Math.max(total, ...totals, Number(data.total_items || 0));
         offset += pageLimit;
@@ -2068,6 +2075,7 @@ export default function PromocionesMeliPage() {
 
       <PricingDataStatus state={dataLoad.state} publications={publications} onRefresh={() => loadData()} />
       {error && <div className="message error">{error}</div>}
+      {syncNotice && <div className="message info">{syncNotice}</div>}
 
       <section className="card promociones-workbar">
         <div className="promociones-current-product">

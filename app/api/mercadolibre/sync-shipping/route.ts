@@ -1547,9 +1547,19 @@ export async function POST(request: NextRequest) {
       resolvedSkus(item).some((sku) => Boolean(productsBySku.get(sku)?.id)),
     );
     const matchedItemIds = new Set(matchedItemsForFetch.map((item) => item.id));
+    // Mercado Libre rechaza el endpoint de promociones para publicaciones en
+    // revisión. No es un fallo de sincronización ni debe borrar su snapshot.
+    const promotionQueryItems = matchedItemsForFetch.filter((item) =>
+      String(item.status || "").toLowerCase() === "active",
+    );
+    const skippedPromotionItems = matchedItemsForFetch.filter((item) =>
+      String(item.status || "").toLowerCase() !== "active",
+    );
+    const promotionQueryItemIds = new Set(promotionQueryItems.map((item) => item.id));
 
     await mapWithConcurrency(matchedItemsForFetch, promotionsOnly || shippingOnly || installmentsOnly ? 8 : 4, async (item) => {
       if (promotionsOnly) {
+        if (!promotionQueryItemIds.has(item.id)) return;
         detailedItemsByItem.set(item.id, item);
         await promotionForMatchedItem(item);
         return;
@@ -1590,7 +1600,7 @@ export async function POST(request: NextRequest) {
       detailedItemsByItem.set(item.id, detailedItem);
       await Promise.all([
         shippingCostForMatchedItem(item),
-        promotionForMatchedItem(item),
+        ...(promotionQueryItemIds.has(item.id) ? [promotionForMatchedItem(item)] : []),
         priceToWinForMatchedItem(item),
         listingPriceForMatchedItem(item),
       ]);
@@ -1625,8 +1635,8 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    const successfulPromotionIds = [...matchedItemIds].filter((id) => validPromotionPayload(promotionsByItem.get(id)?.raw, id));
-    const failedPromotionIds = [...matchedItemIds].filter((id) => !successfulPromotionIds.includes(id));
+    const successfulPromotionIds = [...promotionQueryItemIds].filter((id) => validPromotionPayload(promotionsByItem.get(id)?.raw, id));
+    const failedPromotionIds = [...promotionQueryItemIds].filter((id) => !successfulPromotionIds.includes(id));
     if (!shippingOnly && !installmentsOnly && failedPromotionIds.length) {
       const { data: previousRows, error: previousError } = await supabase
         .from("mercadolibre_shipping_costs").select("id,meli_item_id,meli_promotions").in("meli_item_id", failedPromotionIds);
@@ -1767,7 +1777,7 @@ export async function POST(request: NextRequest) {
         };
       }
 
-      for (const item of matchedItemsForFetch) {
+      for (const item of promotionQueryItems) {
         const promotionResult = await promotionForMatchedItem(item);
         if (!validPromotionPayload(promotionResult.raw, item.id)) continue;
 
@@ -1870,7 +1880,7 @@ export async function POST(request: NextRequest) {
         promotion_queries: promotionsByItem.size,
         seller_promotions: sellerPromotions.length,
         promotion_opportunities: promotionOpportunityRows.length,
-        promotion_coverage: { queried: matchedItemIds.size, successful: successfulPromotionIds.length, failed: failedPromotionIds.length, failed_item_ids: failedPromotionIds },
+        promotion_coverage: { queried: promotionQueryItemIds.size, successful: successfulPromotionIds.length, failed: failedPromotionIds.length, failed_item_ids: failedPromotionIds, skipped: skippedPromotionItems.length, skipped_item_ids: skippedPromotionItems.map((item) => item.id) },
       });
     }
 
@@ -1918,7 +1928,9 @@ export async function POST(request: NextRequest) {
         }
 
         const shippingResult = await shippingCostForMatchedItem(item);
-        const promotionResult = shippingOnly ? null : await promotionForMatchedItem(item);
+        const promotionResult = shippingOnly || !promotionQueryItemIds.has(item.id)
+          ? null
+          : await promotionForMatchedItem(item);
         const detailedItem = detailedItemsByItem.get(item.id) || item;
         const priceToWinResult = shippingOnly ? null : await priceToWinForMatchedItem(item);
         const listingPriceResult = await listingPriceForMatchedItem(item);
@@ -2161,7 +2173,7 @@ export async function POST(request: NextRequest) {
       listing_price_queries: listingPriceByItem.size,
       seller_promotions: sellerPromotions.length,
       promotion_opportunities: promotionOpportunityRows.length,
-        promotion_coverage: { queried: matchedItemIds.size, successful: successfulPromotionIds.length, failed: failedPromotionIds.length, failed_item_ids: failedPromotionIds },
+        promotion_coverage: { queried: promotionQueryItemIds.size, successful: successfulPromotionIds.length, failed: failedPromotionIds.length, failed_item_ids: failedPromotionIds, skipped: skippedPromotionItems.length, skipped_item_ids: skippedPromotionItems.map((item) => item.id) },
       category_fee_updates: categoryFeeRows.length,
       installment_fee_updates: installmentFeeUpdates,
       b2b_guard: b2bGuard,
