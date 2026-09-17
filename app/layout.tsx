@@ -3,8 +3,18 @@ import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pricing ADARA",
-  description: "App interna para costos, productos y pricing por canal"
+  title: "ADARA Ventas",
+  description: "Monitor de ventas, stock y simulador de ADARA",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ADARA Ventas",
+  },
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
