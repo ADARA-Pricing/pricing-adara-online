@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BarChart3, Boxes, CircleDollarSign, PackageCheck, RefreshCw, ShoppingBag, TrendingUp } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageHero } from "@/components/PageHero";
 import { PricingDataStatus } from "@/components/PricingDataStatus";
 import { createClient } from "@/lib/supabase";
@@ -44,20 +45,7 @@ function compactMoney(value: number) {
 }
 
 function HourlyChart({ values }: { values: number[] }) {
-  const max = Math.max(...values, 1);
-  const width = 720;
-  const height = 236;
-  const padding = { left: 12, right: 12, top: 16, bottom: 26 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-  const points = values.map((value, hour) => {
-    const x = padding.left + (hour / 23) * chartWidth;
-    const y = padding.top + chartHeight - (value / max) * chartHeight;
-    return `${x},${y}`;
-  }).join(" ");
-  const area = `${padding.left},${padding.top + chartHeight} ${points} ${width - padding.right},${padding.top + chartHeight}`;
-  const currentHour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
-  const currentX = padding.left + (Math.min(Math.max(currentHour, 0), 23) / 23) * chartWidth;
+  const data = values.map((revenue, hour) => ({ hour: String(hour).padStart(2, "0"), revenue }));
 
   return (
     <div className="sales-monitor-chart" role="img" aria-label="Facturación acumulada por hora de hoy">
@@ -65,21 +53,18 @@ function HourlyChart({ values }: { values: number[] }) {
         <span>Facturación por hora</span>
         <strong>Hoy</strong>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
-        {[0.25, 0.5, 0.75, 1].map((line) => {
-          const y = padding.top + chartHeight - chartHeight * line;
-          return <line key={line} x1={padding.left} x2={width - padding.right} y1={y} y2={y} className="sales-monitor-grid-line" />;
-        })}
-        <polygon points={area} className="sales-monitor-area" />
-        <polyline points={points} className="sales-monitor-line" />
-        <line x1={currentX} x2={currentX} y1={padding.top} y2={padding.top + chartHeight} className="sales-monitor-now-line" />
-        <circle cx={currentX} cy={padding.top + chartHeight - (values[currentHour] || 0) / max * chartHeight} r="5" className="sales-monitor-now-dot" />
-        {[0, 4, 8, 12, 16, 20, 23].map((hour) => (
-          <text key={hour} x={padding.left + (hour / 23) * chartWidth} y={height - 6} textAnchor="middle" className="sales-monitor-axis-label">
-            {String(hour).padStart(2, "0")}
-          </text>
-        ))}
-      </svg>
+      <div className="sales-monitor-chart-canvas">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 12, right: 4, left: -18, bottom: 0 }}>
+            <defs><linearGradient id="salesRevenue" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#246bfe" stopOpacity={0.35} /><stop offset="100%" stopColor="#246bfe" stopOpacity={0.02} /></linearGradient></defs>
+            <CartesianGrid vertical={false} stroke="#e7ecf4" strokeDasharray="3 5" />
+            <XAxis dataKey="hour" interval={3} tickLine={false} axisLine={false} tick={{ fill: "#7a8497", fontSize: 11 }} />
+            <YAxis tickFormatter={compactMoney} width={52} tickLine={false} axisLine={false} tick={{ fill: "#7a8497", fontSize: 11 }} />
+            <Tooltip formatter={(value: number) => [moneyWithCents(value), "Facturación"]} labelFormatter={(hour) => `${hour}:00 hs`} cursor={{ stroke: "#246bfe", strokeDasharray: "4 4" }} contentStyle={{ borderRadius: 12, border: "1px solid #dfe7f3", boxShadow: "0 8px 20px rgba(15,23,42,.12)" }} />
+            <Area type="monotone" dataKey="revenue" stroke="#246bfe" strokeWidth={3} fill="url(#salesRevenue)" activeDot={{ r: 5, strokeWidth: 3, stroke: "#fff" }} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
@@ -178,12 +163,12 @@ export default function SalesMonitorPage() {
             {view.rows.map(({ sale, product, revenue, units, profit, margin, stock, thumbnail }) => (
               <article className="sales-monitor-sale" key={`${sale.order_id}-${sale.meli_item_id}-${sale.variation_id || ""}-${sale.id || sale.order_date}`}>
                 <div className="sales-monitor-sale-main">
-                  <span className="sales-monitor-time">{timeLabel(sale.order_date)}</span>
                   <div className="sales-monitor-thumbnail" aria-hidden="true">
                     {thumbnail ? <img src={thumbnail} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
                     <span>{(sale.title || product?.name || "?").trim().charAt(0)}</span>
                   </div>
                   <div className="sales-monitor-sale-title"><strong>{sale.title || product?.name || "Venta Mercado Libre"}</strong><small>{sale.sku || product?.sku || "Sin SKU"} · {units} {units === 1 ? "unidad" : "unidades"} · Stock {stock}</small></div>
+                  <span className="sales-monitor-time">{timeLabel(sale.order_date)}</span>
                 </div>
                 <div className="sales-monitor-sale-values"><div><span>Vendido</span><strong>{moneyWithCents(revenue)}</strong></div><div className={profit < 0 ? "negative" : "positive"}><span>Ganancia</span><strong>{moneyWithCents(profit)}</strong><small>{margin === null ? "Sin cálculo" : percent(margin)}</small></div></div>
               </article>
