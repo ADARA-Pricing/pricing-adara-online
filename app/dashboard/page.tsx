@@ -35,6 +35,7 @@ import type {
 type ActionType =
   | "paused_stock"
   | "low_margin"
+  | "negative_sale"
   | "b2b_margin"
   | "activate_promo"
   | "future_promo"
@@ -281,6 +282,7 @@ function typeLabel(type: ActionType) {
   const labels: Record<ActionType, string> = {
     paused_stock: "Pausada con stock",
     low_margin: "Margen bajo",
+    negative_sale: "Venta con pérdida",
     b2b_margin: "Mayorista con margen bajo",
     activate_promo: "Promo para activar",
     future_promo: "Promo futura",
@@ -296,7 +298,7 @@ function typeLabel(type: ActionType) {
 }
 
 function actionTone(type: ActionType) {
-  if (type === "paused_stock" || type === "low_margin" || type === "b2b_margin") return "review";
+  if (type === "paused_stock" || type === "low_margin" || type === "negative_sale" || type === "b2b_margin") return "review";
   if (type === "future_promo") return "future";
   if (type === "data_issue" || type === "missing_local_product") return "data_issue";
   if (type === "missing_promo") return "missing_promo";
@@ -335,7 +337,7 @@ export default function DashboardPage() {
   async function loadData(options: { quiet?: boolean; initial?: boolean } = {}) {
     const since = new Date(); since.setHours(0,0,0,0); since.setDate(since.getDate() - 65);
     setLoading(true);
-    try { await dataLoad.run({ products: { table: 'products', filters: [['neq','status','discontinued']] }, publications: { table: 'mercadolibre_shipping_costs', filters: [['eq','active',true]] }, opportunities: { table: 'mercadolibre_promotion_opportunities' }, installments: { table: 'mercadolibre_installment_fees', filters: [['eq','active',true]] }, categories: { table: 'mercadolibre_category_fees', filters: [['eq','active',true]] }, taxes: { table: 'tax_settings', filters: [['eq','key','default']] }, margins: { table: 'product_channel_margins' }, sales: { table: 'mercadolibre_order_items', columns: 'id,order_id,order_date,status,meli_item_id,variation_id,sku,product_id,title,quantity,unit_price,total_amount,updated_at', filters: [['gte','order_date',since.toISOString()],['neq','status','cancelled']], order: 'order_date', ascending: false }, logs: { table: 'mercadolibre_shipping_sync_logs', columns: 'id,sku,meli_item_id,status,message,created_at', filters: [['eq','status','sku_not_found']] }, guards: { table: 'mercadolibre_b2b_margin_guard' } }, data => { setProducts(data.products); setPublications(data.publications); setOpportunities(data.opportunities); setInstallments(data.installments.filter(item => item.code !== 'MC')); setCategoryFees(data.categories); setTaxes(data.taxes[0] || defaultTaxSettings()); setMarginSettings(data.margins); setSales(data.sales); setSyncLogs(data.logs); setB2bGuards(data.guards); }, !options.initial); }
+    try { await dataLoad.run({ products: { table: 'products', filters: [['neq','status','discontinued']] }, publications: { table: 'mercadolibre_shipping_costs', filters: [['eq','active',true]] }, opportunities: { table: 'mercadolibre_promotion_opportunities' }, installments: { table: 'mercadolibre_installment_fees', filters: [['eq','active',true]] }, categories: { table: 'mercadolibre_category_fees', filters: [['eq','active',true]] }, taxes: { table: 'tax_settings', filters: [['eq','key','default']] }, margins: { table: 'product_channel_margins' }, sales: { table: 'mercadolibre_order_items', columns: 'id,order_id,order_date,status,meli_item_id,variation_id,sku,product_id,title,quantity,unit_price,total_amount,real_total_net_profit,normalized_total_net_profit,real_net_sale_price,normalized_net_sale_price,updated_at', filters: [['gte','order_date',since.toISOString()],['neq','status','cancelled']], order: 'order_date', ascending: false }, logs: { table: 'mercadolibre_shipping_sync_logs', columns: 'id,sku,meli_item_id,status,message,created_at', filters: [['eq','status','sku_not_found']] }, guards: { table: 'mercadolibre_b2b_margin_guard' } }, data => { setProducts(data.products); setPublications(data.publications); setOpportunities(data.opportunities); setInstallments(data.installments.filter(item => item.code !== 'MC')); setCategoryFees(data.categories); setTaxes(data.taxes[0] || defaultTaxSettings()); setMarginSettings(data.margins); setSales(data.sales); setSyncLogs(data.logs); setB2bGuards(data.guards); }, !options.initial); }
     finally { setLoading(false); }
   }
 
@@ -687,6 +689,34 @@ export default function DashboardPage() {
         });
       });
 
+    // Una pérdida ya realizada no debe quedar oculta detrás del margen actual
+    // de la publicación: se marca durante 24 h para que sea lo primero a revisar.
+    sales
+      .filter((sale) => daysBetween(sale.order_date) <= 1)
+      .forEach((sale) => {
+        const profit = Number(sale.real_total_net_profit ?? sale.normalized_total_net_profit);
+        if (!Number.isFinite(profit) || profit >= 0) return;
+        const product = (sale.product_id ? productsById.get(sale.product_id) : null) || products.find((item) => item.sku.toUpperCase() === String(sale.sku || "").toUpperCase());
+        const units = numberValue(sale.quantity);
+        const netSale = numberValue(sale.real_net_sale_price ?? sale.normalized_net_sale_price) * units;
+        const margin = netSale > 0 ? profit / netSale * 100 : null;
+        const publication = publications.find((item) => item.meli_item_id === sale.meli_item_id);
+        actions.push({
+          key: `negative-sale-${sale.id || sale.order_id}-${sale.meli_item_id}`,
+          type: "negative_sale",
+          priority: "critica",
+          sku: sale.sku || product?.sku || "SIN SKU",
+          productName: sale.title || product?.name || "Venta Mercado Libre",
+          itemId: sale.meli_item_id,
+          title: "Venta reciente con margen negativo",
+          detail: `${formatDateTime(sale.order_date)} · Vendido ${moneyWithCents(sale.total_amount)} · Pérdida ${moneyWithCents(profit)}.`,
+          href: "/monitor-ventas",
+          margin,
+          stock: Number(publication?.meli_stock ?? product?.stock ?? 0),
+          salePrice: numberValue(sale.total_amount),
+        });
+      });
+
     activePublications.forEach((publication) => {
       const product = productsById.get(publication.product_id);
       if (!product) return;
@@ -911,17 +941,18 @@ export default function DashboardPage() {
     const priorityOrder: Record<Priority, number> = { critica: 1, alta: 2, media: 3, baja: 4 };
     const typeOrder: Record<ActionType, number> = {
       paused_stock: 1,
-      missing_local_product: 2,
-      low_margin: 3,
-      b2b_margin: 4,
-      low_margin_high_rotation: 5,
-      activate_promo: 6,
-      high_margin_low_rotation: 7,
-      stock_risk: 8,
-      stock_idle: 9,
-      missing_promo: 10,
-      future_promo: 11,
-      data_issue: 12,
+      negative_sale: 2,
+      missing_local_product: 3,
+      low_margin: 4,
+      b2b_margin: 5,
+      low_margin_high_rotation: 6,
+      activate_promo: 7,
+      high_margin_low_rotation: 8,
+      stock_risk: 9,
+      stock_idle: 10,
+      missing_promo: 11,
+      future_promo: 12,
+      data_issue: 13,
     };
 
     return {
@@ -1042,6 +1073,7 @@ export default function DashboardPage() {
           <option value="b2b_margin">Mayorista con margen bajo</option>
           <option value="missing_local_product">En ML sin producto</option>
           <option value="low_margin">Margen bajo</option>
+          <option value="negative_sale">Venta con pérdida</option>
           <option value="activate_promo">Promos para activar</option>
           <option value="missing_promo">Sin promo</option>
           <option value="high_margin_low_rotation">Margen alto sin rotar</option>
