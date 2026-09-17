@@ -121,6 +121,8 @@ export default function SalesMonitorPage() {
 
   const view = useMemo(() => {
     const productsById = new Map(products.map((product) => [product.id, product]));
+    const publicationByItemId = new Map(publications.filter((publication) => publication.meli_item_id).map((publication) => [publication.meli_item_id, publication]));
+    const publicationBySku = new Map(publications.filter((publication) => publication.sku).map((publication) => [publication.sku.toUpperCase(), publication]));
     const stockByProduct = new Map<string, number>();
     publications.filter((publication) => publication.meli_status === "active").forEach((publication) => {
       if (!publication.product_id) return;
@@ -136,7 +138,8 @@ export default function SalesMonitorPage() {
       const profit = numberValue(sale.real_total_net_profit ?? sale.normalized_total_net_profit);
       const netSale = numberValue(sale.real_net_sale_price ?? sale.normalized_net_sale_price) * units;
       const product = sale.product_id ? productsById.get(sale.product_id) : null;
-      return { sale, product, revenue, units, profit, margin: netSale > 0 ? profit / netSale * 100 : null, stock: product?.id ? stockByProduct.get(product.id) ?? numberValue(product.stock) : 0 };
+      const publication = publicationByItemId.get(sale.meli_item_id) || publicationBySku.get((sale.sku || product?.sku || "").toUpperCase());
+      return { sale, product, revenue, units, profit, margin: netSale > 0 ? profit / netSale * 100 : null, stock: product?.id ? stockByProduct.get(product.id) ?? numberValue(product.stock) : 0, thumbnail: publication?.meli_thumbnail || null };
     });
     const revenue = rows.reduce((sum, row) => sum + row.revenue, 0);
     const units = rows.reduce((sum, row) => sum + row.units, 0);
@@ -172,9 +175,16 @@ export default function SalesMonitorPage() {
         </div>
         {loading ? <p className="sales-monitor-empty">Cargando ventas...</p> : view.rows.length === 0 ? <p className="sales-monitor-empty">Todavía no hay ventas registradas hoy.</p> : (
           <div className="sales-monitor-sales">
-            {view.rows.map(({ sale, product, revenue, units, profit, margin, stock }) => (
+            {view.rows.map(({ sale, product, revenue, units, profit, margin, stock, thumbnail }) => (
               <article className="sales-monitor-sale" key={`${sale.order_id}-${sale.meli_item_id}-${sale.variation_id || ""}-${sale.id || sale.order_date}`}>
-                <div className="sales-monitor-sale-main"><span className="sales-monitor-time">{timeLabel(sale.order_date)}</span><div><strong>{sale.title || product?.name || "Venta Mercado Libre"}</strong><small>{sale.sku || product?.sku || "Sin SKU"} · {units} {units === 1 ? "unidad" : "unidades"} · Stock {stock}</small></div></div>
+                <div className="sales-monitor-sale-main">
+                  <span className="sales-monitor-time">{timeLabel(sale.order_date)}</span>
+                  <div className="sales-monitor-thumbnail" aria-hidden="true">
+                    {thumbnail ? <img src={thumbnail} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
+                    <span>{(sale.title || product?.name || "?").trim().charAt(0)}</span>
+                  </div>
+                  <div className="sales-monitor-sale-title"><strong>{sale.title || product?.name || "Venta Mercado Libre"}</strong><small>{sale.sku || product?.sku || "Sin SKU"} · {units} {units === 1 ? "unidad" : "unidades"} · Stock {stock}</small></div>
+                </div>
                 <div className="sales-monitor-sale-values"><div><span>Vendido</span><strong>{moneyWithCents(revenue)}</strong></div><div className={profit < 0 ? "negative" : "positive"}><span>Ganancia</span><strong>{moneyWithCents(profit)}</strong><small>{margin === null ? "Sin cálculo" : percent(margin)}</small></div></div>
               </article>
             ))}
