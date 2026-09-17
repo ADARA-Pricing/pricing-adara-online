@@ -14151,6 +14151,7 @@ body {
 .sales-monitor-total i { display:inline-block; width:8px; height:8px; margin-right:6px; border-radius:50%; background:#f43f5e; }
 .sales-monitor-total strong { font-size:clamp(30px,5vw,52px); letter-spacing:-.04em; }
 .sales-monitor-total small { margin-top:7px; font-weight:700; }
+.sales-monitor-sync-note { margin:0 0 12px; padding:9px 12px; border:1px solid #cfe0ff; border-radius:10px; color:#2459af; background:#f5f9ff; font-size:12px; font-weight:700; text-align:center; }.sales-monitor-sync-note.error { border-color:#fecaca; color:#b42318; background:#fff7f7; }
 .sales-monitor-overview { display:grid; grid-template-columns:minmax(250px,.72fr) minmax(0,1.55fr); gap:18px; }
 .sales-monitor-metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); overflow:hidden; border:1px solid var(--border); border-radius:16px; background:#fff; }
 .sales-monitor-metrics article { min-height:146px; padding:20px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); }

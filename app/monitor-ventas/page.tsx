@@ -77,9 +77,31 @@ export default function SalesMonitorPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncInfo, setSyncInfo] = useState<string | null>(null);
 
-  async function loadData() {
+  async function syncTodaySales() {
+    setSyncing(true);
+    setSyncInfo("Buscando las ventas de hoy en Mercado Libre...");
+    try {
+      const response = await fetch("/api/mercadolibre/sync-sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: argentinaDayStart().toISOString(), to: new Date().toISOString(), chunkDays: 1 }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || "No se pudieron actualizar las ventas desde Mercado Libre.");
+      setSyncInfo(`${Number(data.saved || 0)} ventas actualizadas desde Mercado Libre.`);
+    } catch (error) {
+      setSyncInfo(error instanceof Error ? error.message : "No se pudieron actualizar las ventas desde Mercado Libre.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function loadData(options: { syncToday?: boolean } = {}) {
     setLoading(true);
+    if (options.syncToday) await syncTodaySales();
     const today = argentinaDayStart();
     try {
       await dataLoad.run({
@@ -99,7 +121,7 @@ export default function SalesMonitorPage() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) router.push("/login");
-      else loadData();
+      else loadData({ syncToday: true });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -134,14 +156,15 @@ export default function SalesMonitorPage() {
 
   return (
     <main className="container wide sales-monitor-page">
-      <PageHero title="Ventas de hoy" description="Seguimiento en vivo de facturación, unidades y rentabilidad." icon={<BarChart3 aria-hidden="true" />} onRefresh={loadData} />
-      <PricingDataStatus state={dataLoad.state} publications={publications} onRefresh={loadData} />
+      <PageHero title="Ventas de hoy" description="Se actualiza desde Mercado Libre al abrir y al refrescar." icon={<BarChart3 aria-hidden="true" />} onRefresh={() => loadData({ syncToday: true })} />
+      <PricingDataStatus state={dataLoad.state} publications={publications} onRefresh={() => loadData({ syncToday: true })} />
 
       <section className="sales-monitor-total">
         <span><i /> Actualizado {new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" }).format(new Date())}</span>
         <strong>{moneyWithCents(view.revenue)}</strong>
         <small>Facturación bruta de hoy</small>
       </section>
+      {syncInfo && <p className={`sales-monitor-sync-note ${syncInfo.includes("No se pudieron") ? "error" : ""}`}>{syncing ? "Sincronizando ventas de hoy..." : syncInfo}</p>}
 
       <section className="sales-monitor-overview">
         <div className="sales-monitor-metrics">
@@ -156,7 +179,7 @@ export default function SalesMonitorPage() {
       <section className="card sales-monitor-list-card">
         <div className="sales-monitor-list-header">
           <div><h2>Ventas de hoy</h2><p>Precio vendido y rentabilidad de cada operación.</p></div>
-          <button type="button" className="button secondary" onClick={loadData} disabled={loading}><RefreshCw aria-hidden="true" className={loading ? "spin" : ""} />Actualizar</button>
+          <button type="button" className="button secondary" onClick={() => loadData({ syncToday: true })} disabled={loading || syncing}><RefreshCw aria-hidden="true" className={loading || syncing ? "spin" : ""} />{syncing ? "Sincronizando..." : "Actualizar ML"}</button>
         </div>
         {loading ? <p className="sales-monitor-empty">Cargando ventas...</p> : view.rows.length === 0 ? <p className="sales-monitor-empty">Todavía no hay ventas registradas hoy.</p> : (
           <div className="sales-monitor-sales">
