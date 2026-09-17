@@ -12,8 +12,8 @@ export const metadata: Metadata = {
     title: "ADARA Ventas",
   },
   icons: {
-    icon: "/icon.svg",
-    apple: "/icon.svg",
+    icon: "/adara-mark.png",
+    apple: "/adara-mark.png",
   },
 };
 

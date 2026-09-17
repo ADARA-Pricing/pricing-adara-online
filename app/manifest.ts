@@ -10,6 +10,6 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#f3f6fb",
     theme_color: "#246bfe",
     lang: "es-AR",
-    icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
+    icons: [{ src: "/adara-mark.png", sizes: "1024x1024", type: "image/png", purpose: "any" }],
   };
 }

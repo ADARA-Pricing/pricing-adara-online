@@ -150,10 +150,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   }
 
-  const mobileMonitor = pathname === "/monitor-ventas";
+  const mobileApp = pathname === "/monitor-ventas" || pathname === "/calculadora-movil";
 
   return (
-    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${mobileMonitor ? "mobile-monitor-shell" : ""}`}>
+    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${mobileApp ? "mobile-monitor-shell" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-logo-row">
           <Link href="/dashboard" className="adara-logo" aria-label="ADARA">
@@ -262,9 +262,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="app-content">{children}</div>
-      {mobileMonitor && <nav className="mobile-app-nav" aria-label="Navegación móvil">
-        <Link href="/monitor-ventas" className="active"><MonitorSmartphone aria-hidden="true" /><span>Ventas</span></Link>
-        <Link href="/simulador"><Calculator aria-hidden="true" /><span>Simular</span></Link>
+      {mobileApp && <nav className="mobile-app-nav" aria-label="Navegación móvil">
+        <Link href="/monitor-ventas" className={pathname === "/monitor-ventas" ? "active" : ""}><MonitorSmartphone aria-hidden="true" /><span>Ventas</span></Link>
+        <Link href="/calculadora-movil" className={pathname === "/calculadora-movil" ? "active" : ""}><Calculator aria-hidden="true" /><span>Simular</span></Link>
         <Link href="/productos"><Package aria-hidden="true" /><span>Stock</span></Link>
         <Link href="/dashboard"><LayoutDashboard aria-hidden="true" /><span>Cuenta</span></Link>
       </nav>}
