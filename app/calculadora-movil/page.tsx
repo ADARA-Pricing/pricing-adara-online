@@ -20,6 +20,8 @@ export default function MobileCalculatorPage() {
   const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
   const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
   const [selectedProductId, setSelectedProductId] = useState("");
+  const [productQuery, setProductQuery] = useState("");
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -46,7 +48,15 @@ export default function MobileCalculatorPage() {
     setCommission(String(Number(fee?.marketplace_fee_rate || 0)));
     setShipping(String(Math.round(average("shipping_cost_amount"))));
     setFixedFee(String(Math.round(average("fixed_fee_amount"))));
+    setProductQuery(`${product.sku} · ${product.name}`);
+    setProductPickerOpen(false);
   }
+
+  const matchingProducts = useMemo(() => {
+    const query = productQuery.trim().toLocaleLowerCase("es-AR");
+    if (!query) return products.slice(0, 6);
+    return products.filter((product) => `${product.sku} ${product.name} ${product.category || ""}`.toLocaleLowerCase("es-AR").includes(query)).slice(0, 7);
+  }, [products, productQuery]);
 
   const result = useMemo(() => {
     const grossPrice = Number(toNumber(price) || 0);
@@ -66,7 +76,16 @@ export default function MobileCalculatorPage() {
     <header className="mobile-calculator-header"><img src="/adara-mark.png" alt="ADARA" /><div><span>ADARA</span><h1>Calculadora rápida</h1></div></header>
     <section className="mobile-calculator-card">
       <div className="mobile-calculator-card-title"><Calculator aria-hidden="true" /><div><h2>Simular venta ML</h2><p>Estimación rápida con los impuestos configurados.</p></div></div>
-      <label>Producto cargado<select value={selectedProductId} onChange={(event) => loadProduct(event.target.value)}><option value="">Cargar datos manualmente</option>{products.map((product) => <option key={product.id} value={product.id}>{product.sku} · {product.name}</option>)}</select><small>Completa costo, comisión, envío y costo fijo desde tus datos.</small></label>
+      <label>Producto cargado
+        <div className="mobile-calculator-product-picker">
+          <input value={productQuery} onFocus={() => setProductPickerOpen(true)} onChange={(event) => { setProductQuery(event.target.value); setProductPickerOpen(true); setSelectedProductId(""); }} placeholder="Buscar por SKU o nombre" />
+          {productPickerOpen && <div className="mobile-calculator-product-options">
+            {matchingProducts.map((product) => <button type="button" key={product.id} onClick={() => loadProduct(product.id)}><strong>{product.sku}</strong><span>{product.name}</span></button>)}
+            {!matchingProducts.length && <p>No hay productos que coincidan.</p>}
+          </div>}
+        </div>
+        <small>Completa costo, comisión, envío y costo fijo desde tus datos.</small>
+      </label>
       <label>Costo sin IVA<input inputMode="decimal" value={cost} onChange={(event) => setCost(event.target.value)} placeholder="$ 0" /></label>
       <label>Precio de venta c/IVA<input inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="$ 0" /></label>
       <label>Comisión ML <span>%</span><input inputMode="decimal" value={commission} onChange={(event) => setCommission(event.target.value)} /></label>
