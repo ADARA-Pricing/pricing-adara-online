@@ -102,10 +102,12 @@ export default function MobileCalculatorPage() {
         <small>Completa costo, comisión, envío y costo fijo desde tus datos.</small>
       </label>
       <label>Costo sin IVA<input inputMode="decimal" value={cost} onChange={(event) => setCost(event.target.value)} placeholder="$ 0 o =120000/1.21" /><small className={result.costError ? "mobile-calculator-error" : ""}>{result.costError || "Admite fórmulas, por ejemplo =120000/1.21"}</small></label>
-      <label>Condición IVA<select value={vatCondition} onChange={(event) => setVatCondition(event.target.value as VatCondition)}><option value="sin_factura">Sin IVA</option><option value="iva_21">IVA 21%</option><option value="iva_105">IVA 10,5%</option></select></label>
       <label>Precio de venta c/IVA<input inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="$ 0" /></label>
       <label>Comisión ML <span>%</span><input inputMode="decimal" value={commission} onChange={(event) => setCommission(event.target.value)} /></label>
-      <label>Envío / costo extra c/IVA<input inputMode="decimal" value={shipping} onChange={(event) => setShipping(event.target.value)} /><small>Usá $0 si lo paga el cliente. Incluye el costo fijo al cargar un producto.</small></label>
+      <div className="mobile-calculator-two">
+        <label>Envío / extra c/IVA<input inputMode="decimal" value={shipping} onChange={(event) => setShipping(event.target.value)} /><small>Usá $0 si lo paga el cliente.</small></label>
+        <label>Condición IVA<select value={vatCondition} onChange={(event) => setVatCondition(event.target.value as VatCondition)}><option value="sin_factura">Sin IVA</option><option value="iva_21">IVA 21%</option><option value="iva_105">IVA 10,5%</option></select></label>
+      </div>
     </section>
     <section className={`mobile-calculator-result ${result.profit < 0 ? "negative" : ""}`}><span>Ganancia estimada</span><strong>{moneyWithCents(result.profit)}</strong><b>{percent(result.margin)}</b><div><span>Venta neta <em>{moneyWithCents(result.netSale)}</em></span><span>Comisión <em>{moneyWithCents(result.marketplaceFee)}</em></span><span>Envío / extra <em>{moneyWithCents(result.shippingCost)}</em></span><span>Impuestos <em>{moneyWithCents(result.salesTaxes)}</em></span></div></section>
   </main>;
