@@ -415,7 +415,8 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
     // Flex informa el cargo efectivo en charge_flex; los demás modos, en cost.
     const flexCharge = Number(sender?.charges?.charge_flex || 0);
     const senderCost = Number(sender?.cost || 0);
-    const isFlex = String(shipment.logistic_type || "").toLowerCase().includes("flex");
+    const logisticsType = String(shipment.logistic_type || "").toLowerCase();
+    const isFlex = logisticsType === "self_service" || logisticsType.includes("flex");
     const state = String(shipment.receiver_address?.state?.name || "").toLowerCase();
     const city = String(shipment.receiver_address?.city?.name || "").toLowerCase();
     const isCaba = state.includes("capital federal") || city === "caba" || city === "buenos aires";
