@@ -278,13 +278,13 @@ function normalizedProfitability({
   // del mismo pedido, por lo que nunca se cobra dos veces.
   const publicationForSale = actualShippingAmount === null || actualShippingAmount === undefined
     ? publication
-    : publication
-      ? {
-        ...publication,
-        shipping_cost_amount: actualShippingAmount,
-        fixed_fee_amount: observedSaleFeeRate === null ? publication.fixed_fee_amount : 0,
-      }
-      : null;
+    : {
+      // Una venta histórica puede no tener una publicación activa vinculada.
+      // Aun así el costo de envío del shipment es real y debe descontarse.
+      ...(publication || {}),
+      shipping_cost_amount: actualShippingAmount,
+      fixed_fee_amount: observedSaleFeeRate === null ? Number(publication?.fixed_fee_amount || 0) : 0,
+    } as MercadoLibreShippingCost;
   const actualResult = calculatePriceSummary(
     product,
     actualOption,
