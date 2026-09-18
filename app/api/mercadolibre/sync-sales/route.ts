@@ -54,8 +54,8 @@ type MeliShipmentCosts = {
   senders?: Array<{
     cost?: number | null;
     charges?: { charge_flex?: number | null } | null;
+    discounts?: Array<{ promoted_amount?: number | null }> | null;
   }> | null;
-  receiver?: { discounts?: Array<{ promoted_amount?: number | null }> | null } | null;
 };
 
 type MeliItemCatalogLink = {
@@ -313,8 +313,8 @@ function normalizedProfitability({
     incomeTaxAmount?: number | null;
     error?: string | null;
   };
-  // Cuando ML bonifica el envío a cargo del comprador, acredita ese importe
-  // al vendedor. Es un recupero real de la logística, no un descuento propio.
+  // Crédito que Mercado Libre aplica al vendedor en este envío.
+  // No se deben sumar promociones del comprador: pertenecen a `receiver`.
   const actualNetProfit = Number(actualResult.netProfit || 0) + Number(shippingSellerCredit || 0);
   const actualNetSalePrice = Number(actualResult.netSalePrice || 0);
   const actualMarginOnNetSale = actualNetSalePrice > 0 ? (actualNetProfit / actualNetSalePrice) * 100 : null;
@@ -418,7 +418,10 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
       meliFetch(`/shipments/${shipmentId}/costs`, account) as Promise<MeliShipmentCosts>,
     ]);
     const sender = costs.senders?.[0];
-    const sellerCredit = (costs.receiver?.discounts || []).reduce((sum, discount) => sum + Number(discount.promoted_amount || 0), 0);
+    // Sólo los descuentos del bloque `senders` afectan el resultado del vendedor.
+    // `receiver.discounts` es una promoción/costo del comprador y no es un crédito
+    // para la cuenta, aunque el importe pueda coincidir con otra orden.
+    const sellerCredit = (sender?.discounts || []).reduce((sum, discount) => sum + Number(discount.promoted_amount || 0), 0);
     // Flex informa el cargo efectivo en charge_flex; los demás modos, en cost.
     const flexCharge = Number(sender?.charges?.charge_flex || 0);
     const senderCost = Number(sender?.cost || 0);
