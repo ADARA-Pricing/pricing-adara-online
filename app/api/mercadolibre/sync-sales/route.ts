@@ -255,24 +255,21 @@ function normalizedProfitability({
 
   const categoryFeeRate = Number(categoryFee?.marketplace_fee_rate || 0);
   const actualSaleFee = Number(saleFeeAmount || 0);
-  const fixedFeeAmountGross = Number(publication?.fixed_fee_amount || 0);
-  // El número de cuotas informado por la orden puede incluir pasajes de cuotas.
-  // El cargo total de ML incluye comisión de categoría, cuotas y cargo fijo. Primero
-  // separamos el fijo, que calculatePriceSummary ya descuenta por su propia cuenta.
-  // Así no se duplica en la rentabilidad. El resto define comisión + cuotas y luego
-  // se aplica el mismo tratamiento neto (IVA incluido) que Precios.
-  const variableSaleFee = Math.max(0, actualSaleFee - fixedFeeAmountGross);
-  const observedVariableFeeRate = unitPrice > 0 && variableSaleFee > 0
-    ? (variableSaleFee / unitPrice) * 100
+  // `sale_fee` llega desde la orden y es el costo real por unidad: integra
+  // comisión de categoría, cuotas y cualquier cargo fijo de esa venta. Para
+  // no alterar el importe con la configuración vigente de la publicación,
+  // lo representamos como una única comisión efectiva y anulamos el fijo.
+  const observedSaleFeeRate = unitPrice > 0 && actualSaleFee > 0
+    ? (actualSaleFee / unitPrice) * 100
     : null;
-  const observedFinancingFeeRate = observedVariableFeeRate !== null
-    ? Math.max(0, observedVariableFeeRate - categoryFeeRate)
-    : null;
+  const categoryFeeForSale = observedSaleFeeRate === null
+    ? categoryFee
+    : { ...categoryFee, marketplace_fee_rate: observedSaleFeeRate } as MercadoLibreCategoryFee;
   const actualOption = {
     ...mercadoLibreClassicOption(),
     code: "ML-ACTUAL",
     name: "MercadoLibre venta real",
-    financing_fee_rate: observedFinancingFeeRate ?? Number(publication?.meli_financing_fee_rate || 0),
+    financing_fee_rate: observedSaleFeeRate === null ? Number(publication?.meli_financing_fee_rate || 0) : 0,
   };
   // El cargo del envío se obtiene del shipment de esta orden. En Flex es el
   // cargo efectivo a la logística y se distribuye por importe entre los ítems
@@ -280,12 +277,16 @@ function normalizedProfitability({
   const publicationForSale = actualShippingAmount === null || actualShippingAmount === undefined
     ? publication
     : publication
-      ? { ...publication, shipping_cost_amount: actualShippingAmount }
+      ? {
+        ...publication,
+        shipping_cost_amount: actualShippingAmount,
+        fixed_fee_amount: observedSaleFeeRate === null ? publication.fixed_fee_amount : 0,
+      }
       : null;
   const actualResult = calculatePriceSummary(
     product,
     actualOption,
-    categoryFee,
+    categoryFeeForSale,
     taxes,
     publicationForSale as MercadoLibreShippingCost | null,
     {
