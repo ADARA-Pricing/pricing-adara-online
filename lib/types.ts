@@ -288,3 +288,14 @@ export type ProductChannelMargin = {
   promo_discount_rate?: number | null;
   updated_at?: string;
 };
+
+export type FlexShippingRate = {
+  id?: string;
+  zone: string;
+  amount: number;
+  vat_included: boolean;
+  active: boolean;
+  effective_from?: string | null;
+  notes?: string | null;
+  updated_at?: string;
+};

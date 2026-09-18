@@ -35,6 +35,7 @@ import type {
   MercadoLibreInstallmentFee,
   MercadoLibrePriceOption,
   MercadoLibreShippingCost,
+  FlexShippingRate,
   Product,
   ProductChannelMargin,
   TaxSettings,
@@ -64,6 +65,8 @@ const emptyCategory: MercadoLibreCategoryFee = {
   notes: ""
 };
 
+const emptyFlexRate: FlexShippingRate = { zone: "", amount: 0, vat_included: true, active: true, effective_from: "2026-07-06", notes: "" };
+
 type MeliCategoryImportRow = {
   meli_category_id: string;
   meli_category_name: string;
@@ -88,7 +91,7 @@ type MeliCategoryImportPreview = {
 
 type ViewMode = "channel" | "category";
 type SortDirection = "asc" | "desc";
-type ConfigViewMode = "channels" | "categories";
+type ConfigViewMode = "channels" | "categories" | "flex";
 type ConfigChannelSortKey = "code" | "name" | "channelType" | "installments" | "financing" | "active";
 type ConfigCategorySortKey = "category" | "marketplaceFeeRate" | "sync" | "active";
 type ChannelSortKey =
@@ -208,9 +211,11 @@ export default function MercadoLibrePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
   const [marginSettings, setMarginSettings] = useState<ProductChannelMargin[]>([]);
+  const [flexRates, setFlexRates] = useState<FlexShippingRate[]>([]);
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
   const [installmentForm, setInstallmentForm] = useState<MercadoLibreInstallmentFee>(emptyInstallment);
   const [categoryForm, setCategoryForm] = useState<MercadoLibreCategoryFee>(emptyCategory);
+  const [flexRateForm, setFlexRateForm] = useState<FlexShippingRate>(emptyFlexRate);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("channel");
@@ -235,6 +240,7 @@ export default function MercadoLibrePage() {
   const [showChannelForm, setShowChannelForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [showCategoryImport, setShowCategoryImport] = useState(false);
+  const [showFlexRateForm, setShowFlexRateForm] = useState(false);
   const [categoryImportPreview, setCategoryImportPreview] = useState<MeliCategoryImportPreview | null>(null);
   const [categoryImportLoading, setCategoryImportLoading] = useState(false);
   const [categoryImportSaving, setCategoryImportSaving] = useState(false);
@@ -253,7 +259,7 @@ export default function MercadoLibrePage() {
 
   async function loadData(options: {quiet?: boolean; initial?: boolean} = {}) {
     setLoading(true);
-    try { await dataLoad.run({"installments":{"table":"mercadolibre_installment_fees"},"categories":{"table":"mercadolibre_category_fees"},"taxes":{"table":"tax_settings","filters":[["eq","key","default"]]},"products":{"table":"products","filters":[["eq","status","active"]]},"publications":{"table":"mercadolibre_shipping_costs","filters":[["eq","active",true]]},"margins":{"table":"product_channel_margins"}}, data => { setInstallments(data.installments); setCategories(data.categories); if (data.taxes[0]) setTaxes(data.taxes[0]); setProducts(data.products); setShippingCosts(data.publications); setMarginSettings(data.margins); }, !options.initial); }
+    try { await dataLoad.run({"installments":{"table":"mercadolibre_installment_fees"},"categories":{"table":"mercadolibre_category_fees"},"taxes":{"table":"tax_settings","filters":[["eq","key","default"]]},"products":{"table":"products","filters":[["eq","status","active"]]},"publications":{"table":"mercadolibre_shipping_costs","filters":[["eq","active",true]]},"margins":{"table":"product_channel_margins"},"flexRates":{"table":"flex_shipping_rates","order":"zone"}}, data => { setInstallments(data.installments); setCategories(data.categories); if (data.taxes[0]) setTaxes(data.taxes[0]); setProducts(data.products); setShippingCosts(data.publications); setMarginSettings(data.margins); setFlexRates(data.flexRates as FlexShippingRate[]); }, !options.initial); }
     finally { setLoading(false); }
   }
 
@@ -500,6 +506,36 @@ export default function MercadoLibrePage() {
     setCategoryForm(emptyCategory);
     setShowCategoryForm(false);
     await loadData();
+  }
+
+  async function saveFlexRate(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+    const payload = {
+      zone: flexRateForm.zone.trim(),
+      amount: Number(flexRateForm.amount || 0),
+      vat_included: Boolean(flexRateForm.vat_included),
+      active: Boolean(flexRateForm.active),
+      effective_from: flexRateForm.effective_from || null,
+      notes: flexRateForm.notes?.trim() || null,
+    };
+    if (!payload.zone) { setError("La zona es obligatoria."); setSaving(false); return; }
+    const { error } = await supabase.from("flex_shipping_rates").upsert(payload, { onConflict: "zone" });
+    setSaving(false);
+    if (error) { setError(error.message); return; }
+    setMessage(`Tarifa Flex guardada: ${payload.zone}.`);
+    setFlexRateForm(emptyFlexRate);
+    setShowFlexRateForm(false);
+    await loadData();
+  }
+
+  function editFlexRate(item: FlexShippingRate) {
+    setFlexRateForm({ ...emptyFlexRate, ...item, effective_from: item.effective_from || "" });
+    setShowFlexRateForm(true);
+    setMessage(`Editando tarifa Flex: ${item.zone}.`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function deleteInstallment(item: MercadoLibreInstallmentFee) {
@@ -1000,6 +1036,7 @@ export default function MercadoLibrePage() {
       <section className="cost-config-tabs" aria-label="Configuración de costo por canal">
         <button type="button" className={configViewMode === "channels" ? "active" : ""} onClick={() => setConfigViewMode("channels")}>Canales</button>
         <button type="button" className={configViewMode === "categories" ? "active" : ""} onClick={() => setConfigViewMode("categories")}>Categorías</button>
+        <button type="button" className={configViewMode === "flex" ? "active" : ""} onClick={() => setConfigViewMode("flex")}>Envíos Flex</button>
       </section>
 
       {configViewMode === "channels" ? (
@@ -1102,7 +1139,7 @@ export default function MercadoLibrePage() {
             </div>
           )}
         </section>
-      ) : (
+      ) : configViewMode === "categories" ? (
         <section className="card cost-config-card">
           <SectionHeader
             icon={<Tags aria-hidden="true" />}
@@ -1187,6 +1224,35 @@ export default function MercadoLibrePage() {
               </table>
             </div>
           )}
+        </section>
+      ) : (
+        <section className="card cost-config-card">
+          <SectionHeader
+            icon={<Store aria-hidden="true" />}
+            title="Tarifario de logística Flex"
+            description="Valores por envío con IVA incluido. Podés modificarlos cada vez que cambie el tarifario."
+            actions={<button type="button" className="button small-button" onClick={() => { setFlexRateForm(emptyFlexRate); setShowFlexRateForm((current) => !current); }}><Plus aria-hidden="true" />Nueva zona</button>}
+          />
+          <div className="table-wrap cost-config-table-wrap">
+            <table className="cost-config-table">
+              <thead><tr><th>Zona</th><th className="numeric-header">Costo por envío</th><th>Vigente desde</th><th>IVA</th><th>Estado</th><th>Notas</th><th /></tr></thead>
+              <tbody>
+                {flexRates.map((item) => <tr key={item.id || item.zone}>
+                  <td><strong>{item.zone}</strong></td><td className="numeric-cell">{moneyWithCents(item.amount)}</td><td>{item.effective_from ? new Date(`${item.effective_from}T12:00:00`).toLocaleDateString("es-AR") : "-"}</td><td>{item.vat_included ? "Incluido" : "No incluido"}</td><td><StatusBadge active={item.active} activeLabel="Activa" inactiveLabel="Inactiva" /></td><td><span className="cost-config-clamp" title={item.notes || "-"}>{item.notes || "-"}</span></td><td><button className="button ghost small-button" type="button" onClick={() => editFlexRate(item)}><Pencil aria-hidden="true" />Editar</button></td>
+                </tr>)}
+                {!flexRates.length && <tr><td colSpan={7}>Todavía no hay tarifas Flex cargadas.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          {showFlexRateForm && <form className="channel-form-grid" onSubmit={saveFlexRate} style={{ marginTop: 20 }}>
+            <div className="field"><label>Zona *</label><input value={flexRateForm.zone} onChange={(event) => setFlexRateForm((current) => ({ ...current, zone: event.target.value }))} placeholder="Ej. CABA" required /></div>
+            <div className="field"><label>Costo por envío c/IVA *</label><input type="number" min="0" step="0.01" value={flexRateForm.amount} onChange={(event) => setFlexRateForm((current) => ({ ...current, amount: Number(event.target.value) }))} required /></div>
+            <div className="field"><label>Vigente desde</label><input type="date" value={flexRateForm.effective_from || ""} onChange={(event) => setFlexRateForm((current) => ({ ...current, effective_from: event.target.value }))} /></div>
+            <div className="field"><label>IVA</label><select value={flexRateForm.vat_included ? "included" : "excluded"} onChange={(event) => setFlexRateForm((current) => ({ ...current, vat_included: event.target.value === "included" }))}><option value="included">Incluido</option><option value="excluded">No incluido</option></select></div>
+            <div className="field"><label>Estado</label><select value={flexRateForm.active ? "active" : "inactive"} onChange={(event) => setFlexRateForm((current) => ({ ...current, active: event.target.value === "active" }))}><option value="active">Activa</option><option value="inactive">Inactiva</option></select></div>
+            <div className="field"><label>Notas</label><input value={flexRateForm.notes || ""} onChange={(event) => setFlexRateForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Opcional" /></div>
+            <div className="actions"><button className="button primary" type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar tarifa"}</button><button className="button ghost" type="button" onClick={() => { setShowFlexRateForm(false); setFlexRateForm(emptyFlexRate); }}>Cancelar</button></div>
+          </form>}
         </section>
       )}
 
