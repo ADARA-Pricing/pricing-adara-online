@@ -461,15 +461,18 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
       meliFetch(`/shipments/${shipmentId}/costs`, account) as Promise<MeliShipmentCosts>,
     ]);
     const sender = costs.senders?.[0];
-    // Sólo los descuentos del bloque `senders` afectan el resultado del vendedor.
-    // `receiver.discounts` es una promoción/costo del comprador y no es un crédito
-    // para la cuenta, aunque el importe pueda coincidir con otra orden.
-    const sellerCredit = (sender?.discounts || []).reduce((sum, discount) => sum + Number(discount.promoted_amount || 0), 0);
     // Flex informa el cargo efectivo en charge_flex; los demás modos, en cost.
     const flexCharge = Number(sender?.charges?.charge_flex || 0);
     const senderCost = Number(sender?.cost || 0);
     const logisticsType = String(shipment.logistic_type || "").toLowerCase();
     const isFlex = logisticsType === "self_service" || logisticsType.includes("flex");
+    // En Mercado Envíos y Full, `senders.cost` ya es el importe neto que ML
+    // descontará, incluso cuando el payload incluya el descuento mayorista.
+    // Sólo en Flex la bonificación del bloque vendedor es un saldo a favor
+    // separado, porque el costo real es la tarifa de nuestra logística.
+    const sellerCredit = isFlex
+      ? (sender?.discounts || []).reduce((sum, discount) => sum + Number(discount.promoted_amount || 0), 0)
+      : 0;
     const flexZone = isFlex ? flexZoneForAddress(shipment.receiver_address?.state?.name, shipment.receiver_address?.city?.name) : null;
     const zoneRate = flexRateForZone(flexRates, flexZone);
     const fallbackFlexCost = isFlex && flexCharge <= 0 ? Number(zoneRate?.amount || 0) : 0;
