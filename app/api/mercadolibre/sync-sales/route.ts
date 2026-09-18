@@ -572,6 +572,10 @@ export async function POST(request: Request) {
             const allocatedShipping = shipment?.cost === null || shipment?.cost === undefined
               ? null
               : orderGrossTotal > 0 ? Number(shipment.cost) * (lineGrossTotal / orderGrossTotal) : 0;
+            // calculatePriceSummary trabaja por unidad. La columna conserva el
+            // cargo total asignado al renglón, pero para el cálculo lo dividimos
+            // entre las unidades: 3 unidades del mismo SKU pagan 1 envío, no 3.
+            const shippingPerUnit = allocatedShipping === null ? null : allocatedShipping / Math.max(quantity, 1);
             const variationId = asString(orderItem.item?.variation_id);
             const key = [orderId, itemId, variationId, sku].join("|");
             const payment = order.payments?.[0] || null;
@@ -588,7 +592,7 @@ export async function POST(request: Request) {
               quantity,
               actualInstallments,
               saleFeeAmount: Number(orderItem.sale_fee || 0),
-              actualShippingAmount: allocatedShipping,
+              actualShippingAmount: shippingPerUnit,
             });
 
             windowRowsByKey.set(key, {
