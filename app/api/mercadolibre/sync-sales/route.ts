@@ -34,6 +34,7 @@ type MeliOrder = {
   id?: string | number;
   date_created?: string;
   status?: string | null;
+  total_amount?: number | null;
   pack_id?: string | number | null;
   shipping?: { id?: string | number | null } | null;
   order_items?: MeliOrderItem[];
@@ -56,6 +57,7 @@ type MeliShipmentCosts = {
     charges?: { charge_flex?: number | null } | null;
     discounts?: Array<{ promoted_amount?: number | null }> | null;
   }> | null;
+  receiver?: { discounts?: Array<{ promoted_amount?: number | null }> | null } | null;
 };
 
 type MeliItemCatalogLink = {
@@ -468,11 +470,14 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
     const isFlex = logisticsType === "self_service" || logisticsType.includes("flex");
     // En Mercado Envíos y Full, `senders.cost` ya es el importe neto que ML
     // descontará, incluso cuando el payload incluya el descuento mayorista.
-    // Sólo en Flex la bonificación del bloque vendedor es un saldo a favor
-    // separado, porque el costo real es la tarifa de nuestra logística.
-    const sellerCredit = isFlex
-      ? (sender?.discounts || []).reduce((sum, discount) => sum + Number(discount.promoted_amount || 0), 0)
-      : 0;
+    // En Flex, los pedidos de hasta $33.000 tienen envío a cargo del comprador:
+    // la bonificación aparece en `receiver.discounts`, pero ML la acredita en
+    // el cobro del vendedor (tal como figura en la liquidación). Sobre ese
+    // umbral, sólo se consideran descuentos directos del vendedor.
+    const senderDiscount = (sender?.discounts || []).reduce((sum, discount) => sum + Number(discount.promoted_amount || 0), 0);
+    const receiverDiscount = (costs.receiver?.discounts || []).reduce((sum, discount) => sum + Number(discount.promoted_amount || 0), 0);
+    const orderAmount = Number(order.total_amount || order.order_items?.reduce((sum, item) => sum + Number(item.unit_price || 0) * Number(item.quantity || 0), 0) || 0);
+    const sellerCredit = isFlex ? senderDiscount + (orderAmount < 33000 ? receiverDiscount : 0) : 0;
     const flexZone = isFlex ? flexZoneForAddress(shipment.receiver_address?.state?.name, shipment.receiver_address?.city?.name) : null;
     const zoneRate = flexRateForZone(flexRates, flexZone);
     const fallbackFlexCost = isFlex && flexCharge <= 0 ? Number(zoneRate?.amount || 0) : 0;
