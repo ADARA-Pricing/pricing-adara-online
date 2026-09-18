@@ -146,8 +146,8 @@ export default function SalesMonitorPage() {
       const netSale = numberValue(sale.real_net_sale_price ?? sale.normalized_net_sale_price) * units;
       const product = sale.product_id ? productsById.get(sale.product_id) : null;
       const publication = publicationByItemId.get(sale.meli_item_id) || publicationBySku.get((sale.sku || product?.sku || "").toUpperCase());
-      const logisticType = String(sale.shipping_logistic_type || "").replace(/_/g, " ");
-      const shippingLabel = logisticType ? `${logisticType.charAt(0).toUpperCase()}${logisticType.slice(1)}` : null;
+      const logisticType = String(sale.shipping_logistic_type || "").toLowerCase();
+      const shippingLabel = logisticType === "self_service" ? "FLEX" : logisticType === "fulfillment" ? "FULL" : null;
       return { sale, product, revenue, units, profit, margin: netSale > 0 ? profit / netSale * 100 : null, stock: product?.id ? stockByProduct.get(product.id) ?? numberValue(product.stock) : 0, thumbnail: publication?.meli_thumbnail || null, shippingLabel };
     });
     const revenue = rows.reduce((sum, row) => sum + row.revenue, 0);
@@ -192,7 +192,7 @@ export default function SalesMonitorPage() {
                     {thumbnail ? <img src={thumbnail} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
                     <span>{(sale.title || product?.name || "?").trim().charAt(0)}</span>
                   </div>
-                  <div className="sales-monitor-sale-title"><strong>{sale.title || product?.name || "Venta Mercado Libre"}</strong><small>{sale.sku || product?.sku || "Sin SKU"} · {units} {units === 1 ? "unidad" : "unidades"} · Stock {stock}{shippingLabel ? ` · ${shippingLabel}` : ""}</small></div>
+                  <div className="sales-monitor-sale-title"><strong>{sale.title || product?.name || "Venta Mercado Libre"}</strong><small>{sale.sku || product?.sku || "Sin SKU"} · {units} {units === 1 ? "unidad" : "unidades"} · Stock {stock}{shippingLabel ? <em className={`sales-monitor-logistic ${shippingLabel.toLowerCase()}`}>{shippingLabel}</em> : null}</small></div>
                   <span className="sales-monitor-time">{timeLabel(sale.order_date)}</span>
                 </div>
                 <div className="sales-monitor-sale-values"><div><span>Vendido</span><strong>{moneyWithCents(revenue)}</strong></div><div className={profit < 0 ? "negative" : "positive"}><span>Ganancia</span><strong>{moneyWithCents(profit)}</strong><small>{margin === null ? "Sin cálculo" : percent(margin)}</small></div></div>
