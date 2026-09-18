@@ -192,8 +192,8 @@ export default function SalesMonitorPage() {
                     {thumbnail ? <img src={thumbnail} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
                     <span>{(sale.title || product?.name || "?").trim().charAt(0)}</span>
                   </div>
-                  <div className="sales-monitor-sale-title"><strong>{sale.title || product?.name || "Venta Mercado Libre"}</strong><small>{sale.sku || product?.sku || "Sin SKU"} · {units} {units === 1 ? "unidad" : "unidades"} · Stock {stock}{shippingLabel ? <em className={`sales-monitor-logistic ${shippingLabel.toLowerCase()}`}>{shippingLabel}</em> : null}</small></div>
-                  <span className="sales-monitor-time">{timeLabel(sale.order_date)}</span>
+                  <div className="sales-monitor-sale-title"><strong>{sale.title || product?.name || "Venta Mercado Libre"}</strong><small>{sale.sku || product?.sku || "Sin SKU"} · {units} {units === 1 ? "unidad" : "unidades"} · Stock {stock}</small></div>
+                  <div className="sales-monitor-logistic-column"><span className="sales-monitor-time">{timeLabel(sale.order_date)}</span>{shippingLabel ? <em className={`sales-monitor-logistic ${shippingLabel.toLowerCase()}`}>{shippingLabel}</em> : null}</div>
                 </div>
                 <div className="sales-monitor-sale-values"><div><span>Vendido</span><strong>{moneyWithCents(revenue)}</strong></div><div className={profit < 0 ? "negative" : "positive"}><span>Ganancia</span><strong>{moneyWithCents(profit)}</strong><small>{margin === null ? "Sin cálculo" : percent(margin)}</small></div></div>
               </article>
