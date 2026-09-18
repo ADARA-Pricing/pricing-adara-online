@@ -410,6 +410,48 @@ async function detailedOrder(order: MeliOrder, account: Awaited<ReturnType<typeo
   }
 }
 
+function flexZoneForAddress(stateName?: string | null, cityName?: string | null) {
+  const normalizeAddressPart = (value?: string | null) => String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const state = normalizeAddressPart(stateName);
+  const city = normalizeAddressPart(cityName);
+  const normalized = `${state} ${city}`;
+  if (state.includes("capital federal") || state.includes("ciudad autonoma") || ["caba", "buenos aires", "ciudad autonoma de buenos aires"].includes(city)) return "caba";
+
+  // Zonas del tarifario Flex informado por Adara. Incluimos partidos y las
+  // localidades más habituales para que el dato de dirección de ML resuelva
+  // aun cuando no nombre al partido.
+  const zones: Array<[string, string[]]> = [
+    ["gba1", [
+      "vicente lopez", "olivos", "florida", "munro", "villa martelli", "carapachay", "la lucila",
+      "san isidro", "martinez", "beccar", "boulogne", "acassuso", "san fernando", "victoria", "virreyes",
+      "san martin", "villa ballester", "billinghurst", "jose leon suarez", "tres de febrero", "caseros", "ciudadela", "santos lugares",
+      "hurlingham", "villa tesei", "william morris", "moron", "haedo", "el palomar", "castelar", "ituzaingo",
+      "avellaneda", "lanus", "lomas de zamora",
+    ]],
+    ["gba2", [
+      "tigre", "general pacheco", "el talar", "benavidez", "don torcuato", "nordelta", "malvinas argentinas", "los polvorines",
+      "jose c paz", "san miguel", "moreno", "merlo", "la matanza", "ramos mejia", "san justo", "gonzalez catan",
+      "ezeiza", "esteban echeverria", "monte grande", "almirante brown", "adrogue", "quilmes", "berazategui", "florencio varela",
+    ]],
+    ["gba3", [
+      "pilar", "escobar", "general rodriguez", "marcos paz", "canuelas", "san vicente", "presidente peron",
+      "la plata", "ensenada", "berisso", "brandsen",
+    ]],
+  ];
+  return zones.find(([, localities]) => localities.some((locality) => normalized.includes(locality)))?.[0] || null;
+}
+
+function flexRateForZone(rates: FlexShippingRate[], zone: string | null) {
+  if (!zone) return null;
+  return rates.find((rate) => {
+    const name = rate.zone.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    return rate.active && (name === zone || name.includes(zone));
+  }) || null;
+}
+
 async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnType<typeof getConnectedMeliAccount>>, flexRates: FlexShippingRate[]) {
   const shipmentId = asString(order.shipping?.id);
   if (!shipmentId) return null;
@@ -428,11 +470,9 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
     const senderCost = Number(sender?.cost || 0);
     const logisticsType = String(shipment.logistic_type || "").toLowerCase();
     const isFlex = logisticsType === "self_service" || logisticsType.includes("flex");
-    const state = String(shipment.receiver_address?.state?.name || "").toLowerCase();
-    const city = String(shipment.receiver_address?.city?.name || "").toLowerCase();
-    const isCaba = state.includes("capital federal") || city === "caba" || city === "buenos aires";
-    const cabaRate = flexRates.find((rate) => rate.active && rate.zone.trim().toLowerCase() === "caba");
-    const fallbackFlexCost = isFlex && flexCharge <= 0 && isCaba ? Number(cabaRate?.amount || 0) : 0;
+    const flexZone = isFlex ? flexZoneForAddress(shipment.receiver_address?.state?.name, shipment.receiver_address?.city?.name) : null;
+    const zoneRate = flexRateForZone(flexRates, flexZone);
+    const fallbackFlexCost = isFlex && flexCharge <= 0 ? Number(zoneRate?.amount || 0) : 0;
     const resolvedCost = isFlex && flexCharge > 0 ? flexCharge : fallbackFlexCost || senderCost;
     return {
       shipmentId,
@@ -440,7 +480,7 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
       logisticType: shipment.logistic_type || null,
       cost: resolvedCost,
       sellerCredit,
-      source: isFlex && flexCharge > 0 ? "flex_real" : fallbackFlexCost > 0 ? "flex_tariff_caba" : "meli_shipment_real",
+      source: isFlex && flexCharge > 0 ? "flex_real" : fallbackFlexCost > 0 ? `flex_tariff_${flexZone}` : "meli_shipment_real",
     };
   } catch {
     return { shipmentId, mode: null, logisticType: null, cost: null, source: "shipment_unavailable" };
