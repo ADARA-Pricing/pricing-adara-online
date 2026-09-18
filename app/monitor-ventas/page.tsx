@@ -146,7 +146,9 @@ export default function SalesMonitorPage() {
       const netSale = numberValue(sale.real_net_sale_price ?? sale.normalized_net_sale_price) * units;
       const product = sale.product_id ? productsById.get(sale.product_id) : null;
       const publication = publicationByItemId.get(sale.meli_item_id) || publicationBySku.get((sale.sku || product?.sku || "").toUpperCase());
-      return { sale, product, revenue, units, profit, margin: netSale > 0 ? profit / netSale * 100 : null, stock: product?.id ? stockByProduct.get(product.id) ?? numberValue(product.stock) : 0, thumbnail: publication?.meli_thumbnail || null };
+      const logisticType = String(sale.shipping_logistic_type || "").replace(/_/g, " ");
+      const shippingLabel = logisticType ? `${logisticType.charAt(0).toUpperCase()}${logisticType.slice(1)}` : null;
+      return { sale, product, revenue, units, profit, margin: netSale > 0 ? profit / netSale * 100 : null, stock: product?.id ? stockByProduct.get(product.id) ?? numberValue(product.stock) : 0, thumbnail: publication?.meli_thumbnail || null, shippingLabel };
     });
     const revenue = rows.reduce((sum, row) => sum + row.revenue, 0);
     const units = rows.reduce((sum, row) => sum + row.units, 0);
@@ -183,14 +185,14 @@ export default function SalesMonitorPage() {
         </div>
         {loading ? <p className="sales-monitor-empty">Cargando ventas...</p> : view.rows.length === 0 ? <p className="sales-monitor-empty">Todavía no hay ventas registradas hoy.</p> : (
           <div className="sales-monitor-sales">
-            {view.rows.map(({ sale, product, revenue, units, profit, margin, stock, thumbnail }) => (
+            {view.rows.map(({ sale, product, revenue, units, profit, margin, stock, thumbnail, shippingLabel }) => (
               <article className="sales-monitor-sale" key={`${sale.order_id}-${sale.meli_item_id}-${sale.variation_id || ""}-${sale.id || sale.order_date}`}>
                 <div className="sales-monitor-sale-main">
                   <div className="sales-monitor-thumbnail" aria-hidden="true">
                     {thumbnail ? <img src={thumbnail} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
                     <span>{(sale.title || product?.name || "?").trim().charAt(0)}</span>
                   </div>
-                  <div className="sales-monitor-sale-title"><strong>{sale.title || product?.name || "Venta Mercado Libre"}</strong><small>{sale.sku || product?.sku || "Sin SKU"} · {units} {units === 1 ? "unidad" : "unidades"} · Stock {stock}</small></div>
+                  <div className="sales-monitor-sale-title"><strong>{sale.title || product?.name || "Venta Mercado Libre"}</strong><small>{sale.sku || product?.sku || "Sin SKU"} · {units} {units === 1 ? "unidad" : "unidades"} · Stock {stock}{shippingLabel ? ` · ${shippingLabel}` : ""}</small></div>
                   <span className="sales-monitor-time">{timeLabel(sale.order_date)}</span>
                 </div>
                 <div className="sales-monitor-sale-values"><div><span>Vendido</span><strong>{moneyWithCents(revenue)}</strong></div><div className={profit < 0 ? "negative" : "positive"}><span>Ganancia</span><strong>{moneyWithCents(profit)}</strong><small>{margin === null ? "Sin cálculo" : percent(margin)}</small></div></div>

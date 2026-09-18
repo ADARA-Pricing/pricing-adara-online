@@ -34,11 +34,25 @@ type MeliOrder = {
   date_created?: string;
   status?: string | null;
   pack_id?: string | number | null;
+  shipping?: { id?: string | number | null } | null;
   order_items?: MeliOrderItem[];
   payments?: Array<{
     installments?: number | null;
     payment_method_id?: string | null;
   }>;
+};
+
+type MeliShipment = {
+  id?: string | number | null;
+  mode?: string | null;
+  logistic_type?: string | null;
+};
+
+type MeliShipmentCosts = {
+  senders?: Array<{
+    cost?: number | null;
+    charges?: { charge_flex?: number | null } | null;
+  }> | null;
 };
 
 type MeliItemCatalogLink = {
@@ -210,6 +224,7 @@ function normalizedProfitability({
   quantity,
   actualInstallments,
   saleFeeAmount,
+  actualShippingAmount,
 }: {
   product: Product | null;
   publication: SalesPublication | null;
@@ -222,6 +237,7 @@ function normalizedProfitability({
   quantity: number;
   actualInstallments?: number | null;
   saleFeeAmount?: number | null;
+  actualShippingAmount?: number | null;
 }) {
   if (!product || unitPrice <= 0) {
     return {
@@ -253,12 +269,20 @@ function normalizedProfitability({
     name: "MercadoLibre venta real",
     financing_fee_rate: observedFinancingFeeRate ?? Number(publication?.meli_financing_fee_rate || 0),
   };
+  // El cargo del envío se obtiene del shipment de esta orden. En Flex es el
+  // cargo efectivo a la logística y se distribuye por importe entre los ítems
+  // del mismo pedido, por lo que nunca se cobra dos veces.
+  const publicationForSale = actualShippingAmount === null || actualShippingAmount === undefined
+    ? publication
+    : publication
+      ? { ...publication, shipping_cost_amount: actualShippingAmount }
+      : null;
   const actualResult = calculatePriceSummary(
     product,
     actualOption,
     categoryFee,
     taxes,
-    publication as MercadoLibreShippingCost | null,
+    publicationForSale as MercadoLibreShippingCost | null,
     {
       salePrice: unitPrice,
       desiredMarginRate: Number(marginSetting?.desired_margin_rate || 0),
@@ -377,6 +401,31 @@ async function detailedOrder(order: MeliOrder, account: Awaited<ReturnType<typeo
   }
 }
 
+async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnType<typeof getConnectedMeliAccount>>) {
+  const shipmentId = asString(order.shipping?.id);
+  if (!shipmentId) return null;
+  try {
+    const [shipment, costs] = await Promise.all([
+      meliFetch(`/shipments/${shipmentId}`, account) as Promise<MeliShipment>,
+      meliFetch(`/shipments/${shipmentId}/costs`, account) as Promise<MeliShipmentCosts>,
+    ]);
+    const sender = costs.senders?.[0];
+    // Flex informa el cargo efectivo en charge_flex; los demás modos, en cost.
+    const flexCharge = Number(sender?.charges?.charge_flex || 0);
+    const senderCost = Number(sender?.cost || 0);
+    const isFlex = String(shipment.logistic_type || "").toLowerCase().includes("flex");
+    return {
+      shipmentId,
+      mode: shipment.mode || null,
+      logisticType: shipment.logistic_type || null,
+      cost: isFlex && flexCharge > 0 ? flexCharge : senderCost,
+      source: isFlex && flexCharge > 0 ? "flex_real" : "meli_shipment_real",
+    };
+  } catch {
+    return { shipmentId, mode: null, logisticType: null, cost: null, source: "shipment_unavailable" };
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const account = await getConnectedMeliAccount();
@@ -486,6 +535,12 @@ export async function POST(request: Request) {
           const orderId = asString(order.id || searchOrder.id);
           if (!orderId || !order.date_created) continue;
 
+          const shipment = await shipmentCostForOrder(order, account);
+          const orderGrossTotal = (order.order_items || []).reduce(
+            (sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price || 0),
+            0,
+          );
+
           for (const orderItem of order.order_items || []) {
             const itemId = asString(orderItem.item?.id);
             if (!itemId) continue;
@@ -511,6 +566,12 @@ export async function POST(request: Request) {
             const product = productWithCostAtDate(currentProduct, order.date_created, historiesByProductId, historiesBySku);
             const quantity = Number(orderItem.quantity || 0);
             const unitPrice = Number(orderItem.unit_price || 0);
+            const lineGrossTotal = quantity * unitPrice;
+            // Un shipment corresponde a la compra completa. Distribuimos su costo
+            // una sola vez, proporcional al importe de cada ítem.
+            const allocatedShipping = shipment?.cost === null || shipment?.cost === undefined
+              ? null
+              : orderGrossTotal > 0 ? Number(shipment.cost) * (lineGrossTotal / orderGrossTotal) : 0;
             const variationId = asString(orderItem.item?.variation_id);
             const key = [orderId, itemId, variationId, sku].join("|");
             const payment = order.payments?.[0] || null;
@@ -527,6 +588,7 @@ export async function POST(request: Request) {
               quantity,
               actualInstallments,
               saleFeeAmount: Number(orderItem.sale_fee || 0),
+              actualShippingAmount: allocatedShipping,
             });
 
             windowRowsByKey.set(key, {
@@ -548,6 +610,11 @@ export async function POST(request: Request) {
               gross_price: Number(orderItem.gross_price || 0),
               actual_installments: actualInstallments,
               payment_method_id: payment?.payment_method_id || null,
+              shipment_id: shipment?.shipmentId || null,
+              shipping_logistic_type: shipment?.logisticType || null,
+              shipping_mode: shipment?.mode || null,
+              actual_shipping_cost_amount: allocatedShipping,
+              shipping_cost_source: shipment?.source || null,
               ...profitability,
               raw: orderItem,
               updated_at: new Date().toISOString(),
