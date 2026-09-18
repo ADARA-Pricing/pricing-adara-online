@@ -172,7 +172,7 @@ export default function SalesMonitorPage() {
         <div className="sales-monitor-metrics">
           <article><ShoppingBag aria-hidden="true" /><span>Ventas</span><strong>{view.rows.length}</strong></article>
           <article><PackageCheck aria-hidden="true" /><span>Unidades</span><strong>{view.units}</strong></article>
-          <article><CircleDollarSign aria-hidden="true" /><span>Ganancia estimada</span><strong>{moneyWithCents(view.profit)}</strong></article>
+          <article className="sales-monitor-profit-metric"><CircleDollarSign aria-hidden="true" /><span>Ganancia estimada</span><strong>{moneyWithCents(view.profit)}</strong></article>
           <article><Boxes aria-hidden="true" /><span>Stock ML</span><strong>{view.stock}</strong></article>
         </div>
         <HourlyChart values={view.hourly} />
