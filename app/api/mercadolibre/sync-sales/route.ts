@@ -12,6 +12,7 @@ import type {
   Product,
   ProductChannelMargin,
   TaxSettings,
+  FlexShippingRate,
 } from "@/lib/types";
 
 type MeliOrderItem = {
@@ -46,6 +47,7 @@ type MeliShipment = {
   id?: string | number | null;
   mode?: string | null;
   logistic_type?: string | null;
+  receiver_address?: { state?: { name?: string | null } | null; city?: { name?: string | null } | null } | null;
 };
 
 type MeliShipmentCosts = {
@@ -401,7 +403,7 @@ async function detailedOrder(order: MeliOrder, account: Awaited<ReturnType<typeo
   }
 }
 
-async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnType<typeof getConnectedMeliAccount>>) {
+async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnType<typeof getConnectedMeliAccount>>, flexRates: FlexShippingRate[]) {
   const shipmentId = asString(order.shipping?.id);
   if (!shipmentId) return null;
   try {
@@ -414,12 +416,18 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
     const flexCharge = Number(sender?.charges?.charge_flex || 0);
     const senderCost = Number(sender?.cost || 0);
     const isFlex = String(shipment.logistic_type || "").toLowerCase().includes("flex");
+    const state = String(shipment.receiver_address?.state?.name || "").toLowerCase();
+    const city = String(shipment.receiver_address?.city?.name || "").toLowerCase();
+    const isCaba = state.includes("capital federal") || city === "caba" || city === "buenos aires";
+    const cabaRate = flexRates.find((rate) => rate.active && rate.zone.trim().toLowerCase() === "caba");
+    const fallbackFlexCost = isFlex && flexCharge <= 0 && isCaba ? Number(cabaRate?.amount || 0) : 0;
+    const resolvedCost = isFlex && flexCharge > 0 ? flexCharge : fallbackFlexCost || senderCost;
     return {
       shipmentId,
       mode: shipment.mode || null,
       logisticType: shipment.logistic_type || null,
-      cost: isFlex && flexCharge > 0 ? flexCharge : senderCost,
-      source: isFlex && flexCharge > 0 ? "flex_real" : "meli_shipment_real",
+      cost: resolvedCost,
+      source: isFlex && flexCharge > 0 ? "flex_real" : fallbackFlexCost > 0 ? "flex_tariff_caba" : "meli_shipment_real",
     };
   } catch {
     return { shipmentId, mode: null, logisticType: null, cost: null, source: "shipment_unavailable" };
@@ -447,6 +455,7 @@ export async function POST(request: Request) {
       { data: taxesData, error: taxesError },
       { data: marginsData, error: marginsError },
       { data: costHistoryData, error: costHistoryError },
+      { data: flexRatesData, error: flexRatesError },
     ] = await Promise.all([
       supabase.from("products").select("*").in("status", ["active", "paused"]),
       supabase
@@ -460,6 +469,7 @@ export async function POST(request: Request) {
         .from("product_cost_history")
         .select("product_id, sku, previous_cost_without_vat, new_cost_without_vat, previous_vat_rate, new_vat_rate, changed_at")
         .order("changed_at", { ascending: true }),
+      supabase.from("flex_shipping_rates").select("*").eq("active", true),
     ]);
 
     if (productsError) throw new Error(productsError.message);
@@ -468,6 +478,7 @@ export async function POST(request: Request) {
     if (taxesError) throw new Error(taxesError.message);
     if (marginsError) throw new Error(marginsError.message);
     if (costHistoryError) throw new Error(costHistoryError.message);
+    if (flexRatesError) throw new Error(flexRatesError.message);
 
     const products = (productsData || []) as Product[];
     const publications = (publicationsData || []) as SalesPublication[];
@@ -475,6 +486,7 @@ export async function POST(request: Request) {
     const taxes = (taxesData || defaultTaxSettings()) as TaxSettings;
     const margins = (marginsData || []) as ProductChannelMargin[];
     const costHistory = (costHistoryData || []) as ProductCostHistory[];
+    const flexRates = (flexRatesData || []) as FlexShippingRate[];
     const productBySku = mapBySku(products);
     const productById = new Map(products.filter((product) => product.id).map((product) => [String(product.id), product]));
     const publicationByItemId = new Map(publications.filter((item) => item.meli_item_id).map((item) => [String(item.meli_item_id), item]));
@@ -535,7 +547,7 @@ export async function POST(request: Request) {
           const orderId = asString(order.id || searchOrder.id);
           if (!orderId || !order.date_created) continue;
 
-          const shipment = await shipmentCostForOrder(order, account);
+          const shipment = await shipmentCostForOrder(order, account, flexRates);
           const orderGrossTotal = (order.order_items || []).reduce(
             (sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price || 0),
             0,
