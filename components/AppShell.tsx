@@ -12,6 +12,7 @@ import {
   Compass,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   MonitorSmartphone,
   Package,
   PanelLeftClose,
@@ -150,7 +151,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   }
 
-  const mobileApp = pathname === "/monitor-ventas" || pathname === "/calculadora-movil";
+  const mobileApp = pathname === "/monitor-ventas" || pathname === "/calculadora-movil" || pathname === "/preguntas";
 
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${mobileApp ? "mobile-monitor-shell" : ""}`}>
@@ -265,8 +266,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {mobileApp && <nav className="mobile-app-nav" aria-label="Navegación móvil">
         <Link href="/monitor-ventas" className={pathname === "/monitor-ventas" ? "active" : ""}><MonitorSmartphone aria-hidden="true" /><span>Ventas</span></Link>
         <Link href="/calculadora-movil" className={pathname === "/calculadora-movil" ? "active" : ""}><Calculator aria-hidden="true" /><span>Simular</span></Link>
-        <Link href="/productos"><Package aria-hidden="true" /><span>Stock</span></Link>
-        <Link href="/dashboard"><LayoutDashboard aria-hidden="true" /><span>Cuenta</span></Link>
+        <Link href="/preguntas" className={pathname === "/preguntas" ? "active" : ""}><MessageCircle aria-hidden="true" /><span>Preguntas</span></Link>
       </nav>}
     </div>
   );
