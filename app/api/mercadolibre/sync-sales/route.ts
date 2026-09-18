@@ -55,6 +55,7 @@ type MeliShipmentCosts = {
     cost?: number | null;
     charges?: { charge_flex?: number | null } | null;
   }> | null;
+  receiver?: { discounts?: Array<{ promoted_amount?: number | null }> | null } | null;
 };
 
 type MeliItemCatalogLink = {
@@ -227,6 +228,7 @@ function normalizedProfitability({
   actualInstallments,
   saleFeeAmount,
   actualShippingAmount,
+  shippingSellerCredit,
 }: {
   product: Product | null;
   publication: SalesPublication | null;
@@ -240,6 +242,7 @@ function normalizedProfitability({
   actualInstallments?: number | null;
   saleFeeAmount?: number | null;
   actualShippingAmount?: number | null;
+  shippingSellerCredit?: number | null;
 }) {
   if (!product || unitPrice <= 0) {
     return {
@@ -310,7 +313,9 @@ function normalizedProfitability({
     incomeTaxAmount?: number | null;
     error?: string | null;
   };
-  const actualNetProfit = Number(actualResult.netProfit || 0);
+  // Cuando ML bonifica el envío a cargo del comprador, acredita ese importe
+  // al vendedor. Es un recupero real de la logística, no un descuento propio.
+  const actualNetProfit = Number(actualResult.netProfit || 0) + Number(shippingSellerCredit || 0);
   const actualNetSalePrice = Number(actualResult.netSalePrice || 0);
   const referencePrice = normalizedReferencePrice(sku, unitPrice, publication, publicationsBySku, actualInstallments);
   const referenceNetSalePrice = referencePrice / (1 + Number((marginSetting?.sale_applies_vat ?? true) ? product.vat_rate || 21 : 0) / 100);
@@ -412,6 +417,7 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
       meliFetch(`/shipments/${shipmentId}/costs`, account) as Promise<MeliShipmentCosts>,
     ]);
     const sender = costs.senders?.[0];
+    const sellerCredit = (costs.receiver?.discounts || []).reduce((sum, discount) => sum + Number(discount.promoted_amount || 0), 0);
     // Flex informa el cargo efectivo en charge_flex; los demás modos, en cost.
     const flexCharge = Number(sender?.charges?.charge_flex || 0);
     const senderCost = Number(sender?.cost || 0);
@@ -428,6 +434,7 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
       mode: shipment.mode || null,
       logisticType: shipment.logistic_type || null,
       cost: resolvedCost,
+      sellerCredit,
       source: isFlex && flexCharge > 0 ? "flex_real" : fallbackFlexCost > 0 ? "flex_tariff_caba" : "meli_shipment_real",
     };
   } catch {
@@ -589,6 +596,10 @@ export async function POST(request: Request) {
             // cargo total asignado al renglón, pero para el cálculo lo dividimos
             // entre las unidades: 3 unidades del mismo SKU pagan 1 envío, no 3.
             const shippingPerUnit = allocatedShipping === null ? null : allocatedShipping / Math.max(quantity, 1);
+            const allocatedShippingCredit = shipment?.sellerCredit === null || shipment?.sellerCredit === undefined
+              ? null
+              : orderGrossTotal > 0 ? Number(shipment.sellerCredit) * (lineGrossTotal / orderGrossTotal) : 0;
+            const shippingCreditPerUnit = allocatedShippingCredit === null ? null : allocatedShippingCredit / Math.max(quantity, 1);
             const variationId = asString(orderItem.item?.variation_id);
             const key = [orderId, itemId, variationId, sku].join("|");
             const payment = order.payments?.[0] || null;
@@ -606,6 +617,7 @@ export async function POST(request: Request) {
               actualInstallments,
               saleFeeAmount: Number(orderItem.sale_fee || 0),
               actualShippingAmount: shippingPerUnit,
+              shippingSellerCredit: shippingCreditPerUnit,
             });
 
             windowRowsByKey.set(key, {
@@ -631,6 +643,7 @@ export async function POST(request: Request) {
               shipping_logistic_type: shipment?.logisticType || null,
               shipping_mode: shipment?.mode || null,
               actual_shipping_cost_amount: allocatedShipping,
+              shipping_seller_credit_amount: allocatedShippingCredit,
               shipping_cost_source: shipment?.source || null,
               ...profitability,
               raw: orderItem,

@@ -190,6 +190,7 @@ export type MercadoLibreOrderItem = {
   shipping_logistic_type?: string | null;
   shipping_mode?: string | null;
   actual_shipping_cost_amount?: number | null;
+  shipping_seller_credit_amount?: number | null;
   shipping_cost_source?: string | null;
   real_unit_price?: number | null;
   real_net_sale_price?: number | null;
