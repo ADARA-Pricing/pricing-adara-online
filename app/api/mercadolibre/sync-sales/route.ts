@@ -317,6 +317,7 @@ function normalizedProfitability({
   // al vendedor. Es un recupero real de la logística, no un descuento propio.
   const actualNetProfit = Number(actualResult.netProfit || 0) + Number(shippingSellerCredit || 0);
   const actualNetSalePrice = Number(actualResult.netSalePrice || 0);
+  const actualMarginOnNetSale = actualNetSalePrice > 0 ? (actualNetProfit / actualNetSalePrice) * 100 : null;
   const referencePrice = normalizedReferencePrice(sku, unitPrice, publication, publicationsBySku, actualInstallments);
   const referenceNetSalePrice = referencePrice / (1 + Number((marginSetting?.sale_applies_vat ?? true) ? product.vat_rate || 21 : 0) / 100);
 
@@ -326,7 +327,7 @@ function normalizedProfitability({
     real_net_sale_price: actualResult.valid ? actualNetSalePrice : null,
     real_net_profit: actualResult.valid ? actualNetProfit : null,
     real_total_net_profit: actualResult.valid ? actualNetProfit * quantity : null,
-    real_margin_on_net_sale: actualResult.valid ? Number(actualResult.marginOnNetSale || 0) : null,
+    real_margin_on_net_sale: actualResult.valid ? actualMarginOnNetSale : null,
     normalized_unit_price: referencePrice,
     normalized_net_sale_price: actualResult.valid ? referenceNetSalePrice : null,
     normalized_net_profit: actualResult.valid ? actualNetProfit : null,
