@@ -121,9 +121,9 @@ export default function SalesMonitorPage() {
     }
   }
 
-  async function loadData(options: { syncToday?: boolean } = {}) {
-    setLoading(true);
-    if (options.syncToday) await syncTodaySales();
+  async function loadData(options: { showLoading?: boolean } = {}) {
+    const showLoading = options.showLoading ?? true;
+    if (showLoading) setLoading(true);
     const today = argentinaDayStart();
     try {
       await dataLoad.run({
@@ -136,14 +136,24 @@ export default function SalesMonitorPage() {
         setPublications(data.publications);
       });
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
+  }
+
+  async function refreshToday() {
+    // No bloqueamos la pantalla con Mercado Libre: primero se muestra la
+    // base guardada y, al terminar la consulta, se refresca sólo esta vista.
+    await syncTodaySales();
+    await loadData({ showLoading: false });
   }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) router.push("/login");
-      else loadData({ syncToday: true });
+      else {
+        void loadData();
+        void refreshToday();
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -180,11 +190,11 @@ export default function SalesMonitorPage() {
 
   return (
     <main className="container wide sales-monitor-page">
-      <PageHero title="Ventas de hoy" description="Se actualiza desde Mercado Libre al abrir y al refrescar." icon={<BarChart3 aria-hidden="true" />} onRefresh={() => loadData({ syncToday: true })} />
-      <PricingDataStatus state={dataLoad.state} publications={publications} onRefresh={() => loadData({ syncToday: true })} />
+      <PageHero title="Ventas de hoy" description="Muestra la última sincronización y busca novedades en segundo plano." icon={<BarChart3 aria-hidden="true" />} onRefresh={refreshToday} />
+      <PricingDataStatus state={dataLoad.state} publications={publications} onRefresh={refreshToday} />
 
       <section className="sales-monitor-total">
-        <span><i /> Actualizado {new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" }).format(new Date())}</span>
+        <span><i /> Datos guardados: {sales.length ? timeLabel(sales.reduce((latest, sale) => Date.parse(sale.updated_at || sale.order_date) > Date.parse(latest.updated_at || latest.order_date) ? sale : latest).updated_at || sales[0]?.order_date) : "sin sincronizaciones hoy"}</span>
         <strong>{moneyWithCents(view.revenue)}</strong>
         <small>Facturación bruta de hoy</small>
       </section>
@@ -203,7 +213,7 @@ export default function SalesMonitorPage() {
       <section className="card sales-monitor-list-card">
         <div className="sales-monitor-list-header">
           <div><h2>Ventas de hoy</h2><p>Precio vendido y rentabilidad de cada operación.</p></div>
-          <button type="button" className="button secondary" onClick={() => loadData({ syncToday: true })} disabled={loading || syncing}><RefreshCw aria-hidden="true" className={loading || syncing ? "spin" : ""} />{syncing ? "Sincronizando..." : "Actualizar ML"}</button>
+          <button type="button" className="button secondary" onClick={refreshToday} disabled={syncing}><RefreshCw aria-hidden="true" className={syncing ? "spin" : ""} />{syncing ? "Sincronizando..." : "Actualizar ML"}</button>
         </div>
         {loading ? <p className="sales-monitor-empty">Cargando ventas...</p> : view.rows.length === 0 ? <p className="sales-monitor-empty">Todavía no hay ventas registradas hoy.</p> : (
           <div className="sales-monitor-sales">
