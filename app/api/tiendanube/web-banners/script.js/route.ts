@@ -309,7 +309,7 @@ const script = `
       '#adara-featured-product-dynamic .adara-copy h2{margin:0 0 8px;font-size:clamp(28px,3.6vw,52px);line-height:1.04;font-weight:800;letter-spacing:0}',
       '#adara-featured-product-dynamic .adara-copy p{margin:0 0 16px;font-size:clamp(14px,1.45vw,19px);line-height:1.35}',
       '#adara-featured-product-dynamic .adara-button{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:6px;background:#fff;color:#111;font-weight:700;text-shadow:none}',
-      '@media(max-width:720px){#adara-featured-product-dynamic{padding:16px 0 30px!important}#adara-featured-product-dynamic .adara-featured-shell{width:calc(100vw - 28px)!important}#adara-featured-product-dynamic .adara-featured-card{aspect-ratio:820/1100!important}#adara-featured-product-dynamic .adara-copy{left:18px;right:18px;bottom:24px;width:var(--adara-copy-width-mobile,86vw);max-width:calc(100% - 36px)}}',
+      '@media(max-width:720px){#adara-featured-product-dynamic{padding:16px 0 30px!important}#adara-featured-product-dynamic .adara-featured-shell{width:calc(100vw - 28px)!important}#adara-featured-product-dynamic .adara-featured-card{aspect-ratio:820/1100!important}#adara-featured-product-dynamic .adara-featured-card img{object-fit:cover!important}#adara-featured-product-dynamic .adara-copy{left:18px;right:18px;bottom:24px;width:var(--adara-copy-width-mobile,86vw);max-width:calc(100% - 36px)}}',
       '</style>',
       '<div class="adara-featured-shell"><a class="adara-featured-card" href="' + link + '" style="--adara-text:' + text + ';--adara-overlay:' + overlay + ';--adara-copy-width:' + textWidth + 'vw;--adara-copy-width-mobile:' + mobileTextWidth + 'vw">',
       '<img src="' + image + '" alt="' + title + '" loading="lazy">',
