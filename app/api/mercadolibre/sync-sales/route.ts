@@ -89,6 +89,39 @@ function daysAgo(days: number) {
   return date.toISOString();
 }
 
+const RECENT_SALES_OVERLAP_MS = 5 * 60 * 1000;
+
+function argentinaDayStartIso(now = new Date()) {
+  const day = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  return new Date(`${day}T00:00:00-03:00`).toISOString();
+}
+
+async function incrementalTodayStart(
+  supabase: ReturnType<typeof createAdminClient>,
+  dayStartIso: string,
+) {
+  // Conservamos unos minutos de solapamiento: ML puede terminar de completar
+  // un pago o un envío después de que el pedido aparece por primera vez.
+  const { data, error } = await supabase
+    .from("mercadolibre_order_items")
+    .select("updated_at")
+    .gte("order_date", dayStartIso)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+
+  const latestSync = Date.parse(String(data?.updated_at || ""));
+  const dayStart = Date.parse(dayStartIso);
+  if (!Number.isFinite(latestSync) || !Number.isFinite(dayStart)) return dayStartIso;
+  return new Date(Math.max(dayStart, latestSync - RECENT_SALES_OVERLAP_MS)).toISOString();
+}
+
 function mapBySku<T extends { sku?: string | null }>(items: T[]) {
   const map = new Map<string, T>();
   items.forEach((item) => {
@@ -503,11 +536,17 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
+    // La sincronización programada sólo necesita el día reciente; las
+    // sincronizaciones manuales continúan usando 60 días por defecto.
     const days = Math.max(7, Math.min(Number(body?.days || 60), 180));
-    const from = body?.from || daysAgo(days);
+    const incrementalToday = body?.incrementalToday === true;
     const to = body?.to || new Date().toISOString();
     const chunkDays = Math.max(1, Math.min(Number(body?.chunkDays || 7), 15));
     const supabase = createAdminClient();
+    const dayStart = incrementalToday ? argentinaDayStartIso() : null;
+    const from = body?.from || (dayStart
+      ? await incrementalTodayStart(supabase, dayStart)
+      : daysAgo(days));
 
     const [
       { data: productsData, error: productsError },
@@ -717,7 +756,7 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ ok: true, scanned, saved, from, to, windows: windows.length, chunkDays });
+    return NextResponse.json({ ok: true, scanned, saved, from, to, windows: windows.length, chunkDays, incremental: incrementalToday });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudieron sincronizar ventas.";
     return NextResponse.json({ error: message }, { status: 500 });

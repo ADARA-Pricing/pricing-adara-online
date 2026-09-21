@@ -12,13 +12,30 @@ import { moneyWithCents, percent } from "@/lib/pricing";
 import type { MercadoLibreOrderItem, MercadoLibreShippingCost, Product } from "@/lib/types";
 
 function argentinaDayStart() {
-  const date = new Intl.DateTimeFormat("en-CA", {
+  const date = argentinaDayKey();
+  return new Date(`${date}T00:00:00-03:00`);
+}
+
+function argentinaDayKey() {
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Argentina/Buenos_Aires",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
-  return new Date(`${date}T00:00:00-03:00`);
+}
+
+function incrementalTodayStart() {
+  const dayStart = argentinaDayStart().getTime();
+  try {
+    const lastSuccess = Number(window.localStorage.getItem(`adara-monitor-sales-sync:${argentinaDayKey()}`));
+    if (Number.isFinite(lastSuccess) && lastSuccess > 0) {
+      return new Date(Math.max(dayStart, lastSuccess - 5 * 60 * 1000)).toISOString();
+    }
+  } catch {
+    // La sincronización sigue funcionando si el navegador no permite storage.
+  }
+  return new Date(dayStart).toISOString();
 }
 
 function numberValue(value: unknown) {
@@ -87,11 +104,16 @@ export default function SalesMonitorPage() {
       const response = await fetch("/api/mercadolibre/sync-sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from: argentinaDayStart().toISOString(), to: new Date().toISOString(), chunkDays: 1 }),
+        body: JSON.stringify({ incrementalToday: true, from: incrementalTodayStart(), to: new Date().toISOString(), chunkDays: 1 }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error || "No se pudieron actualizar las ventas desde Mercado Libre.");
-      setSyncInfo(`${Number(data.saved || 0)} ventas actualizadas desde Mercado Libre.`);
+      try {
+        window.localStorage.setItem(`adara-monitor-sales-sync:${argentinaDayKey()}`, String(Date.now()));
+      } catch {
+        // La sincronización sigue funcionando si el navegador no permite storage.
+      }
+      setSyncInfo(`${Number(data.saved || 0)} ventas nuevas o modificadas actualizadas desde Mercado Libre.`);
     } catch (error) {
       setSyncInfo(error instanceof Error ? error.message : "No se pudieron actualizar las ventas desde Mercado Libre.");
     } finally {

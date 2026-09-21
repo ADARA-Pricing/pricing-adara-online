@@ -1,0 +1,2128 @@
+
+> pricing-adara-online@0.1.0 lint
+> eslint .
+
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\analisis-mercado\page.tsx
+  106:996  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  108:506  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\asesoria-360\page.tsx
+  155:25  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            @next/next/no-img-element
+  371:5   warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\asesoria-360\page.tsx:371:5
+  369 |   useEffect(() => {
+  370 |     checkSession();
+> 371 |     loadData();
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  372 |     const stored = window.localStorage.getItem(STORAGE_KEY);
+  373 |     if (stored) {
+  374 |       try {  react-hooks/set-state-in-effect
+  461:9   warning  The 'selectedPublications' conditional could make the dependencies of useMemo Hook (at line 503) change on every render. To fix this, wrap the initialization of 'selectedPublications' in its own useMemo() Hook                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  react-hooks/exhaustive-deps
+  753:6   warning  React Hook useMemo has a missing dependency: 'offerPriceForPublication'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/exhaustive-deps
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\configuracion\mercadolibre\page.tsx
+  101:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\configuracion\mercadolibre\page.tsx:101:5
+   99 |   useEffect(() => {
+  100 |     checkSession();
+> 101 |     loadStatus();
+      |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  102 |     // eslint-disable-next-line react-hooks/exhaustive-deps
+  103 |   }, []);
+  104 |  react-hooks/set-state-in-effect
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\dashboard\page.tsx
+  458:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\dashboard\page.tsx:458:5
+  456 |   useEffect(() => {
+  457 |     checkSession();
+> 458 |     loadData({ initial: true });
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  459 |     // eslint-disable-next-line react-hooks/exhaustive-deps
+  460 |   }, []);
+  461 |  react-hooks/set-state-in-effect
+  942:6  warning  React Hook useMemo has missing dependencies: 'channelSetting', 'marginForPublication', and 'optionForPublication'. Either include them or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       react-hooks/exhaustive-deps
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\envios-meli\page.tsx
+  99:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\envios-meli\page.tsx:99:5
+   97 |   useEffect(() => {
+   98 |     checkSession();
+>  99 |     loadData();
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  100 |     // eslint-disable-next-line react-hooks/exhaustive-deps
+  101 |   }, []);
+  102 |  react-hooks/set-state-in-effect
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\impuestos\page.tsx
+  53:5  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\impuestos\page.tsx:53:5
+  51 |   useEffect(() => {
+  52 |     checkSession();
+> 53 |     loadData();
+     |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  54 |     // eslint-disable-next-line react-hooks/exhaustive-deps
+  55 |   }, []);
+  56 |  react-hooks/set-state-in-effect
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\login\page.tsx
+  53:11  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx
+   262:5   warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:262:5
+  260 |   useEffect(() => {
+  261 |     checkSession();
+> 262 |     loadData();
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  263 |     // eslint-disable-next-line react-hooks/exhaustive-deps
+  264 |   }, []);
+  265 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      react-hooks/set-state-in-effect
+   731:6   warning  React Hook useMemo has a missing dependency: 'shippingCostForOption'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            react-hooks/exhaustive-deps
+  1053:26  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:1053:26
+  1051 |                     <th>
+  1052 |                       <div className="cost-config-channel-sort-stack">
+> 1053 |                         <ConfigChannelSortButton column="code">Código</ConfigChannelSortButton>
+       |                          ^^^^^^^^^^^^^^^^^^^^^^^ This component is created during render
+  1054 |                         <ConfigChannelSortButton column="name">Nombre</ConfigChannelSortButton>
+  1055 |                       </div>
+  1056 |                     </th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:947:3
+  945 |   }
+  946 |
+> 947 |   function ConfigChannelSortButton({ column, children }: { column: ConfigChannelSortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 948 |     return (
+      | ^^^^^^^^^^^^
+> 949 |       <button className={`cost-config-sort-trigger ${configChannelSortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigChannelSort(column)}>
+      | ^^^^^^^^^^^^
+> 950 |         {children}
+      | ^^^^^^^^^^^^
+> 951 |         <ConfigSortIcon active={configChannelSortKey === column} />
+      | ^^^^^^^^^^^^
+> 952 |       </button>
+      | ^^^^^^^^^^^^
+> 953 |     );
+      | ^^^^^^^^^^^^
+> 954 |   }
+      | ^^^^ The component is created during render here
+  955 |
+  956 |   function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+  957 |     return (                                                                                                                                                                                                                                                         react-hooks/static-components
+  1054:26  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:1054:26
+  1052 |                       <div className="cost-config-channel-sort-stack">
+  1053 |                         <ConfigChannelSortButton column="code">Código</ConfigChannelSortButton>
+> 1054 |                         <ConfigChannelSortButton column="name">Nombre</ConfigChannelSortButton>
+       |                          ^^^^^^^^^^^^^^^^^^^^^^^ This component is created during render
+  1055 |                       </div>
+  1056 |                     </th>
+  1057 |                     <th><ConfigChannelSortButton column="channelType">Tipo</ConfigChannelSortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:947:3
+  945 |   }
+  946 |
+> 947 |   function ConfigChannelSortButton({ column, children }: { column: ConfigChannelSortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 948 |     return (
+      | ^^^^^^^^^^^^
+> 949 |       <button className={`cost-config-sort-trigger ${configChannelSortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigChannelSort(column)}>
+      | ^^^^^^^^^^^^
+> 950 |         {children}
+      | ^^^^^^^^^^^^
+> 951 |         <ConfigSortIcon active={configChannelSortKey === column} />
+      | ^^^^^^^^^^^^
+> 952 |       </button>
+      | ^^^^^^^^^^^^
+> 953 |     );
+      | ^^^^^^^^^^^^
+> 954 |   }
+      | ^^^^ The component is created during render here
+  955 |
+  956 |   function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+  957 |     return (                                                                                                                                                                        react-hooks/static-components
+  1057:26  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:1057:26
+  1055 |                       </div>
+  1056 |                     </th>
+> 1057 |                     <th><ConfigChannelSortButton column="channelType">Tipo</ConfigChannelSortButton></th>
+       |                          ^^^^^^^^^^^^^^^^^^^^^^^ This component is created during render
+  1058 |                     <th className="numeric-header"><ConfigChannelSortButton column="installments">Cuotas</ConfigChannelSortButton></th>
+  1059 |                     <th className="numeric-header"><ConfigChannelSortButton column="financing">Financiación</ConfigChannelSortButton></th>
+  1060 |                     <th className="boolean-header">ML</th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:947:3
+  945 |   }
+  946 |
+> 947 |   function ConfigChannelSortButton({ column, children }: { column: ConfigChannelSortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 948 |     return (
+      | ^^^^^^^^^^^^
+> 949 |       <button className={`cost-config-sort-trigger ${configChannelSortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigChannelSort(column)}>
+      | ^^^^^^^^^^^^
+> 950 |         {children}
+      | ^^^^^^^^^^^^
+> 951 |         <ConfigSortIcon active={configChannelSortKey === column} />
+      | ^^^^^^^^^^^^
+> 952 |       </button>
+      | ^^^^^^^^^^^^
+> 953 |     );
+      | ^^^^^^^^^^^^
+> 954 |   }
+      | ^^^^ The component is created during render here
+  955 |
+  956 |   function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+  957 |     return (                                                                                                 react-hooks/static-components
+  1058:53  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:1058:53
+  1056 |                     </th>
+  1057 |                     <th><ConfigChannelSortButton column="channelType">Tipo</ConfigChannelSortButton></th>
+> 1058 |                     <th className="numeric-header"><ConfigChannelSortButton column="installments">Cuotas</ConfigChannelSortButton></th>
+       |                                                     ^^^^^^^^^^^^^^^^^^^^^^^ This component is created during render
+  1059 |                     <th className="numeric-header"><ConfigChannelSortButton column="financing">Financiación</ConfigChannelSortButton></th>
+  1060 |                     <th className="boolean-header">ML</th>
+  1061 |                     <th className="boolean-header">Envío</th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:947:3
+  945 |   }
+  946 |
+> 947 |   function ConfigChannelSortButton({ column, children }: { column: ConfigChannelSortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 948 |     return (
+      | ^^^^^^^^^^^^
+> 949 |       <button className={`cost-config-sort-trigger ${configChannelSortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigChannelSort(column)}>
+      | ^^^^^^^^^^^^
+> 950 |         {children}
+      | ^^^^^^^^^^^^
+> 951 |         <ConfigSortIcon active={configChannelSortKey === column} />
+      | ^^^^^^^^^^^^
+> 952 |       </button>
+      | ^^^^^^^^^^^^
+> 953 |     );
+      | ^^^^^^^^^^^^
+> 954 |   }
+      | ^^^^ The component is created during render here
+  955 |
+  956 |   function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+  957 |     return (                                     react-hooks/static-components
+  1059:53  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:1059:53
+  1057 |                     <th><ConfigChannelSortButton column="channelType">Tipo</ConfigChannelSortButton></th>
+  1058 |                     <th className="numeric-header"><ConfigChannelSortButton column="installments">Cuotas</ConfigChannelSortButton></th>
+> 1059 |                     <th className="numeric-header"><ConfigChannelSortButton column="financing">Financiación</ConfigChannelSortButton></th>
+       |                                                     ^^^^^^^^^^^^^^^^^^^^^^^ This component is created during render
+  1060 |                     <th className="boolean-header">ML</th>
+  1061 |                     <th className="boolean-header">Envío</th>
+  1062 |                     <th className="boolean-header">IIBB</th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:947:3
+  945 |   }
+  946 |
+> 947 |   function ConfigChannelSortButton({ column, children }: { column: ConfigChannelSortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 948 |     return (
+      | ^^^^^^^^^^^^
+> 949 |       <button className={`cost-config-sort-trigger ${configChannelSortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigChannelSort(column)}>
+      | ^^^^^^^^^^^^
+> 950 |         {children}
+      | ^^^^^^^^^^^^
+> 951 |         <ConfigSortIcon active={configChannelSortKey === column} />
+      | ^^^^^^^^^^^^
+> 952 |       </button>
+      | ^^^^^^^^^^^^
+> 953 |     );
+      | ^^^^^^^^^^^^
+> 954 |   }
+      | ^^^^ The component is created during render here
+  955 |
+  956 |   function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+  957 |     return (  react-hooks/static-components
+  1065:26  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:1065:26
+  1063 |                     <th className="boolean-header">IIGG</th>
+  1064 |                     <th className="boolean-header">IVA</th>
+> 1065 |                     <th><ConfigChannelSortButton column="active">Estado</ConfigChannelSortButton></th>
+       |                          ^^^^^^^^^^^^^^^^^^^^^^^ This component is created during render
+  1066 |                     <th></th>
+  1067 |                   </tr>
+  1068 |                 </thead>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:947:3
+  945 |   }
+  946 |
+> 947 |   function ConfigChannelSortButton({ column, children }: { column: ConfigChannelSortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 948 |     return (
+      | ^^^^^^^^^^^^
+> 949 |       <button className={`cost-config-sort-trigger ${configChannelSortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigChannelSort(column)}>
+      | ^^^^^^^^^^^^
+> 950 |         {children}
+      | ^^^^^^^^^^^^
+> 951 |         <ConfigSortIcon active={configChannelSortKey === column} />
+      | ^^^^^^^^^^^^
+> 952 |       </button>
+      | ^^^^^^^^^^^^
+> 953 |     );
+      | ^^^^^^^^^^^^
+> 954 |   }
+      | ^^^^ The component is created during render here
+  955 |
+  956 |   function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+  957 |     return (                                                                                                                                                                                                                                                                                                 react-hooks/static-components
+  1156:26  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:1156:26
+  1154 |                 <thead>
+  1155 |                   <tr>
+> 1156 |                     <th><ConfigCategorySortButton column="category">Categoría</ConfigCategorySortButton></th>
+       |                          ^^^^^^^^^^^^^^^^^^^^^^^^ This component is created during render
+  1157 |                     <th className="numeric-header"><ConfigCategorySortButton column="marketplaceFeeRate">Comisión</ConfigCategorySortButton></th>
+  1158 |                     <th>Categorías ML</th>
+  1159 |                     <th><ConfigCategorySortButton column="sync">Sync ML</ConfigCategorySortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:956:3
+  954 |   }
+  955 |
+> 956 |   function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 957 |     return (
+      | ^^^^^^^^^^^^
+> 958 |       <button className={`cost-config-sort-trigger ${configCategorySortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigCategorySort(column)}>
+      | ^^^^^^^^^^^^
+> 959 |         {children}
+      | ^^^^^^^^^^^^
+> 960 |         <ConfigSortIcon active={configCategorySortKey === column} />
+      | ^^^^^^^^^^^^
+> 961 |       </button>
+      | ^^^^^^^^^^^^
+> 962 |     );
+      | ^^^^^^^^^^^^
+> 963 |   }
+      | ^^^^ The component is created during render here
+  964 |
+  965 |   function BooleanMark({ value, label }: { value: boolean; label: string }) {
+  966 |     return value ? (                                                                                                                                                                    react-hooks/static-components
+  1157:53  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:1157:53
+  1155 |                   <tr>
+  1156 |                     <th><ConfigCategorySortButton column="category">Categoría</ConfigCategorySortButton></th>
+> 1157 |                     <th className="numeric-header"><ConfigCategorySortButton column="marketplaceFeeRate">Comisión</ConfigCategorySortButton></th>
+       |                                                     ^^^^^^^^^^^^^^^^^^^^^^^^ This component is created during render
+  1158 |                     <th>Categorías ML</th>
+  1159 |                     <th><ConfigCategorySortButton column="sync">Sync ML</ConfigCategorySortButton></th>
+  1160 |                     <th><ConfigCategorySortButton column="active">Estado</ConfigCategorySortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:956:3
+  954 |   }
+  955 |
+> 956 |   function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 957 |     return (
+      | ^^^^^^^^^^^^
+> 958 |       <button className={`cost-config-sort-trigger ${configCategorySortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigCategorySort(column)}>
+      | ^^^^^^^^^^^^
+> 959 |         {children}
+      | ^^^^^^^^^^^^
+> 960 |         <ConfigSortIcon active={configCategorySortKey === column} />
+      | ^^^^^^^^^^^^
+> 961 |       </button>
+      | ^^^^^^^^^^^^
+> 962 |     );
+      | ^^^^^^^^^^^^
+> 963 |   }
+      | ^^^^ The component is created during render here
+  964 |
+  965 |   function BooleanMark({ value, label }: { value: boolean; label: string }) {
+  966 |     return value ? (                                                        react-hooks/static-components
+  1159:26  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:1159:26
+  1157 |                     <th className="numeric-header"><ConfigCategorySortButton column="marketplaceFeeRate">Comisión</ConfigCategorySortButton></th>
+  1158 |                     <th>Categorías ML</th>
+> 1159 |                     <th><ConfigCategorySortButton column="sync">Sync ML</ConfigCategorySortButton></th>
+       |                          ^^^^^^^^^^^^^^^^^^^^^^^^ This component is created during render
+  1160 |                     <th><ConfigCategorySortButton column="active">Estado</ConfigCategorySortButton></th>
+  1161 |                     <th>Notas</th>
+  1162 |                     <th></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:956:3
+  954 |   }
+  955 |
+> 956 |   function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 957 |     return (
+      | ^^^^^^^^^^^^
+> 958 |       <button className={`cost-config-sort-trigger ${configCategorySortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigCategorySort(column)}>
+      | ^^^^^^^^^^^^
+> 959 |         {children}
+      | ^^^^^^^^^^^^
+> 960 |         <ConfigSortIcon active={configCategorySortKey === column} />
+      | ^^^^^^^^^^^^
+> 961 |       </button>
+      | ^^^^^^^^^^^^
+> 962 |     );
+      | ^^^^^^^^^^^^
+> 963 |   }
+      | ^^^^ The component is created during render here
+  964 |
+  965 |   function BooleanMark({ value, label }: { value: boolean; label: string }) {
+  966 |     return value ? (                                                                                                                                                       react-hooks/static-components
+  1160:26  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:1160:26
+  1158 |                     <th>Categorías ML</th>
+  1159 |                     <th><ConfigCategorySortButton column="sync">Sync ML</ConfigCategorySortButton></th>
+> 1160 |                     <th><ConfigCategorySortButton column="active">Estado</ConfigCategorySortButton></th>
+       |                          ^^^^^^^^^^^^^^^^^^^^^^^^ This component is created during render
+  1161 |                     <th>Notas</th>
+  1162 |                     <th></th>
+  1163 |                   </tr>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\mercadolibre\page.tsx:956:3
+  954 |   }
+  955 |
+> 956 |   function ConfigCategorySortButton({ column, children }: { column: ConfigCategorySortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 957 |     return (
+      | ^^^^^^^^^^^^
+> 958 |       <button className={`cost-config-sort-trigger ${configCategorySortKey === column ? "active" : ""}`} type="button" onClick={() => changeConfigCategorySort(column)}>
+      | ^^^^^^^^^^^^
+> 959 |         {children}
+      | ^^^^^^^^^^^^
+> 960 |         <ConfigSortIcon active={configCategorySortKey === column} />
+      | ^^^^^^^^^^^^
+> 961 |       </button>
+      | ^^^^^^^^^^^^
+> 962 |     );
+      | ^^^^^^^^^^^^
+> 963 |   }
+      | ^^^^ The component is created during render here
+  964 |
+  965 |   function BooleanMark({ value, label }: { value: boolean; label: string }) {
+  966 |     return value ? (                                                                                                                                                                                                                                                                                 react-hooks/static-components
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx
+  410:63  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:410:63
+  408 |         </article>
+  409 |         <article className="kpi-card">
+> 410 |           <span className="kpi-label">Ganancia / facturación <MetricHelp metricKey="grossProfitRate" /></span>
+      |                                                               ^^^^^^^^^^ This component is created during render
+  411 |           <strong className="kpi-value">{loading && !sales.length ? "—" : percent(totals.grossProfitRate)}</strong>
+  412 |           <small className="kpi-meta">Neta sobre bruto ML</small>
+  413 |         </article>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:333:3
+  331 |   }
+  332 |
+> 333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 334 |     const help = metricHelp[metricKey];
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 335 |     if (!help) return null;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 336 |     return (
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 337 |       <span className="metricas-help" title={help} aria-label={help}>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 338 |         <Info aria-hidden="true" />
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 339 |       </span>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 340 |     );
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 341 |   }
+      | ^^^^ The component is created during render here
+  342 |
+  343 |   const chartValues = dailyRows.map((row) => Number(row[metric] || 0));
+  344 |   const minValue = Math.min(0, ...chartValues);                                                                                                                                        react-hooks/static-components
+  415:52  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:415:52
+  413 |         </article>
+  414 |         <article className="kpi-card">
+> 415 |           <span className="kpi-label">Margen real <MetricHelp metricKey="realMargin" /></span>
+      |                                                    ^^^^^^^^^^ This component is created during render
+  416 |           <strong className="kpi-value">{loading && !sales.length ? "—" : percent(totals.realMargin)}</strong>
+  417 |           <small className="kpi-meta">Sobre neto real</small>
+  418 |         </article>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:333:3
+  331 |   }
+  332 |
+> 333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 334 |     const help = metricHelp[metricKey];
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 335 |     if (!help) return null;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 336 |     return (
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 337 |       <span className="metricas-help" title={help} aria-label={help}>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 338 |         <Info aria-hidden="true" />
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 339 |       </span>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 340 |     );
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 341 |   }
+      | ^^^^ The component is created during render here
+  342 |
+  343 |   const chartValues = dailyRows.map((row) => Number(row[metric] || 0));
+  344 |   const minValue = Math.min(0, ...chartValues);                                                                                                                                                                            react-hooks/static-components
+  503:22  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:503:22
+  501 |             <thead>
+  502 |               <tr>
+> 503 |                 <th><SortButton column="key">Dia</SortButton></th>
+      |                      ^^^^^^^^^^ This component is created during render
+  504 |                 <th className="numeric-header"><SortButton column="orders">Ventas</SortButton></th>
+  505 |                 <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+  506 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:324:3
+  322 |   }
+  323 |
+> 324 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 325 |     return (
+      | ^^^^^^^^^^^^
+> 326 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 327 |         {children}
+      | ^^^^^^^^^^^^
+> 328 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 329 |       </button>
+      | ^^^^^^^^^^^^
+> 330 |     );
+      | ^^^^^^^^^^^^
+> 331 |   }
+      | ^^^^ The component is created during render here
+  332 |
+  333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+  334 |     const help = metricHelp[metricKey];                                                                                                                                                                                                                                                                                                           react-hooks/static-components
+  504:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:504:49
+  502 |               <tr>
+  503 |                 <th><SortButton column="key">Dia</SortButton></th>
+> 504 |                 <th className="numeric-header"><SortButton column="orders">Ventas</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  505 |                 <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+  506 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+  507 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia neta</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:324:3
+  322 |   }
+  323 |
+> 324 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 325 |     return (
+      | ^^^^^^^^^^^^
+> 326 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 327 |         {children}
+      | ^^^^^^^^^^^^
+> 328 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 329 |       </button>
+      | ^^^^^^^^^^^^
+> 330 |     );
+      | ^^^^^^^^^^^^
+> 331 |   }
+      | ^^^^ The component is created during render here
+  332 |
+  333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+  334 |     const help = metricHelp[metricKey];                                                                                                                                                                                      react-hooks/static-components
+  505:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:505:49
+  503 |                 <th><SortButton column="key">Dia</SortButton></th>
+  504 |                 <th className="numeric-header"><SortButton column="orders">Ventas</SortButton></th>
+> 505 |                 <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  506 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+  507 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia neta</SortButton></th>
+  508 |                 <th className="numeric-header"><SortButton column="grossProfitRate">Ganancia / fact.</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:324:3
+  322 |   }
+  323 |
+> 324 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 325 |     return (
+      | ^^^^^^^^^^^^
+> 326 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 327 |         {children}
+      | ^^^^^^^^^^^^
+> 328 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 329 |       </button>
+      | ^^^^^^^^^^^^
+> 330 |     );
+      | ^^^^^^^^^^^^
+> 331 |   }
+      | ^^^^ The component is created during render here
+  332 |
+  333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+  334 |     const help = metricHelp[metricKey];                                                                                  react-hooks/static-components
+  506:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:506:49
+  504 |                 <th className="numeric-header"><SortButton column="orders">Ventas</SortButton></th>
+  505 |                 <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+> 506 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  507 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia neta</SortButton></th>
+  508 |                 <th className="numeric-header"><SortButton column="grossProfitRate">Ganancia / fact.</SortButton></th>
+  509 |                 <th className="numeric-header"><SortButton column="realMargin">Margen real</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:324:3
+  322 |   }
+  323 |
+> 324 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 325 |     return (
+      | ^^^^^^^^^^^^
+> 326 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 327 |         {children}
+      | ^^^^^^^^^^^^
+> 328 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 329 |       </button>
+      | ^^^^^^^^^^^^
+> 330 |     );
+      | ^^^^^^^^^^^^
+> 331 |   }
+      | ^^^^ The component is created during render here
+  332 |
+  333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+  334 |     const help = metricHelp[metricKey];                                        react-hooks/static-components
+  507:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:507:49
+  505 |                 <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+  506 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+> 507 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia neta</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  508 |                 <th className="numeric-header"><SortButton column="grossProfitRate">Ganancia / fact.</SortButton></th>
+  509 |                 <th className="numeric-header"><SortButton column="realMargin">Margen real</SortButton></th>
+  510 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:324:3
+  322 |   }
+  323 |
+> 324 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 325 |     return (
+      | ^^^^^^^^^^^^
+> 326 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 327 |         {children}
+      | ^^^^^^^^^^^^
+> 328 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 329 |       </button>
+      | ^^^^^^^^^^^^
+> 330 |     );
+      | ^^^^^^^^^^^^
+> 331 |   }
+      | ^^^^ The component is created during render here
+  332 |
+  333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+  334 |     const help = metricHelp[metricKey];                  react-hooks/static-components
+  508:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:508:49
+  506 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+  507 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia neta</SortButton></th>
+> 508 |                 <th className="numeric-header"><SortButton column="grossProfitRate">Ganancia / fact.</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  509 |                 <th className="numeric-header"><SortButton column="realMargin">Margen real</SortButton></th>
+  510 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+  511 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:324:3
+  322 |   }
+  323 |
+> 324 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 325 |     return (
+      | ^^^^^^^^^^^^
+> 326 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 327 |         {children}
+      | ^^^^^^^^^^^^
+> 328 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 329 |       </button>
+      | ^^^^^^^^^^^^
+> 330 |     );
+      | ^^^^^^^^^^^^
+> 331 |   }
+      | ^^^^ The component is created during render here
+  332 |
+  333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+  334 |     const help = metricHelp[metricKey];     react-hooks/static-components
+  509:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:509:49
+  507 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia neta</SortButton></th>
+  508 |                 <th className="numeric-header"><SortButton column="grossProfitRate">Ganancia / fact.</SortButton></th>
+> 509 |                 <th className="numeric-header"><SortButton column="realMargin">Margen real</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  510 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+  511 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+  512 |                 <th className="numeric-header"><SortButton column="avgTicket">Ticket prom.</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:324:3
+  322 |   }
+  323 |
+> 324 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 325 |     return (
+      | ^^^^^^^^^^^^
+> 326 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 327 |         {children}
+      | ^^^^^^^^^^^^
+> 328 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 329 |       </button>
+      | ^^^^^^^^^^^^
+> 330 |     );
+      | ^^^^^^^^^^^^
+> 331 |   }
+      | ^^^^ The component is created during render here
+  332 |
+  333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+  334 |     const help = metricHelp[metricKey];  react-hooks/static-components
+  510:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:510:49
+  508 |                 <th className="numeric-header"><SortButton column="grossProfitRate">Ganancia / fact.</SortButton></th>
+  509 |                 <th className="numeric-header"><SortButton column="realMargin">Margen real</SortButton></th>
+> 510 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  511 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+  512 |                 <th className="numeric-header"><SortButton column="avgTicket">Ticket prom.</SortButton></th>
+  513 |               </tr>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:324:3
+  322 |   }
+  323 |
+> 324 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 325 |     return (
+      | ^^^^^^^^^^^^
+> 326 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 327 |         {children}
+      | ^^^^^^^^^^^^
+> 328 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 329 |       </button>
+      | ^^^^^^^^^^^^
+> 330 |     );
+      | ^^^^^^^^^^^^
+> 331 |   }
+      | ^^^^ The component is created during render here
+  332 |
+  333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+  334 |     const help = metricHelp[metricKey];                                                                                            react-hooks/static-components
+  511:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:511:49
+  509 |                 <th className="numeric-header"><SortButton column="realMargin">Margen real</SortButton></th>
+  510 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+> 511 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  512 |                 <th className="numeric-header"><SortButton column="avgTicket">Ticket prom.</SortButton></th>
+  513 |               </tr>
+  514 |             </thead>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:324:3
+  322 |   }
+  323 |
+> 324 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 325 |     return (
+      | ^^^^^^^^^^^^
+> 326 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 327 |         {children}
+      | ^^^^^^^^^^^^
+> 328 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 329 |       </button>
+      | ^^^^^^^^^^^^
+> 330 |     );
+      | ^^^^^^^^^^^^
+> 331 |   }
+      | ^^^^ The component is created during render here
+  332 |
+  333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+  334 |     const help = metricHelp[metricKey];                                                                                                                                                                                              react-hooks/static-components
+  512:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:512:49
+  510 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+  511 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+> 512 |                 <th className="numeric-header"><SortButton column="avgTicket">Ticket prom.</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  513 |               </tr>
+  514 |             </thead>
+  515 |             <tbody>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\metricas-meli\page.tsx:324:3
+  322 |   }
+  323 |
+> 324 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 325 |     return (
+      | ^^^^^^^^^^^^
+> 326 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 327 |         {children}
+      | ^^^^^^^^^^^^
+> 328 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 329 |       </button>
+      | ^^^^^^^^^^^^
+> 330 |     );
+      | ^^^^^^^^^^^^
+> 331 |   }
+      | ^^^^ The component is created during render here
+  332 |
+  333 |   function MetricHelp({ metricKey }: { metricKey: MetricKey }) {
+  334 |     const help = metricHelp[metricKey];                                                                                                                                                                                                                                                                                       react-hooks/static-components
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\page.tsx
+  6:11  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\precios\page.tsx
+   237:6   warning  React Hook useMemo has missing dependencies: 'calculateMcRawPriceForProduct' and 'getMargin'. Either include them or remove the dependency array                                                                                                                                         react-hooks/exhaustive-deps
+   290:6   warning  React Hook useMemo has missing dependencies: 'calculateMcRawPriceForProduct' and 'getMargin'. Either include them or remove the dependency array                                                                                                                                         react-hooks/exhaustive-deps
+  1740:44  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\productos\page.tsx
+   530:39  warning  Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\productos\page.tsx:530:39
+  528 |     const search = meliImportSearch.trim().toLowerCase();
+  529 |     const recentDays = meliImportRecentFilter ? Number(meliImportRecentFilter) : 0;
+> 530 |     const recentCutoff = recentDays ? Date.now() - recentDays * 24 * 60 * 60 * 1000 : 0;
+      |                                       ^^^^^^^^^^ Cannot call impure function
+  531 |
+  532 |     return (meliPreview?.rows || []).filter((row) => {
+  533 |       if (meliImportKindFilter === "missing" && row.exists) return false;                                                                                                                                      react-hooks/purity
+   565:5   warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\productos\page.tsx:565:5
+  563 |   useEffect(() => {
+  564 |     checkSession();
+> 565 |     loadProducts();
+      |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  566 |     // eslint-disable-next-line react-hooks/exhaustive-deps
+  567 |   }, []);
+  568 |  react-hooks/set-state-in-effect
+  1370:50  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            @next/next/no-img-element
+  1480:36  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            @next/next/no-img-element
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\promociones-meli\page.tsx
+  1140:35   warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\promociones-meli\page.tsx:1140:35
+  1138 |   useEffect(() => {
+  1139 |     checkSession();
+> 1140 |     if ("Notification" in window) setDesktopAlertPermission(Notification.permission);
+       |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  1141 |     setDesktopAlertsEnabled(window.localStorage.getItem("promos-meli-alerts-enabled") === "true");
+  1142 |     setDesktopAlertMeliRate(Number(window.localStorage.getItem("promos-meli-alerts-meli-rate") || 3) || 3);
+  1143 |     setDesktopAlertInterval(Number(window.localStorage.getItem("promos-meli-alerts-interval") || 30) || 30);                                                                                                                    react-hooks/set-state-in-effect
+  1244:192  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\promociones-meli\page.tsx:1244:192
+  1242 |   }, [products, publications, opportunities]);
+  1243 |
+> 1244 |   useEffect(() => { const sku = new URLSearchParams(window.location.search).get('sku'); const group = groups.find(group => group.product.sku.toUpperCase() === sku?.toUpperCase()); if (group) setSelectedKey(productKey(group.product)); }, [groups]);
+       |                                                                                                                                                                                                ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  1245 |   const filteredGroups = useMemo(() => {
+  1246 |     const value = normalizeFilter(query);
+  1247 |     if (!value) return groups;  react-hooks/set-state-in-effect
+  1269:9    warning  The 'selectedOpportunities' conditional could make the dependencies of useMemo Hook (at line 1453) change on every render. Move it inside the useMemo callback. Alternatively, wrap the initialization of 'selectedOpportunities' in its own useMemo() Hook                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             react-hooks/exhaustive-deps
+  1384:31   warning  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\promociones-meli\page.tsx:1384:31
+  1382 |   }
+  1383 |
+> 1384 |   const publicationFamilies = useMemo<PublicationVariantGroup[]>(() => {
+       |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1385 |     if (!selectedGroup) return [];
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1386 |     const opportunitiesByItem = new Map<string, MercadoLibrePromotionOpportunity[]>();
+       …
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1452 |       });
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1453 |   }, [selectedGroup, selectedOpportunities, onlyMeliContribution]);
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Could not preserve existing memoization
+  1454 |
+  1455 |   const trafficLights = useMemo<PromoTrafficLights>(() => {
+  1456 |     const red: PromoTrafficLightItem[] = [];                                                                                                                                                                                                                                                                                                                                                                          react-hooks/preserve-manual-memoization
+  1453:7    warning  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This dependency may be mutated later, which could cause the value to change unexpectedly.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\promociones-meli\page.tsx:1453:7
+  1451 |         return a.title.localeCompare(b.title, "es");
+  1452 |       });
+> 1453 |   }, [selectedGroup, selectedOpportunities, onlyMeliContribution]);
+       |       ^^^^^^^^^^^^^ This dependency may be modified later
+  1454 |
+  1455 |   const trafficLights = useMemo<PromoTrafficLights>(() => {
+  1456 |     const red: PromoTrafficLightItem[] = [];                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         react-hooks/preserve-manual-memoization
+  1453:22   warning  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This dependency may be mutated later, which could cause the value to change unexpectedly.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\promociones-meli\page.tsx:1453:22
+  1451 |         return a.title.localeCompare(b.title, "es");
+  1452 |       });
+> 1453 |   }, [selectedGroup, selectedOpportunities, onlyMeliContribution]);
+       |                      ^^^^^^^^^^^^^^^^^^^^^ This dependency may be modified later
+  1454 |
+  1455 |   const trafficLights = useMemo<PromoTrafficLights>(() => {
+  1456 |     const red: PromoTrafficLightItem[] = [];                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 react-hooks/preserve-manual-memoization
+  1900:6    warning  React Hook useMemo has missing dependencies: 'isPolicyBlockedPromotion' and 'rentabilityForProductRow'. Either include them or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              react-hooks/exhaustive-deps
+  2067:41   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 @next/next/no-img-element
+  2149:44   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 @next/next/no-img-element
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx
+  173:25  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   @next/next/no-img-element
+  217:5   warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:217:5
+  215 |   useEffect(() => {
+  216 |     checkSession();
+> 217 |     loadData({ initial: true });
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  218 |     // eslint-disable-next-line react-hooks/exhaustive-deps
+  219 |   }, []);
+  220 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        react-hooks/set-state-in-effect
+  450:6   warning  React Hook useMemo has a missing dependency: 'rowMatchesColumnFilters'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  react-hooks/exhaustive-deps
+  812:20  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:812:20
+  810 |               <tr>
+  811 |                 <th className="sticky-product-column">
+> 812 |                   <SortButton column="productName">Producto</SortButton>
+      |                    ^^^^^^^^^^ This component is created during render
+  813 |                 </th>
+  814 |                 <th className="numeric-header"><SortButton column="stock">Stock</SortButton></th>
+  815 |                 <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:490:3
+  488 |   }
+  489 |
+> 490 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 491 |     return (
+      | ^^^^^^^^^^^^
+> 492 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 493 |         {children}
+      | ^^^^^^^^^^^^
+> 494 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 495 |       </button>
+      | ^^^^^^^^^^^^
+> 496 |     );
+      | ^^^^^^^^^^^^
+> 497 |   }
+      | ^^^^ The component is created during render here
+  498 |
+  499 |   function clearFilters() {
+  500 |     setQuery("");                                                                                                                                                                                                                                                                                                                                                                                            react-hooks/static-components
+  814:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:814:49
+  812 |                   <SortButton column="productName">Producto</SortButton>
+  813 |                 </th>
+> 814 |                 <th className="numeric-header"><SortButton column="stock">Stock</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  815 |                 <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+  816 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+  817 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia real</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:490:3
+  488 |   }
+  489 |
+> 490 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 491 |     return (
+      | ^^^^^^^^^^^^
+> 492 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 493 |         {children}
+      | ^^^^^^^^^^^^
+> 494 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 495 |       </button>
+      | ^^^^^^^^^^^^
+> 496 |     );
+      | ^^^^^^^^^^^^
+> 497 |   }
+      | ^^^^ The component is created during render here
+  498 |
+  499 |   function clearFilters() {
+  500 |     setQuery("");                                                                                                                                                                                                                 react-hooks/static-components
+  815:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:815:49
+  813 |                 </th>
+  814 |                 <th className="numeric-header"><SortButton column="stock">Stock</SortButton></th>
+> 815 |                 <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  816 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+  817 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia real</SortButton></th>
+  818 |                 <th className="numeric-header"><SortButton column="margin">Margen real</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:490:3
+  488 |   }
+  489 |
+> 490 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 491 |     return (
+      | ^^^^^^^^^^^^
+> 492 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 493 |         {children}
+      | ^^^^^^^^^^^^
+> 494 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 495 |       </button>
+      | ^^^^^^^^^^^^
+> 496 |     );
+      | ^^^^^^^^^^^^
+> 497 |   }
+      | ^^^^ The component is created during render here
+  498 |
+  499 |   function clearFilters() {
+  500 |     setQuery("");                                                                                                                                                                                 react-hooks/static-components
+  816:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:816:49
+  814 |                 <th className="numeric-header"><SortButton column="stock">Stock</SortButton></th>
+  815 |                 <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+> 816 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  817 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia real</SortButton></th>
+  818 |                 <th className="numeric-header"><SortButton column="margin">Margen real</SortButton></th>
+  819 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:490:3
+  488 |   }
+  489 |
+> 490 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 491 |     return (
+      | ^^^^^^^^^^^^
+> 492 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 493 |         {children}
+      | ^^^^^^^^^^^^
+> 494 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 495 |       </button>
+      | ^^^^^^^^^^^^
+> 496 |     );
+      | ^^^^^^^^^^^^
+> 497 |   }
+      | ^^^^ The component is created during render here
+  498 |
+  499 |   function clearFilters() {
+  500 |     setQuery("");                                                                             react-hooks/static-components
+  817:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:817:49
+  815 |                 <th className="numeric-header"><SortButton column="units">Unidades</SortButton></th>
+  816 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+> 817 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia real</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  818 |                 <th className="numeric-header"><SortButton column="margin">Margen real</SortButton></th>
+  819 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+  820 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:490:3
+  488 |   }
+  489 |
+> 490 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 491 |     return (
+      | ^^^^^^^^^^^^
+> 492 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 493 |         {children}
+      | ^^^^^^^^^^^^
+> 494 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 495 |       </button>
+      | ^^^^^^^^^^^^
+> 496 |     );
+      | ^^^^^^^^^^^^
+> 497 |   }
+      | ^^^^ The component is created during render here
+  498 |
+  499 |   function clearFilters() {
+  500 |     setQuery("");                                                             react-hooks/static-components
+  818:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:818:49
+  816 |                 <th className="numeric-header"><SortButton column="revenue">Facturación</SortButton></th>
+  817 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia real</SortButton></th>
+> 818 |                 <th className="numeric-header"><SortButton column="margin">Margen real</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  819 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+  820 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+  821 |                 <th className="date-header"><SortButton column="lastSale">{period === "today" ? "Hora" : "Última venta"}</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:490:3
+  488 |   }
+  489 |
+> 490 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 491 |     return (
+      | ^^^^^^^^^^^^
+> 492 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 493 |         {children}
+      | ^^^^^^^^^^^^
+> 494 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 495 |       </button>
+      | ^^^^^^^^^^^^
+> 496 |     );
+      | ^^^^^^^^^^^^
+> 497 |   }
+      | ^^^^ The component is created during render here
+  498 |
+  499 |   function clearFilters() {
+  500 |     setQuery("");                       react-hooks/static-components
+  819:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:819:49
+  817 |                 <th className="numeric-header"><SortButton column="netProfit">Ganancia real</SortButton></th>
+  818 |                 <th className="numeric-header"><SortButton column="margin">Margen real</SortButton></th>
+> 819 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  820 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+  821 |                 <th className="date-header"><SortButton column="lastSale">{period === "today" ? "Hora" : "Última venta"}</SortButton></th>
+  822 |                 <th className="numeric-header"><SortButton column="activePublications">Publicaciones activas</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:490:3
+  488 |   }
+  489 |
+> 490 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 491 |     return (
+      | ^^^^^^^^^^^^
+> 492 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 493 |         {children}
+      | ^^^^^^^^^^^^
+> 494 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 495 |       </button>
+      | ^^^^^^^^^^^^
+> 496 |     );
+      | ^^^^^^^^^^^^
+> 497 |   }
+      | ^^^^ The component is created during render here
+  498 |
+  499 |   function clearFilters() {
+  500 |     setQuery("");  react-hooks/static-components
+  820:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:820:49
+  818 |                 <th className="numeric-header"><SortButton column="margin">Margen real</SortButton></th>
+  819 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+> 820 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  821 |                 <th className="date-header"><SortButton column="lastSale">{period === "today" ? "Hora" : "Última venta"}</SortButton></th>
+  822 |                 <th className="numeric-header"><SortButton column="activePublications">Publicaciones activas</SortButton></th>
+  823 |               </tr>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:490:3
+  488 |   }
+  489 |
+> 490 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 491 |     return (
+      | ^^^^^^^^^^^^
+> 492 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 493 |         {children}
+      | ^^^^^^^^^^^^
+> 494 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 495 |       </button>
+      | ^^^^^^^^^^^^
+> 496 |     );
+      | ^^^^^^^^^^^^
+> 497 |   }
+      | ^^^^ The component is created during render here
+  498 |
+  499 |   function clearFilters() {
+  500 |     setQuery("");                                                                                            react-hooks/static-components
+  821:46  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:821:46
+  819 |                 <th className="numeric-header"><SortButton column="normalizedMargin">Margen normalizado</SortButton></th>
+  820 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+> 821 |                 <th className="date-header"><SortButton column="lastSale">{period === "today" ? "Hora" : "Última venta"}</SortButton></th>
+      |                                              ^^^^^^^^^^ This component is created during render
+  822 |                 <th className="numeric-header"><SortButton column="activePublications">Publicaciones activas</SortButton></th>
+  823 |               </tr>
+  824 |             </thead>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:490:3
+  488 |   }
+  489 |
+> 490 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 491 |     return (
+      | ^^^^^^^^^^^^
+> 492 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 493 |         {children}
+      | ^^^^^^^^^^^^
+> 494 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 495 |       </button>
+      | ^^^^^^^^^^^^
+> 496 |     );
+      | ^^^^^^^^^^^^
+> 497 |   }
+      | ^^^^ The component is created during render here
+  498 |
+  499 |   function clearFilters() {
+  500 |     setQuery("");                                                                                                                                                                                   react-hooks/static-components
+  822:49  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:822:49
+  820 |                 <th className="numeric-header"><SortButton column="marginOnCost">Margen s/costo</SortButton></th>
+  821 |                 <th className="date-header"><SortButton column="lastSale">{period === "today" ? "Hora" : "Última venta"}</SortButton></th>
+> 822 |                 <th className="numeric-header"><SortButton column="activePublications">Publicaciones activas</SortButton></th>
+      |                                                 ^^^^^^^^^^ This component is created during render
+  823 |               </tr>
+  824 |             </thead>
+  825 |             <tbody>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rentabilidad-meli\page.tsx:490:3
+  488 |   }
+  489 |
+> 490 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 491 |     return (
+      | ^^^^^^^^^^^^
+> 492 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => toggleSort(column)}>
+      | ^^^^^^^^^^^^
+> 493 |         {children}
+      | ^^^^^^^^^^^^
+> 494 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 495 |       </button>
+      | ^^^^^^^^^^^^
+> 496 |     );
+      | ^^^^^^^^^^^^
+> 497 |   }
+      | ^^^^ The component is created during render here
+  498 |
+  499 |   function clearFilters() {
+  500 |     setQuery("");                                                                                                                                                                                                                                                                                      react-hooks/static-components
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx
+   53:25  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @next/next/no-img-element
+  169:5   warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:169:5
+  167 |   useEffect(() => {
+  168 |     checkSession();
+> 169 |     loadData({ initial: true });
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  170 |     // eslint-disable-next-line react-hooks/exhaustive-deps
+  171 |   }, []);
+  172 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                react-hooks/set-state-in-effect
+  180:7   warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:180:7
+  178 |     const allowedStatuses = new Set(["slow", "capital_idle", "break_risk", "low_stock", "normal", "no_sales"]);
+  179 |     if (allowedStatuses.has(estado)) {
+> 180 |       setRotationFilter(estado);
+      |       ^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  181 |       if (estado === "break_risk" || estado === "low_stock") {
+  182 |         setSortKey("stockDays");
+  183 |         setSortDirection("asc");                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           react-hooks/set-state-in-effect
+  370:6   warning  React Hook useMemo has a missing dependency: 'rowMatchesColumnFilters'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/exhaustive-deps
+  766:70  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:766:70
+  764 |               <thead>
+  765 |                 <tr>
+> 766 |                   <th className="sticky-product-column" rowSpan={2}><SortButton column="productName">Producto</SortButton></th>
+      |                                                                      ^^^^^^^^^^ This component is created during render
+  767 |                   <th className="numeric-header" rowSpan={2}><SortButton column="activePublications">Publicaciones</SortButton></th>
+  768 |                   <th className="rotation-group-7" colSpan={2}>Últimos 7 días</th>
+  769 |                   <th className="rotation-group-30" colSpan={2}>Últimos 30 días</th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                                                                                                                                                                               react-hooks/static-components
+  767:63  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:767:63
+  765 |                 <tr>
+  766 |                   <th className="sticky-product-column" rowSpan={2}><SortButton column="productName">Producto</SortButton></th>
+> 767 |                   <th className="numeric-header" rowSpan={2}><SortButton column="activePublications">Publicaciones</SortButton></th>
+      |                                                               ^^^^^^^^^^ This component is created during render
+  768 |                   <th className="rotation-group-7" colSpan={2}>Últimos 7 días</th>
+  769 |                   <th className="rotation-group-30" colSpan={2}>Últimos 30 días</th>
+  770 |                   <th className="numeric-header" rowSpan={2}><SortButton column="units60">60 días</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                                                                                        react-hooks/static-components
+  770:63  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:770:63
+  768 |                   <th className="rotation-group-7" colSpan={2}>Últimos 7 días</th>
+  769 |                   <th className="rotation-group-30" colSpan={2}>Últimos 30 días</th>
+> 770 |                   <th className="numeric-header" rowSpan={2}><SortButton column="units60">60 días</SortButton></th>
+      |                                                               ^^^^^^^^^^ This component is created during render
+  771 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stock">Stock</SortButton></th>
+  772 |                   <th className="numeric-header" rowSpan={2}><SortButton column="unitCost">Costo</SortButton></th>
+  773 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stockValue">Capital</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                        react-hooks/static-components
+  771:63  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:771:63
+  769 |                   <th className="rotation-group-30" colSpan={2}>Últimos 30 días</th>
+  770 |                   <th className="numeric-header" rowSpan={2}><SortButton column="units60">60 días</SortButton></th>
+> 771 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stock">Stock</SortButton></th>
+      |                                                               ^^^^^^^^^^ This component is created during render
+  772 |                   <th className="numeric-header" rowSpan={2}><SortButton column="unitCost">Costo</SortButton></th>
+  773 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stockValue">Capital</SortButton></th>
+  774 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stockDays">Días stock</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");  react-hooks/static-components
+  772:63  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:772:63
+  770 |                   <th className="numeric-header" rowSpan={2}><SortButton column="units60">60 días</SortButton></th>
+  771 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stock">Stock</SortButton></th>
+> 772 |                   <th className="numeric-header" rowSpan={2}><SortButton column="unitCost">Costo</SortButton></th>
+      |                                                               ^^^^^^^^^^ This component is created during render
+  773 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stockValue">Capital</SortButton></th>
+  774 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stockDays">Días stock</SortButton></th>
+  775 |                   <th rowSpan={2}>Accion</th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                         react-hooks/static-components
+  773:63  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:773:63
+  771 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stock">Stock</SortButton></th>
+  772 |                   <th className="numeric-header" rowSpan={2}><SortButton column="unitCost">Costo</SortButton></th>
+> 773 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stockValue">Capital</SortButton></th>
+      |                                                               ^^^^^^^^^^ This component is created during render
+  774 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stockDays">Días stock</SortButton></th>
+  775 |                   <th rowSpan={2}>Accion</th>
+  776 |                   <th className="date-header" rowSpan={2}><SortButton column="lastSale">Última venta</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                      react-hooks/static-components
+  774:63  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:774:63
+  772 |                   <th className="numeric-header" rowSpan={2}><SortButton column="unitCost">Costo</SortButton></th>
+  773 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stockValue">Capital</SortButton></th>
+> 774 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stockDays">Días stock</SortButton></th>
+      |                                                               ^^^^^^^^^^ This component is created during render
+  775 |                   <th rowSpan={2}>Accion</th>
+  776 |                   <th className="date-header" rowSpan={2}><SortButton column="lastSale">Última venta</SortButton></th>
+  777 |                 </tr>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                                                                                                                react-hooks/static-components
+  776:60  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:776:60
+  774 |                   <th className="numeric-header" rowSpan={2}><SortButton column="stockDays">Días stock</SortButton></th>
+  775 |                   <th rowSpan={2}>Accion</th>
+> 776 |                   <th className="date-header" rowSpan={2}><SortButton column="lastSale">Última venta</SortButton></th>
+      |                                                            ^^^^^^^^^^ This component is created during render
+  777 |                 </tr>
+  778 |                 <tr>
+  779 |                   <th className="rotation-group-7 numeric-header"><SortButton column="units7">Unidades</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                                                                                                                                                                                                               react-hooks/static-components
+  779:68  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:779:68
+  777 |                 </tr>
+  778 |                 <tr>
+> 779 |                   <th className="rotation-group-7 numeric-header"><SortButton column="units7">Unidades</SortButton></th>
+      |                                                                    ^^^^^^^^^^ This component is created during render
+  780 |                   <th className="rotation-group-7 rotation-group-divider numeric-header"><SortButton column="revenue7">Venta</SortButton></th>
+  781 |                   <th className="rotation-group-30 numeric-header"><SortButton column="units30">Unidades</SortButton></th>
+  782 |                   <th className="rotation-group-30 numeric-header"><SortButton column="revenue30">Venta</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                                                                                                 react-hooks/static-components
+  780:91  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:780:91
+  778 |                 <tr>
+  779 |                   <th className="rotation-group-7 numeric-header"><SortButton column="units7">Unidades</SortButton></th>
+> 780 |                   <th className="rotation-group-7 rotation-group-divider numeric-header"><SortButton column="revenue7">Venta</SortButton></th>
+      |                                                                                           ^^^^^^^^^^ This component is created during render
+  781 |                   <th className="rotation-group-30 numeric-header"><SortButton column="units30">Unidades</SortButton></th>
+  782 |                   <th className="rotation-group-30 numeric-header"><SortButton column="revenue30">Venta</SortButton></th>
+  783 |                 </tr>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                                                                          react-hooks/static-components
+  781:69  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:781:69
+  779 |                   <th className="rotation-group-7 numeric-header"><SortButton column="units7">Unidades</SortButton></th>
+  780 |                   <th className="rotation-group-7 rotation-group-divider numeric-header"><SortButton column="revenue7">Venta</SortButton></th>
+> 781 |                   <th className="rotation-group-30 numeric-header"><SortButton column="units30">Unidades</SortButton></th>
+      |                                                                     ^^^^^^^^^^ This component is created during render
+  782 |                   <th className="rotation-group-30 numeric-header"><SortButton column="revenue30">Venta</SortButton></th>
+  783 |                 </tr>
+  784 |               </thead>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                                                                                              react-hooks/static-components
+  782:69  warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:782:69
+  780 |                   <th className="rotation-group-7 rotation-group-divider numeric-header"><SortButton column="revenue7">Venta</SortButton></th>
+  781 |                   <th className="rotation-group-30 numeric-header"><SortButton column="units30">Unidades</SortButton></th>
+> 782 |                   <th className="rotation-group-30 numeric-header"><SortButton column="revenue30">Venta</SortButton></th>
+      |                                                                     ^^^^^^^^^^ This component is created during render
+  783 |                 </tr>
+  784 |               </thead>
+  785 |               <tbody>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\rotacion-sku\page.tsx:451:3
+  449 |   }
+  450 |
+> 451 |   function SortButton({ column, children }: { column: SortKey; children: ReactNode }) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 452 |     return (
+      | ^^^^^^^^^^^^
+> 453 |       <button className={`rotation-sort-trigger ${sortKey === column ? "active" : ""}`} type="button" onClick={() => changeSort(column)}>
+      | ^^^^^^^^^^^^
+> 454 |         {children}
+      | ^^^^^^^^^^^^
+> 455 |         <SortIcon column={column} />
+      | ^^^^^^^^^^^^
+> 456 |       </button>
+      | ^^^^^^^^^^^^
+> 457 |     );
+      | ^^^^^^^^^^^^
+> 458 |   }
+      | ^^^^ The component is created during render here
+  459 |
+  460 |   function clearFilters() {
+  461 |     setQuery("");                                                                                                                                                                                                                 react-hooks/static-components
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\simulador\page.tsx
+  345:5   warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\simulador\page.tsx:345:5
+  343 |   useEffect(() => {
+  344 |     checkSession();
+> 345 |     loadData();
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  346 |     // eslint-disable-next-line react-hooks/exhaustive-deps
+  347 |   }, []);
+  348 |  react-hooks/set-state-in-effect
+  630:6   warning  React Hook useMemo has missing dependencies: 'currentPriceForProduct' and 'shippingForProduct'. Either include them or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         react-hooks/exhaustive-deps
+  743:31  warning  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\simulador\page.tsx:743:31
+  741 |   }, [installments]);
+  742 |
+> 743 |   const costWithoutVatInput = useMemo(() => evaluateFormulaInput(form.costWithoutVat), [form.costWithoutVat]);
+      |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Could not preserve existing memoization
+  744 |
+  745 |   const simulation = useMemo(() => {
+  746 |     const costWithoutVat = Number(costWithoutVatInput.value || 0);                                                                                                                                                                                                                                                      react-hooks/preserve-manual-memoization
+  896:6   warning  React Hook useMemo has a missing dependency: 'averageShippingForCategory'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                react-hooks/exhaustive-deps
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx
+   312:25   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  @next/next/no-img-element
+   443:5    warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:443:5
+  441 |   useEffect(() => {
+  442 |     checkSession();
+> 443 |     loadData();
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  444 |     const params = new URLSearchParams(window.location.search);
+  445 |     const sku = params.get("sku");
+  446 |     if (sku) setQuery(sku);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/set-state-in-effect
+  1121:22   warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:1121:22
+  1119 |             <thead>
+  1120 |               <tr>
+> 1121 |                 <th><SortButton id="name">Producto</SortButton></th>
+       |                      ^^^^^^^^^^ This component is created during render
+  1122 |                 <th className="numeric-header">ML 1 pago</th>
+  1123 |                 <th className="numeric-header"><SortButton id="price">TN actual</SortButton></th>
+  1124 |                 <th className="numeric-header"><SortButton id="suggested">Sugerido TN</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:995:22
+   993 |   }
+   994 |
+>  995 |   const SortButton = ({ id, children }: { id: SortKey; children: React.ReactNode }) => (
+       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  996 |     <button type="button" className="tn-sort-button" onClick={() => changeSort(id)}>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  997 |       {children}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  998 |       {sortKey === id ? (sortDirection === "asc" ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />) : <ArrowUpDown size={12} className="idle-sort-icon" aria-hidden="true" />}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  999 |     </button>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1000 |   );
+       | ^^^^ The component is created during render here
+  1001 |
+  1002 |   return (
+  1003 |     <main className="container wide tienda-nube-page">                                                                                                                                                                                                                       react-hooks/static-components
+  1123:49   warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:1123:49
+  1121 |                 <th><SortButton id="name">Producto</SortButton></th>
+  1122 |                 <th className="numeric-header">ML 1 pago</th>
+> 1123 |                 <th className="numeric-header"><SortButton id="price">TN actual</SortButton></th>
+       |                                                 ^^^^^^^^^^ This component is created during render
+  1124 |                 <th className="numeric-header"><SortButton id="suggested">Sugerido TN</SortButton></th>
+  1125 |                 <th className="numeric-header"><SortButton id="diff">Diferencia</SortButton></th>
+  1126 |                 <th className="numeric-header"><SortButton id="margin">Margen actual</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:995:22
+   993 |   }
+   994 |
+>  995 |   const SortButton = ({ id, children }: { id: SortKey; children: React.ReactNode }) => (
+       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  996 |     <button type="button" className="tn-sort-button" onClick={() => changeSort(id)}>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  997 |       {children}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  998 |       {sortKey === id ? (sortDirection === "asc" ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />) : <ArrowUpDown size={12} className="idle-sort-icon" aria-hidden="true" />}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  999 |     </button>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1000 |   );
+       | ^^^^ The component is created during render here
+  1001 |
+  1002 |   return (
+  1003 |     <main className="container wide tienda-nube-page">                          react-hooks/static-components
+  1124:49   warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:1124:49
+  1122 |                 <th className="numeric-header">ML 1 pago</th>
+  1123 |                 <th className="numeric-header"><SortButton id="price">TN actual</SortButton></th>
+> 1124 |                 <th className="numeric-header"><SortButton id="suggested">Sugerido TN</SortButton></th>
+       |                                                 ^^^^^^^^^^ This component is created during render
+  1125 |                 <th className="numeric-header"><SortButton id="diff">Diferencia</SortButton></th>
+  1126 |                 <th className="numeric-header"><SortButton id="margin">Margen actual</SortButton></th>
+  1127 |                 <th className="numeric-header">Objetivo</th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:995:22
+   993 |   }
+   994 |
+>  995 |   const SortButton = ({ id, children }: { id: SortKey; children: React.ReactNode }) => (
+       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  996 |     <button type="button" className="tn-sort-button" onClick={() => changeSort(id)}>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  997 |       {children}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  998 |       {sortKey === id ? (sortDirection === "asc" ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />) : <ArrowUpDown size={12} className="idle-sort-icon" aria-hidden="true" />}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  999 |     </button>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1000 |   );
+       | ^^^^ The component is created during render here
+  1001 |
+  1002 |   return (
+  1003 |     <main className="container wide tienda-nube-page">                                  react-hooks/static-components
+  1125:49   warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:1125:49
+  1123 |                 <th className="numeric-header"><SortButton id="price">TN actual</SortButton></th>
+  1124 |                 <th className="numeric-header"><SortButton id="suggested">Sugerido TN</SortButton></th>
+> 1125 |                 <th className="numeric-header"><SortButton id="diff">Diferencia</SortButton></th>
+       |                                                 ^^^^^^^^^^ This component is created during render
+  1126 |                 <th className="numeric-header"><SortButton id="margin">Margen actual</SortButton></th>
+  1127 |                 <th className="numeric-header">Objetivo</th>
+  1128 |                 <th className="numeric-header"><SortButton id="stock">Stock</SortButton></th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:995:22
+   993 |   }
+   994 |
+>  995 |   const SortButton = ({ id, children }: { id: SortKey; children: React.ReactNode }) => (
+       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  996 |     <button type="button" className="tn-sort-button" onClick={() => changeSort(id)}>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  997 |       {children}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  998 |       {sortKey === id ? (sortDirection === "asc" ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />) : <ArrowUpDown size={12} className="idle-sort-icon" aria-hidden="true" />}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  999 |     </button>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1000 |   );
+       | ^^^^ The component is created during render here
+  1001 |
+  1002 |   return (
+  1003 |     <main className="container wide tienda-nube-page">  react-hooks/static-components
+  1126:49   warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:1126:49
+  1124 |                 <th className="numeric-header"><SortButton id="suggested">Sugerido TN</SortButton></th>
+  1125 |                 <th className="numeric-header"><SortButton id="diff">Diferencia</SortButton></th>
+> 1126 |                 <th className="numeric-header"><SortButton id="margin">Margen actual</SortButton></th>
+       |                                                 ^^^^^^^^^^ This component is created during render
+  1127 |                 <th className="numeric-header">Objetivo</th>
+  1128 |                 <th className="numeric-header"><SortButton id="stock">Stock</SortButton></th>
+  1129 |                 <th>Acciones</th>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:995:22
+   993 |   }
+   994 |
+>  995 |   const SortButton = ({ id, children }: { id: SortKey; children: React.ReactNode }) => (
+       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  996 |     <button type="button" className="tn-sort-button" onClick={() => changeSort(id)}>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  997 |       {children}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  998 |       {sortKey === id ? (sortDirection === "asc" ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />) : <ArrowUpDown size={12} className="idle-sort-icon" aria-hidden="true" />}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  999 |     </button>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1000 |   );
+       | ^^^^ The component is created during render here
+  1001 |
+  1002 |   return (
+  1003 |     <main className="container wide tienda-nube-page">                                                                  react-hooks/static-components
+  1128:49   warning  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:1128:49
+  1126 |                 <th className="numeric-header"><SortButton id="margin">Margen actual</SortButton></th>
+  1127 |                 <th className="numeric-header">Objetivo</th>
+> 1128 |                 <th className="numeric-header"><SortButton id="stock">Stock</SortButton></th>
+       |                                                 ^^^^^^^^^^ This component is created during render
+  1129 |                 <th>Acciones</th>
+  1130 |               </tr>
+  1131 |             </thead>
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\app\tienda-nube\page.tsx:995:22
+   993 |   }
+   994 |
+>  995 |   const SortButton = ({ id, children }: { id: SortKey; children: React.ReactNode }) => (
+       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  996 |     <button type="button" className="tn-sort-button" onClick={() => changeSort(id)}>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  997 |       {children}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  998 |       {sortKey === id ? (sortDirection === "asc" ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />) : <ArrowUpDown size={12} className="idle-sort-icon" aria-hidden="true" />}
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  999 |     </button>
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1000 |   );
+       | ^^^^ The component is created during render here
+  1001 |
+  1002 |   return (
+  1003 |     <main className="container wide tienda-nube-page">                                                                                                                                                                                                                                   react-hooks/static-components
+  1399:135  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  @next/next/no-img-element
+  1404:133  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  @next/next/no-img-element
+  1456:17   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  @next/next/no-img-element
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\components\AppShell.tsx
+   99:17  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\components\AppShell.tsx:99:17
+   97 |   useEffect(() => {
+   98 |     const stored = window.localStorage.getItem("adara-sidebar-collapsed");
+>  99 |     if (stored) setCollapsed(stored === "true");
+      |                 ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  100 |     const storedMetrics = window.localStorage.getItem("adara-sidebar-metrics-open");
+  101 |     const storedConfig = window.localStorage.getItem("adara-sidebar-config-open");
+  102 |     if (storedMetrics) setMetricsOpen(storedMetrics === "true");  react-hooks/set-state-in-effect
+  107:6   warning  React Hook useEffect has a missing dependency: 'supabase.auth'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       react-hooks/exhaustive-deps
+  110:68  warning  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\User\Documents\GitHub\pricing-adara-online\components\AppShell.tsx:110:68
+  108 |
+  109 |   useEffect(() => {
+> 110 |     if (metricItems.some((item) => isActive(pathname, item.href))) setMetricsOpen(true);
+      |                                                                    ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  111 |     if (configItems.some((item) => isActive(pathname, item.href))) setConfigOpen(true);
+  112 |   }, [pathname]);
+  113 |                                                                                                              react-hooks/set-state-in-effect
+  156:13  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                @next/next/no-img-element
+
+✖ 101 problems (0 errors, 101 warnings)
+

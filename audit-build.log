@@ -1,0 +1,81 @@
+
+> pricing-adara-online@0.1.0 build
+> next build
+
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\User\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\User\Documents\GitHub\pricing-adara-online\package-lock.json
+
+▲ Next.js 16.2.9 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 3.0s
+  Running TypeScript ...
+  Finished TypeScript in 8.0s ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/48) ...
+  Generating static pages using 15 workers (12/48) 
+  Generating static pages using 15 workers (24/48) 
+  Generating static pages using 15 workers (36/48) 
+✓ Generating static pages using 15 workers (48/48) in 527ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /analisis-mercado
+├ ƒ /api/mercadolibre/activate-promotion
+├ ƒ /api/mercadolibre/auto-sync
+├ ƒ /api/mercadolibre/b2b-pricing
+├ ƒ /api/mercadolibre/callback
+├ ƒ /api/mercadolibre/catalog-competition
+├ ƒ /api/mercadolibre/connect
+├ ƒ /api/mercadolibre/import-categories
+├ ƒ /api/mercadolibre/import-products
+├ ƒ /api/mercadolibre/refresh-adara-promotion
+├ ƒ /api/mercadolibre/status
+├ ƒ /api/mercadolibre/sync-sales
+├ ƒ /api/mercadolibre/sync-shipping
+├ ƒ /api/mercadolibre/update-b2b-prices
+├ ƒ /api/mercadolibre/update-sku-price
+├ ƒ /api/tiendanube/callback
+├ ƒ /api/tiendanube/connect
+├ ƒ /api/tiendanube/create-product
+├ ƒ /api/tiendanube/install-web-script
+├ ƒ /api/tiendanube/privacy
+├ ƒ /api/tiendanube/status
+├ ƒ /api/tiendanube/sync-products
+├ ƒ /api/tiendanube/update-price
+├ ƒ /api/tiendanube/web-banners
+├ ƒ /api/tiendanube/web-banners/public
+├ ƒ /api/tiendanube/web-banners/script.js
+├ ƒ /api/tiendanube/web-banners/upload
+├ ○ /asesoria-360
+├ ○ /canales
+├ ○ /configuracion/general
+├ ○ /configuracion/mercadolibre
+├ ○ /dashboard
+├ ○ /envios-meli
+├ ○ /impuestos
+├ ○ /login
+├ ○ /mercadolibre
+├ ○ /metricas-meli
+├ ○ /oportunidades
+├ ○ /precios
+├ ○ /productos
+├ ○ /promociones-meli
+├ ○ /rentabilidad-meli
+├ ○ /rotacion-sku
+├ ○ /simulador
+└ ○ /tienda-nube
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

@@ -1,0 +1,27 @@
+{
+  "description": "Sanitized sample data for external visual review of Rotacion SKU. This file is not loaded by the app automatically.",
+  "products": [
+    { "sku": "178", "name": "Tablet Xiaomi Redmi Pad 2 8/256gb - Gris Oscuro", "category": "Tablets", "stock": 44, "thumbnail": "https://http2.mlstatic.com/D_NQ_NP_2X_000001-MLA00000000001_000000-F.webp" },
+    { "sku": "87", "name": "Redmi Watch 5 Active black", "category": "Smartwatch", "stock": 0, "thumbnail": "https://http2.mlstatic.com/D_NQ_NP_2X_000002-MLA00000000002_000000-F.webp" },
+    { "sku": "87B", "name": "Redmi Watch 5 Active white", "category": "Smartwatch", "stock": 52, "thumbnail": "https://http2.mlstatic.com/D_NQ_NP_2X_000003-MLA00000000003_000000-F.webp" },
+    { "sku": "86", "name": "Redmi Watch 5 Lite black", "category": "Smartwatch", "stock": 117, "thumbnail": null },
+    { "sku": "73", "name": "Auriculares Inalambricos Xiaomi Redmi Buds 6 Play Negro", "category": "Auriculares", "stock": 10, "thumbnail": "https://http2.mlstatic.com/D_NQ_NP_2X_000004-MLA00000000004_000000-F.webp" },
+    { "sku": "DS001N", "name": "Disco de estado Solido Kingston 480gb A400", "category": "Discos", "stock": 1, "thumbnail": null },
+    { "sku": "TA005G", "name": "Tablet Xiaomi Pad 7 - Pantalla 3.2k 11.2, Snapdragon 7+ Gen 3, 8gb Ram, 256gb", "category": "Tablets", "stock": 50, "thumbnail": "https://http2.mlstatic.com/D_NQ_NP_2X_000005-MLA00000000005_000000-F.webp" },
+    { "sku": "301", "name": "Smart TV Enova 32 Led Hd Google TV", "category": "TV", "stock": 90, "thumbnail": "https://http2.mlstatic.com/D_NQ_NP_2X_000006-MLA00000000006_000000-F.webp" },
+    { "sku": "NT003", "name": "Notebook Lenovo IdeaPad Slim 3 15.6", "category": "Notebooks", "stock": 0, "thumbnail": "https://http2.mlstatic.com/D_NQ_NP_2X_000007-MLA00000000007_000000-F.webp" },
+    { "sku": "MF001", "name": "Impresora Brother DCP-1617NW Laser Multifuncion Monocromatica", "category": "Impresoras", "stock": 8, "thumbnail": null }
+  ],
+  "rotationRows": [
+    { "sku": "178", "activePublications": 15, "catalogCount": 9, "units7": 12, "revenue7": 6744000, "units30": 44, "revenue30": 24728000, "units60": 91, "stock": 44, "stockDays": 30, "lastSale": "2026-08-11" },
+    { "sku": "87", "activePublications": 0, "catalogCount": 0, "units7": 50, "revenue7": 3717500, "units30": 172, "revenue30": 12765123.92, "units60": 301, "stock": 0, "stockDays": 0, "lastSale": "2026-08-08" },
+    { "sku": "87B", "activePublications": 4, "catalogCount": 2, "units7": 20, "revenue7": 1576320, "units30": 106, "revenue30": 8365530.51, "units60": 188, "stock": 52, "stockDays": 3.4, "lastSale": "2026-08-11" },
+    { "sku": "86", "activePublications": 4, "catalogCount": 2, "units7": 16, "revenue7": 1585912, "units30": 91, "revenue30": 9019879.15, "units60": 160, "stock": 117, "stockDays": 9, "lastSale": "2026-08-11" },
+    { "sku": "73", "activePublications": 6, "catalogCount": 2, "units7": 7, "revenue7": 177451, "units30": 57, "revenue30": 1444963, "units60": 179, "stock": 10, "stockDays": 1.2, "lastSale": "2026-08-11" },
+    { "sku": "DS001N", "activePublications": 10, "catalogCount": 5, "units7": 5, "revenue7": 891578, "units30": 50, "revenue30": 8915780.15, "units60": 70, "stock": 1, "stockDays": 0.1, "lastSale": "2026-08-11" },
+    { "sku": "TA005G", "activePublications": 14, "catalogCount": 7, "units7": 5, "revenue7": 3903990.31, "units30": 52, "revenue30": 40571332.10, "units60": 52, "stock": 50, "stockDays": 6.7, "lastSale": "2026-08-11" },
+    { "sku": "301", "activePublications": 19, "catalogCount": 10, "units7": 9, "revenue7": 2499346.05, "units30": 50, "revenue30": 13845425.75, "units60": 50, "stock": 90, "stockDays": 13, "lastSale": "2026-08-11" },
+    { "sku": "NT003", "activePublications": 1, "catalogCount": 0, "units7": 7, "revenue7": 9634206.75, "units30": 55, "revenue30": 82493769.40, "units60": 74, "stock": 0, "stockDays": 0, "lastSale": "2026-08-06" },
+    { "sku": "MF001", "activePublications": 1, "catalogCount": 0, "units7": 0, "revenue7": 0, "units30": 0, "revenue30": 0, "units60": 0, "stock": 8, "stockDays": null, "lastSale": null }
+  ]
+}
