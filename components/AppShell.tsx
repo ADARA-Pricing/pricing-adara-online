@@ -11,6 +11,7 @@ import {
   CircleDollarSign,
   Compass,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   MessageCircle,
   MonitorSmartphone,
@@ -42,6 +43,7 @@ function SidebarIcon({ icon: Icon, active = false, sub = false }: { icon: Lucide
 const mainItems: NavItem[] = [
   { href: "/dashboard", label: "Control de cuenta", icon: LayoutDashboard },
   { href: "/monitor-ventas", label: "Monitor de ventas", icon: MonitorSmartphone },
+  { href: "/logistica", label: "Logística ML", icon: ListChecks },
   { href: "/productos", label: "Productos", icon: Package },
   { href: "/mercadolibre", label: "Costo x canal", icon: ChartNoAxesCombined },
   { href: "/impuestos", label: "Impuestos", icon: ReceiptText },
