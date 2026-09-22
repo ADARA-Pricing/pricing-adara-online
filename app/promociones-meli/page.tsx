@@ -21,6 +21,7 @@ import {
 import type {
   MercadoLibreCategoryFee,
   MercadoLibreInstallmentFee,
+  MercadoLibreOrderItem,
   MercadoLibrePriceOption,
   MercadoLibrePromotionOpportunity,
   MercadoLibreShippingCost,
@@ -91,6 +92,7 @@ type PromoComparison = {
   netProfit: number | null;
   startDate?: string | null;
   endDate?: string | null;
+  lastSyncAt?: string | null;
   joined?: boolean;
   scheduled?: boolean;
   fixedFeeAmount?: number | null;
@@ -119,6 +121,13 @@ type PromoTrafficLightItem = {
   status: "Vigente" | "Para activar";
   activeMargin?: number | null;
   activePromoPrice?: number | null;
+  profitDifference?: number | null;
+  units30?: number;
+  units7?: number;
+  rotation?: "fast" | "slow" | "none";
+  higherBuyerPrice?: boolean;
+  needsReview?: boolean;
+  lastSyncAt?: string | null;
   activeComparison?: {
     key: string;
     promotionName: string;
@@ -158,6 +167,7 @@ type MissingPromoGroup = {
 type PromoTrafficLights = {
   red: PromoTrafficLightGroup[];
   yellow: PromoTrafficLightGroup[];
+  review: PromoTrafficLightGroup[];
   scheduled: PromoTrafficLightGroup[];
   scheduledShared: PromoTrafficLightGroup[];
 };
@@ -754,6 +764,8 @@ export default function PromocionesMeliPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [publications, setPublications] = useState<MercadoLibreShippingCost[]>([]);
   const [opportunities, setOpportunities] = useState<MercadoLibrePromotionOpportunity[]>([]);
+  const [sales, setSales] = useState<MercadoLibreOrderItem[]>([]);
+  const [rotationAsOf, setRotationAsOf] = useState(() => Date.now());
   const [installments, setInstallments] = useState<MercadoLibreInstallmentFee[]>([]);
   const [categoryFees, setCategoryFees] = useState<MercadoLibreCategoryFee[]>([]);
   const [taxes, setTaxes] = useState<TaxSettings>(defaultTaxSettings());
@@ -795,9 +807,9 @@ export default function PromocionesMeliPage() {
   }
 
   async function loadData(options: { quiet?: boolean; initial?: boolean } = {}) {
-    const since = new Date(); since.setHours(0,0,0,0); since.setDate(since.getDate() - 65);
+    const since = new Date(); since.setHours(0,0,0,0); since.setDate(since.getDate() - 30);
     setLoading(true);
-    try { await dataLoad.run({ products: { table: 'products', filters: [['neq','status','discontinued']] }, publications: { table: 'mercadolibre_shipping_costs', filters: [['eq','active',true]] }, opportunities: { table: 'mercadolibre_promotion_opportunities' }, installments: { table: 'mercadolibre_installment_fees', filters: [['eq','active',true]] }, categories: { table: 'mercadolibre_category_fees', filters: [['eq','active',true]] }, taxes: { table: 'tax_settings', filters: [['eq','key','default']] }, margins: { table: 'product_channel_margins' } }, data => { setProducts(data.products); setPublications(data.publications.filter(item => item.meli_status === 'active')); setOpportunities(data.opportunities); setInstallments(data.installments.filter(item => item.code !== 'MC')); setCategoryFees(data.categories); setTaxes(data.taxes[0] || defaultTaxSettings()); setMarginSettings(data.margins); }, !options.initial); }
+    try { await dataLoad.run({ products: { table: 'products', filters: [['neq','status','discontinued']] }, publications: { table: 'mercadolibre_shipping_costs', filters: [['eq','active',true]] }, opportunities: { table: 'mercadolibre_promotion_opportunities' }, sales: { table: 'mercadolibre_order_items', columns: 'id,order_date,status,meli_item_id,sku,product_id,quantity', filters: [['gte','order_date',since.toISOString()],['neq','status','cancelled']], order: 'order_date', ascending: false }, installments: { table: 'mercadolibre_installment_fees', filters: [['eq','active',true]] }, categories: { table: 'mercadolibre_category_fees', filters: [['eq','active',true]] }, taxes: { table: 'tax_settings', filters: [['eq','key','default']] }, margins: { table: 'product_channel_margins' } }, data => { setProducts(data.products); setPublications(data.publications.filter(item => item.meli_status === 'active')); setOpportunities(data.opportunities); setSales(data.sales); setRotationAsOf(Date.now()); setInstallments(data.installments.filter(item => item.code !== 'MC')); setCategoryFees(data.categories); setTaxes(data.taxes[0] || defaultTaxSettings()); setMarginSettings(data.margins); }, !options.initial); }
     finally { setLoading(false); }
   }
 
@@ -1104,6 +1116,7 @@ export default function PromocionesMeliPage() {
   }
 
   function isIdealDesktopAlertItem(item: PromoTrafficLightItem) {
+    if (item.needsReview || item.higherBuyerPrice || item.joined) return false;
     const improvesMarginAndBuyer = Boolean(
       item.activeMargin !== null &&
       item.activeMargin !== undefined &&
@@ -1473,9 +1486,25 @@ export default function PromocionesMeliPage() {
       });
   }, [selectedGroup, selectedOpportunities, onlyMeliContribution]);
 
+  const salesBySku = useMemo(() => {
+    const result = new Map<string, { units7: number; units30: number }>();
+    const weekAgo = rotationAsOf - 7 * 86400000;
+    sales.forEach((sale) => {
+      const sku = sale.sku?.trim().toUpperCase();
+      if (!sku) return;
+      const current = result.get(sku) || { units7: 0, units30: 0 };
+      const quantity = Math.max(0, Number(sale.quantity || 0));
+      current.units30 += quantity;
+      if (new Date(sale.order_date).getTime() >= weekAgo) current.units7 += quantity;
+      result.set(sku, current);
+    });
+    return result;
+  }, [sales, rotationAsOf]);
+
   const trafficLights = useMemo<PromoTrafficLights>(() => {
     const red: PromoTrafficLightItem[] = [];
     const yellow: PromoTrafficLightItem[] = [];
+    const review: PromoTrafficLightItem[] = [];
     const scheduled: PromoTrafficLightItem[] = [];
     const scheduledShared: PromoTrafficLightItem[] = [];
 
@@ -1553,6 +1582,7 @@ export default function PromocionesMeliPage() {
                 netProfit: null,
                 startDate: activePublicationPromoDates.startDate,
                 endDate: activePublicationPromoDates.endDate,
+                lastSyncAt: publication.meli_last_sync_at,
               }]
             : []),
           ...row.opportunities.map((opportunity) => {
@@ -1603,6 +1633,7 @@ export default function PromocionesMeliPage() {
               netProfit: null,
               startDate,
               endDate,
+              lastSyncAt: opportunity.last_sync_at || publication.meli_last_sync_at,
               joined: isJoinedOpportunity(opportunity),
               scheduled: isScheduledOpportunity({ ...opportunity, start_date: startDate, end_date: endDate }),
               fixedFeeAmount: promotionFixedFeeAmount(opportunity),
@@ -1644,7 +1675,8 @@ export default function PromocionesMeliPage() {
               promoBuyerPrice(activeItem.promo) > 0 &&
               promoBuyerPrice(item.promo) < promoBuyerPrice(activeItem.promo)
             ) ||
-            promoImprovesMeliSupport(item.promo, activeItem.promo)
+            promoImprovesMeliSupport(item.promo, activeItem.promo) ||
+            (item.netProfit > activeItem.netProfit + 1 && item.margin > activeItem.margin)
           )) &&
           !calculatedPromos.some((scheduledItem) =>
             scheduledItem.promo.status === "Para activar" &&
@@ -1760,8 +1792,8 @@ export default function PromocionesMeliPage() {
             // acepta para una candidata. Las vigentes sólo son referencia.
             .filter((candidate) => candidate.margin >= yellowThreshold ||
               activePromos.some((activeItem) =>
-                promoImprovesMeliSupport(candidate.promo, activeItem.promo) &&
-                candidate.netProfit > activeItem.netProfit + 1,
+                candidate.netProfit > activeItem.netProfit + 1 &&
+                (promoImprovesMeliSupport(candidate.promo, activeItem.promo) || candidate.margin > activeItem.margin),
               ))
             .sort((a, b) => {
               const priceA = Number(a.promo.effectiveSalePrice || a.promo.promoPrice || 0);
@@ -1774,7 +1806,13 @@ export default function PromocionesMeliPage() {
               const supportComparison = activePromos.find((activeItem) => promoImprovesMeliSupport(promo, activeItem.promo)) || null;
               const activeComparisonSource = supportComparison || bestActive;
               const improvesMeliSupport = Boolean(supportComparison);
-              addItem(yellow, {
+              const activeBuyerPrice = Number(activeComparisonSource?.promo.promoPrice || 0);
+              const candidateBuyerPrice = Number(promo.promoPrice || 0);
+              const higherBuyerPrice = activeBuyerPrice > 0 && candidateBuyerPrice > activeBuyerPrice + 1;
+              const rotation = salesBySku.get(group.product.sku.toUpperCase()) || { units7: 0, units30: 0 };
+              const rotationKind = rotation.units30 === 0 ? "none" : rotation.units7 >= 3 || rotation.units30 >= 10 ? "fast" : "slow";
+              const needsReview = higherBuyerPrice && rotationKind !== "fast";
+              addItem(needsReview ? review : yellow, {
                 key: `${group.product.sku}-${publication.meli_item_id}-${promo.key}-${promo.status}`,
                 sku: group.product.sku,
                 title: publication.meli_title || group.product.name,
@@ -1796,6 +1834,13 @@ export default function PromocionesMeliPage() {
                 status: promo.status,
                 activeMargin: activeComparisonSource?.margin ?? null,
                 activePromoPrice: activeComparisonSource?.promo.promoPrice ?? null,
+                profitDifference: activeComparisonSource ? candidate.netProfit - activeComparisonSource.netProfit : null,
+                units7: rotation.units7,
+                units30: rotation.units30,
+                rotation: rotationKind,
+                higherBuyerPrice,
+                needsReview,
+                lastSyncAt: promo.lastSyncAt,
                 activeComparison: activeComparisonSource ? {
                   key: `${group.product.sku}-${publication.meli_item_id}-${activeComparisonSource.promo.key}-${promo.key}-active-comparison`,
                   promotionName: activeComparisonSource.promo.name,
@@ -1819,7 +1864,7 @@ export default function PromocionesMeliPage() {
       });
     });
 
-    function groupBySku(items: PromoTrafficLightItem[], mode: "best" | "worst" = "best") {
+    function groupBySku(items: PromoTrafficLightItem[], mode: "best" | "worst" | "profit" = "best") {
       const grouped = new Map<string, PromoTrafficLightGroup>();
       items.forEach((item) => {
         const current = grouped.get(item.sku) || {
@@ -1836,7 +1881,9 @@ export default function PromocionesMeliPage() {
         } else if (
           mode === "worst"
             ? item.margin < current.items[existingIndex].margin
-            : item.margin > current.items[existingIndex].margin
+            : mode === "profit"
+              ? (item.profitDifference ?? item.netProfit) > (current.items[existingIndex].profitDifference ?? current.items[existingIndex].netProfit)
+              : item.margin > current.items[existingIndex].margin
         ) {
           current.items[existingIndex] = item;
         }
@@ -1848,7 +1895,7 @@ export default function PromocionesMeliPage() {
           ...group,
           items: [...group.items].sort((a, b) => {
             if (a.installmentCount !== b.installmentCount) return a.installmentCount - b.installmentCount;
-            return b.margin - a.margin;
+            return mode === "profit" ? (b.profitDifference ?? b.netProfit) - (a.profitDifference ?? a.netProfit) : b.margin - a.margin;
           }),
         }))
         .sort((a, b) => a.sku.localeCompare(b.sku, "es"));
@@ -1870,7 +1917,7 @@ export default function PromocionesMeliPage() {
       });
 
       bySkuInstallment.forEach((sameInstallmentItems) => {
-        const marginWinner = [...sameInstallmentItems].sort((a, b) => b.margin - a.margin)[0];
+        const marginWinner = [...sameInstallmentItems].sort((a, b) => (b.profitDifference ?? b.netProfit) - (a.profitDifference ?? a.netProfit))[0];
         if (!marginWinner) return;
         selected.push(marginWinner);
 
@@ -1880,7 +1927,7 @@ export default function PromocionesMeliPage() {
           .sort((a, b) => {
             const priceDiff = buyerPrice(a) - buyerPrice(b);
             if (priceDiff !== 0) return priceDiff;
-            return b.margin - a.margin;
+            return (b.profitDifference ?? b.netProfit) - (a.profitDifference ?? a.netProfit);
           })[0];
 
         if (lowerBuyerPrice) selected.push(lowerBuyerPrice);
@@ -1896,7 +1943,7 @@ export default function PromocionesMeliPage() {
             if (meliDiff !== 0) return meliDiff;
             const sellerDiff = Number(a.sellerRate || 0) - Number(b.sellerRate || 0);
             if (sellerDiff !== 0) return sellerDiff;
-            return b.margin - a.margin;
+            return (b.profitDifference ?? b.netProfit) - (a.profitDifference ?? a.netProfit);
           })[0];
 
         if (betterMeliSupport) selected.push(betterMeliSupport);
@@ -1918,8 +1965,7 @@ export default function PromocionesMeliPage() {
           ...group,
           items: [...group.items].sort((a, b) => {
             if (a.installmentCount !== b.installmentCount) return a.installmentCount - b.installmentCount;
-            if (a.installmentLabel === b.installmentLabel) return b.margin - a.margin;
-            return b.margin - a.margin;
+            return (b.profitDifference ?? b.netProfit) - (a.profitDifference ?? a.netProfit);
           }),
         }))
         .sort((a, b) => a.sku.localeCompare(b.sku, "es"));
@@ -1928,17 +1974,18 @@ export default function PromocionesMeliPage() {
     return {
       red: groupBySku(red, "worst"),
       yellow: groupYellowBySku(yellow),
+      review: groupBySku(review, "profit"),
       scheduled: groupBySku(scheduled),
       scheduledShared: groupBySku(scheduledShared),
     };
-  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold, blockedActivationKeys]);
+  }, [groups, products, pricingOptions, categoryFees, taxes, marginSettings, redThreshold, yellowThreshold, blockedActivationKeys, salesBySku]);
 
   const desktopAlertCandidates = useMemo(() => {
     const flatten = (groups: PromoTrafficLightGroup[]) => groups.flatMap((group) => group.items);
     return [
       ...flatten(trafficLights.yellow),
       ...flatten(trafficLights.scheduledShared),
-    ].filter((item) => meliContributionRateForItem(item) >= desktopAlertMeliRate || isIdealDesktopAlertItem(item));
+    ].filter((item) => !item.needsReview && !item.higherBuyerPrice && (meliContributionRateForItem(item) >= desktopAlertMeliRate || isIdealDesktopAlertItem(item)));
   }, [trafficLights, desktopAlertMeliRate]);
 
   const topDesktopAlertCandidates = useMemo(() => {
@@ -2529,7 +2576,7 @@ export default function PromocionesMeliPage() {
                               <tbody>
                                 {promoComparisons.map((promo) => (
                                   <tr key={promo.key}>
-                                    <td><span className={`promo-status ${promo.status === "Vigente" ? "active" : ""}`}>{promo.joined && promo.status !== "Vigente" ? "Adherida en ML" : promo.status}</span></td>
+                                    <td><span className={`promo-status ${promo.status === "Vigente" ? "active" : ""}`}>{promo.status === "Vigente" ? "Aplicada ahora" : promo.joined && promo.scheduled ? "Adherida y programada" : promo.joined ? "Adherida en ML" : promo.scheduled ? "Programada, disponible" : "Disponible para adherir"}</span></td>
                                     <td>
                                       <strong>{promo.name}</strong>
                                       {futureStartLabel(promo.startDate) && (
@@ -2601,7 +2648,7 @@ export default function PromocionesMeliPage() {
         <div className="promociones-traffic-head">
           <div>
             <h2>Ajustes pendientes</h2>
-            <p>Intervalos de margen: rojo por debajo de Rojo; amarillo desde Rojo hasta Amarillo sin incluir; verde desde Amarillo. Esta vista muestra candidatas para activar y futuras; una vigente sólo aparece como referencia al comparar una candidata.</p>
+            <p>Las sugerencias comparan ganancia neta, precio al comprador y rotación. Una suba de precio sólo pasa a «Suba posible» con al menos 3 unidades vendidas en 7 días o 10 en 30 días; de otro modo queda en «Revisar».</p>
           </div>
           <div className="promociones-traffic-actions">
             <label>
@@ -2650,10 +2697,17 @@ export default function PromocionesMeliPage() {
             },
             {
               key: "yellow",
-              title: "Candidatas para activar",
-              subtitle: `Rentabilidad mínima ${percent(yellowThreshold)} (configurable)`,
+              title: "Sugeridas y adheridas",
+              subtitle: `Margen objetivo ${percent(yellowThreshold)}; verificar antes de activar`,
               groups: trafficLights.yellow,
               Icon: TrendingUp,
+            },
+            {
+              key: "review",
+              title: "Revisar precio y rotación",
+              subtitle: "Mayor precio al comprador con rotación lenta o nula",
+              groups: trafficLights.review,
+              Icon: CircleAlert,
             },
             {
               key: "scheduled",
@@ -2731,7 +2785,7 @@ export default function PromocionesMeliPage() {
                             const validity = promoValidityLabel(item.startDate, item.endDate);
                             return (
                             <Fragment key={item.key}>
-                            {column.key === "yellow" && item.activeComparison && (
+                            {(column.key === "yellow" || column.key === "review") && item.activeComparison && (
                               <div className="promociones-traffic-item promociones-traffic-item-active" key={item.activeComparison.key}>
                                 <div className="promociones-traffic-main">
                                   <strong>{item.installmentLabel}</strong>
@@ -2763,7 +2817,7 @@ export default function PromocionesMeliPage() {
                             <div className="promociones-traffic-item">
                               <div className="promociones-traffic-main">
                                 <strong>{item.installmentLabel}</strong>
-                                {column.key === "yellow" && <span className="promo-date-badge">{item.joined ? "Adherida en ML" : item.status === "Vigente" ? "Vigente" : "Sugerida"}</span>}
+                                {(column.key === "yellow" || column.key === "review") && <span className="promo-date-badge">{item.joined ? "Adherida en ML" : item.needsReview ? "Revisar, no sugerida" : item.higherBuyerPrice ? "Suba posible, revisar" : "Sugerida"}</span>}
                                 <span>
                                   {item.promotionName}
                                   {column.key === "yellow" && validity ? ` | ${validity}` : ""}
@@ -2774,6 +2828,14 @@ export default function PromocionesMeliPage() {
                                 {item.recommendationReason === "better_meli_support" && (
                                   <span className="promo-meli-support-badge">{item.joined ? "Mejora el margen; verificar cuándo reemplaza la promo actual" : "Conviene: baja vendedor y suma aporte ML"}</span>
                                 )}
+                                {item.profitDifference !== null && item.profitDifference !== undefined && (
+                                  <span>{item.profitDifference >= 0 ? "Ganancia adicional estimada" : "Menor ganancia estimada"}: {moneyWithCents(Math.abs(item.profitDifference))} por unidad | Margen {percent(item.activeMargin || 0)} → {percent(item.margin)}</span>
+                                )}
+                                {(column.key === "yellow" || column.key === "review") && <span>Rotación: {item.units7 || 0} u. en 7 días · {item.units30 || 0} u. en 30 días{item.higherBuyerPrice ? " | Sube precio al comprador" : ""}</span>}
+                                {item.needsReview && <span>Sin rotación suficiente para sugerir una suba de precio. Evaluar manualmente demanda y competencia.</span>}
+                                {item.higherBuyerPrice && !item.needsReview && <span>La rotación reciente permite evaluar una suba, pero no garantiza conservar las ventas.</span>}
+                                {item.joined && <span>Ya adherida; el beneficio es estimado hasta que Mercado Libre la aplique.</span>}
+                                {(column.key === "yellow" || column.key === "review") && <span>Última consulta de promo: {formatDateTime(item.lastSyncAt)}{!item.lastSyncAt || rotationAsOf - new Date(item.lastSyncAt).getTime() > 6 * 3600000 ? " | Datos desactualizados; sincronizar antes de decidir" : ""}</span>}
                                 <span>
                                   Comprador {item.promoPrice ? moneyWithCents(item.promoPrice) : "-"} | Venta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
                                 </span>
