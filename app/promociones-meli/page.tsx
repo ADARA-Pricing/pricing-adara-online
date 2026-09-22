@@ -135,6 +135,7 @@ type PromoTrafficLightItem = {
     netProfit: number;
   } | null;
   recommendationReason?: "better_meli_support";
+  joined?: boolean;
 };
 
 type PromoTrafficLightGroup = {
@@ -211,6 +212,12 @@ function futureStartLabel(value?: string | null) {
 function isCurrentOpportunity(item: MercadoLibrePromotionOpportunity) { return ['active', 'future', 'candidate'].includes(promotionState(item)); }
 
 function isActiveOpportunity(item: MercadoLibrePromotionOpportunity) { return promotionState(item) === "active"; }
+
+function isAppliedOpportunity(item: MercadoLibrePromotionOpportunity, publication: MercadoLibreShippingCost) {
+  if (!isActiveOpportunity(item)) return false;
+  const appliedName = normalizePromoIdentity(publication.meli_promo_name);
+  return !appliedName || normalizePromoIdentity(item.promotion_name) === appliedName;
+}
 
 function isActivePromotionStatus(value?: string | null) {
   return ["started", "active", "vigente"].includes(String(value || "").toLowerCase());
@@ -608,7 +615,10 @@ function promoImprovesMeliSupport(candidate: PromoComparison, active: PromoCompa
     candidateMeliAmount > activeMeliAmount + 1;
   const lowersSeller =
     (activeSellerRate > 0 && candidateSellerRate > 0 && candidateSellerRate < activeSellerRate - 0.05) ||
-    (activeSellerAmount > 0 && candidateSellerAmount > 0 && candidateSellerAmount < activeSellerAmount - 1);
+    (activeSellerAmount > 0 && candidateSellerAmount > 0 && candidateSellerAmount < activeSellerAmount - 1) ||
+    // Una promo propia puede no traer desglose del vendedor. Con el mismo
+    // precio al comprador, el aporte nuevo de ML mejora el cobro igualmente.
+    (samePrice(candidate.promoPrice, active.promoPrice) && candidateMeliAmount > activeMeliAmount + 1);
 
   return improvesMeli && lowersSeller;
 }
@@ -663,7 +673,7 @@ function promotionCountForPublication(
   onlyWithMeliContribution: boolean,
 ) {
   const hasStartedOpportunity = opportunities.some((item) =>
-    isActiveOpportunity(item),
+    isAppliedOpportunity(item, publication),
   );
   const activePromo =
     publication.meli_promo_price &&
@@ -711,7 +721,7 @@ function promotionCountForPublication(
         promotionType: item.promotion_type || null,
         offerId: item.offer_id || null,
         itemId: publication.meli_item_id || null,
-        status: isActiveOpportunity(item) ? "Vigente" as const : "Para activar" as const,
+        status: isAppliedOpportunity(item, publication) ? "Vigente" as const : "Para activar" as const,
         name: item.promotion_name || item.promotion_id,
         promoPrice: Number(item.promo_price || 0) || null,
         effectiveSalePrice: effectiveSalePrice(
@@ -904,6 +914,7 @@ export default function PromocionesMeliPage() {
     if (isPolicyBlockedPromotion(promo)) return false;
     if (
       promo.status !== "Para activar" ||
+      promo.joined ||
       !promo.itemId ||
       !promo.promotionId ||
       !promo.promotionType
@@ -928,6 +939,7 @@ export default function PromocionesMeliPage() {
 
   function nonActivableReason(promo: PromoComparison) {
     if (promo.status !== "Para activar") return null;
+    if (promo.joined) return "Ya adherida en ML";
     if (!promo.promotionType || !promo.promotionId) return "Sin ID";
     if (isPolicyBlockedPromotion(promo)) return "Bloqueada por Meli";
     if (OFFER_ACTIVATION_TYPES.has(promo.promotionType) && !promo.offerId) return "Sin offer";
@@ -1493,7 +1505,9 @@ export default function PromocionesMeliPage() {
           bestOpportunity: null,
         };
 
-        const hasStartedOpportunity = row.opportunities.some(isActiveOpportunity);
+        const hasStartedOpportunity = row.opportunities.some((opportunity) =>
+          isAppliedOpportunity(opportunity, publication),
+        );
         const hasActivePublicationPromo = isActivePromotionStatus(publication.meli_promo_status);
         const activePublicationPromoDates = publicationPromotionDates(
           publication,
@@ -1568,7 +1582,9 @@ export default function PromocionesMeliPage() {
               promotionType: opportunity.promotion_type || null,
               offerId: opportunity.offer_id || null,
               itemId: publication.meli_item_id || null,
-              status: isActiveOpportunity(opportunity) ? "Vigente" as const : "Para activar" as const,
+              // ML puede informar una campaña adherida como "started" aunque
+              // la publicación aún muestre otra promo como aplicada.
+              status: isAppliedOpportunity(opportunity, publication) ? "Vigente" as const : "Para activar" as const,
               name: opportunity.promotion_name || opportunity.promotion_id,
               promoPrice: Number(opportunity.promo_price || 0) || null,
               originalPrice: Number(opportunity.original_price || publication.meli_price || 0) || null,
@@ -1619,7 +1635,7 @@ export default function PromocionesMeliPage() {
         const candidatePromos = calculatedPromos.filter((item) =>
           item.promo.status === "Para activar" &&
           !item.promo.scheduled &&
-          !item.promo.joined &&
+          (!item.promo.joined || activePromos.some((activeItem) => promoImprovesMeliSupport(item.promo, activeItem.promo))) &&
           !activePromos.some((activeItem) => samePromotionIdentity(activeItem.promo, item.promo)) &&
           !activePromos.some((activeItem) => samePromotionEconomics(activeItem.promo, item.promo)) &&
           (!activePromos.length || activePromos.some((activeItem) =>
@@ -1742,7 +1758,11 @@ export default function PromocionesMeliPage() {
           candidatePromos
             // El umbral amarillo es la rentabilidad mínima que el usuario
             // acepta para una candidata. Las vigentes sólo son referencia.
-            .filter((candidate) => candidate.margin >= yellowThreshold)
+            .filter((candidate) => candidate.margin >= yellowThreshold ||
+              activePromos.some((activeItem) =>
+                promoImprovesMeliSupport(candidate.promo, activeItem.promo) &&
+                candidate.netProfit > activeItem.netProfit + 1,
+              ))
             .sort((a, b) => {
               const priceA = Number(a.promo.effectiveSalePrice || a.promo.promoPrice || 0);
               const priceB = Number(b.promo.effectiveSalePrice || b.promo.promoPrice || 0);
@@ -1792,6 +1812,7 @@ export default function PromocionesMeliPage() {
                   netProfit: activeComparisonSource.netProfit,
                 } : null,
                 recommendationReason: improvesMeliSupport ? "better_meli_support" : undefined,
+                joined: promo.joined,
               });
             });
         }
@@ -2276,7 +2297,7 @@ export default function PromocionesMeliPage() {
                       (!onlyMeliContribution || publicationHasMeliContribution(selectedSummary.publication))
         ? (() => {
             const hasStartedOpportunity = selectedSummary.row.opportunities.some((item) =>
-              isActiveOpportunity(item),
+              isAppliedOpportunity(item, selectedSummary.publication),
             );
             if (hasStartedOpportunity) return [];
             const activeMeliAmount = meliContributionAmount(
@@ -2354,7 +2375,7 @@ export default function PromocionesMeliPage() {
                             promotionType: item.promotion_type || null,
                             offerId: item.offer_id || null,
                             itemId: selectedSummary.publication.meli_item_id || null,
-                            status: isActiveOpportunity(item) ? "Vigente" as const : "Para activar" as const,
+                            status: isAppliedOpportunity(item, selectedSummary.publication) ? "Vigente" as const : "Para activar" as const,
                             name: item.promotion_name || item.promotion_id,
                             promoPrice: Number(item.promo_price || 0) || null,
                             effectiveSalePrice: promoEffectiveSalePrice,
@@ -2364,6 +2385,7 @@ export default function PromocionesMeliPage() {
                             sellerRate: Number(item.seller_percentage || 0),
                             rentability: rentability?.margin ?? null,
                             netProfit: rentability?.netProfit ?? null,
+                            joined: isJoinedOpportunity(item),
                             startDate: item.start_date || null,
                             endDate: item.end_date || null,
                             fixedFeeAmount,
@@ -2484,7 +2506,7 @@ export default function PromocionesMeliPage() {
                         <div className="promociones-promo-comparison-head">
                           <div>
                             <h3>Promos de {selectedSummary?.label || "-"}</h3>
-                            <p>Activas y disponibles para activar en esta publicacion.</p>
+                            <p>Activas, adheridas y disponibles en esta publicación.</p>
                           </div>
                           <strong>{promoComparisons.length} promo(s)</strong>
                         </div>
@@ -2507,7 +2529,7 @@ export default function PromocionesMeliPage() {
                               <tbody>
                                 {promoComparisons.map((promo) => (
                                   <tr key={promo.key}>
-                                    <td><span className={`promo-status ${promo.status === "Vigente" ? "active" : ""}`}>{promo.status}</span></td>
+                                    <td><span className={`promo-status ${promo.status === "Vigente" ? "active" : ""}`}>{promo.joined && promo.status !== "Vigente" ? "Adherida en ML" : promo.status}</span></td>
                                     <td>
                                       <strong>{promo.name}</strong>
                                       {futureStartLabel(promo.startDate) && (
@@ -2741,7 +2763,7 @@ export default function PromocionesMeliPage() {
                             <div className="promociones-traffic-item">
                               <div className="promociones-traffic-main">
                                 <strong>{item.installmentLabel}</strong>
-                                {column.key === "yellow" && <span className="promo-date-badge">{item.status === "Vigente" ? "Vigente" : "Sugerida"}</span>}
+                                {column.key === "yellow" && <span className="promo-date-badge">{item.joined ? "Adherida en ML" : item.status === "Vigente" ? "Vigente" : "Sugerida"}</span>}
                                 <span>
                                   {item.promotionName}
                                   {column.key === "yellow" && validity ? ` | ${validity}` : ""}
@@ -2750,7 +2772,7 @@ export default function PromocionesMeliPage() {
                                   <span className="promo-date-badge">{futureStartLabel(item.startDate)}</span>
                                 )}
                                 {item.recommendationReason === "better_meli_support" && (
-                                  <span className="promo-meli-support-badge">Conviene: baja vendedor y suma aporte ML</span>
+                                  <span className="promo-meli-support-badge">{item.joined ? "Mejora el margen; verificar cuándo reemplaza la promo actual" : "Conviene: baja vendedor y suma aporte ML"}</span>
                                 )}
                                 <span>
                                   Comprador {item.promoPrice ? moneyWithCents(item.promoPrice) : "-"} | Venta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
