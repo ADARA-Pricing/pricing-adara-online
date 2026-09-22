@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabaseAdmin";
-import { getConnectedMeliAccount, refreshAccessToken } from "@/lib/mercadolibre";
+import { getConnectedMeliAccount, meliFetch, refreshAccessToken } from "@/lib/mercadolibre";
 import { requireApiUser } from "@/lib/serverAuth";
 
 export const runtime = "nodejs";
@@ -24,21 +23,29 @@ export async function POST(request: NextRequest) {
     const format = body.format === "zpl" ? "zpl2" : body.format === "pdf" ? "pdf" : null;
     if (!format) return NextResponse.json({ error: "Formato no válido." }, { status: 400 });
 
-    const { data, error } = await createAdminClient()
-      .from("mercadolibre_order_items")
-      .select("shipment_id,shipping_logistic_type,status")
-      .in("shipment_id", ids);
-    if (error) throw new Error(error.message);
-    const known = new Set((data || [])
-      .filter((row) => row.status !== "cancelled" && ["cross_docking", "self_service"].includes(row.shipping_logistic_type || ""))
-      .map((row) => String(row.shipment_id)));
-    if (ids.some((id) => !known.has(id))) {
-      return NextResponse.json({ error: "Hay envíos que no pertenecen a ventas activas de Colecta o Flex sincronizadas." }, { status: 400 });
-    }
-
     const connected = await getConnectedMeliAccount();
     if (!connected) return NextResponse.json({ error: "No hay una cuenta de Mercado Libre conectada." }, { status: 400 });
     const account = await refreshAccessToken(connected);
+    for (let index = 0; index < ids.length; index += 10) {
+      const batch = await Promise.all(ids.slice(index, index + 10).map((id) => meliFetch(`/shipments/${id}`, account, { headers: { "x-format-new": "true" } }) as Promise<{
+        sender_id?: number | string;
+        origin?: { sender_id?: number | string };
+        status?: string;
+        substatus?: string;
+        logistic_type?: string;
+        logistic?: { type?: string };
+      }>));
+      for (const shipment of batch) {
+        const sellerId = shipment.sender_id || shipment.origin?.sender_id;
+        const logistic = shipment.logistic?.type || shipment.logistic_type;
+        if ((sellerId && String(sellerId) !== String(account.meli_user_id)) ||
+          !["cross_docking", "self_service"].includes(logistic || "") ||
+          shipment.status !== "ready_to_ship" ||
+          !["ready_to_print", "printed"].includes(shipment.substatus || "")) {
+          return NextResponse.json({ error: "Una de las etiquetas ya no está disponible para imprimir. Actualizá el panel." }, { status: 409 });
+        }
+      }
+    }
     const params = new URLSearchParams({ shipment_ids: ids.join(","), response_type: format });
     const response = await fetch(`https://api.mercadolibre.com/shipment_labels?${params}`, {
       headers: { Authorization: `Bearer ${account.access_token}` },

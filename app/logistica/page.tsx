@@ -1,123 +1,87 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Download, Printer, RefreshCw, Search, Truck } from "lucide-react";
+import { ClipboardList, Download, Printer, RefreshCw, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase";
-import { usePricingLoad } from "@/lib/usePricingLoad";
-import { PricingDataStatus, PricingPagination } from "@/components/PricingDataStatus";
-import type { MercadoLibreOrderItem } from "@/lib/types";
+import { PricingPagination } from "@/components/PricingDataStatus";
 
+type Day = "today" | "tomorrow";
 type Mode = "all" | "cross_docking" | "self_service";
-type Shipment = { id: string; mode: "cross_docking" | "self_service"; orderIds: string[]; date: string; items: MercadoLibreOrderItem[] };
-
+type StatusFilter = "all" | "ready_to_print" | "printed";
+type Item = { orderId: string; itemId: string; sku: string; title: string; image: string | null; quantity: number; unitPrice: number };
+type Shipment = { id: string; mode: "cross_docking" | "self_service"; status: "ready_to_print" | "printed" | "other"; substatus: string | null; dispatchAt: string; orderIds: string[]; orderDate: string; buyer: string; items: Item[] };
 const PAGE_SIZE = 50;
-
-function argentinaTodayStart() {
-  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-  return new Date(`${day}T00:00:00-03:00`);
-}
 
 function dateLabel(value: string) {
   return new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
-
 function modeLabel(mode: Shipment["mode"]) { return mode === "cross_docking" ? "Colecta" : "Flex"; }
+function money(value: number) { return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value); }
 
 export default function LogisticaPage() {
   const router = useRouter();
   const supabase = createClient();
-  const dataLoad = usePricingLoad("logistica", supabase);
-  const [sales, setSales] = useState<MercadoLibreOrderItem[]>([]);
+  const [day, setDay] = useState<Day>("today");
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const [incomplete, setIncomplete] = useState(false);
   const [mode, setMode] = useState<Mode>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string[]>([]);
-  const [syncing, setSyncing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const requestId = useRef(0);
 
-  async function loadData(force = false) {
-    const since = argentinaTodayStart();
-    since.setDate(since.getDate() - 14);
-    await dataLoad.run({
-      sales: {
-        table: "mercadolibre_order_items",
-        columns: "id,order_id,order_date,status,pack_id,shipment_id,shipping_logistic_type,meli_item_id,sku,title,quantity",
-        filters: [["gte", "order_date", since.toISOString()], ["neq", "status", "cancelled"]],
-        order: "order_date", ascending: false,
-      },
-    }, (data) => setSales(data.sales), force);
-  }
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) router.push("/login");
-      else void loadData();
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const shipments = useMemo(() => {
-    const groups = new Map<string, Shipment>();
-    for (const sale of sales) {
-      const logistic = sale.shipping_logistic_type;
-      if (!sale.shipment_id || (logistic !== "cross_docking" && logistic !== "self_service")) continue;
-      const id = String(sale.shipment_id);
-      const current = groups.get(id) || { id, mode: logistic, orderIds: [], date: sale.order_date, items: [] };
-      if (!current.orderIds.includes(sale.order_id)) current.orderIds.push(sale.order_id);
-      if (sale.order_date > current.date) current.date = sale.order_date;
-      current.items.push(sale);
-      groups.set(id, current);
-    }
-    return [...groups.values()].sort((a, b) => b.date.localeCompare(a.date));
-  }, [sales]);
-
-  const counts = useMemo(() => ({
-    all: shipments.length,
-    cross_docking: shipments.filter((item) => item.mode === "cross_docking").length,
-    self_service: shipments.filter((item) => item.mode === "self_service").length,
-  }), [shipments]);
-  const unclassified = useMemo(() => sales.filter((sale) => !sale.shipment_id || !["cross_docking", "self_service"].includes(sale.shipping_logistic_type || "")).length, [sales]);
-
-  const filtered = useMemo(() => {
-    const term = query.trim().toLocaleLowerCase("es-AR");
-    return shipments.filter((item) => (mode === "all" || item.mode === mode) && (!term || [item.id, ...item.orderIds, ...item.items.flatMap((sale) => [sale.sku, sale.title || ""])].some((text) => text.toLocaleLowerCase("es-AR").includes(term))));
-  }, [shipments, mode, query]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const pageItems = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const pageIds = pageItems.map((item) => item.id);
-  const selectedOnPage = selected.filter((id) => pageIds.includes(id));
-
-  function changeView(nextMode: Mode) { setMode(nextMode); setPage(1); setSelected([]); }
-  function changePage(nextPage: number) { setPage(nextPage); setSelected([]); }
-  function changeQuery(value: string) { setQuery(value); setPage(1); setSelected([]); }
-  function toggle(id: string) { setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]); }
-  function togglePage() { setSelected(selectedOnPage.length === pageIds.length ? [] : pageIds); }
-
-  async function refresh() {
-    if (syncing) return;
-    setSyncing(true);
-    setMessage("Actualizando ventas recientes desde Mercado Libre...");
+  async function loadBoard(target: Day = day) {
+    const currentRequest = ++requestId.current;
+    setLoading(true);
     try {
       const { data } = await supabase.auth.getSession();
-      if (!data.session) throw new Error("Sesión vencida. Volvé a iniciar sesión.");
-      const from = argentinaTodayStart();
-      from.setDate(from.getDate() - 1);
-      const response = await fetch("/api/mercadolibre/sync-sales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` },
-        body: JSON.stringify({ from: from.toISOString(), to: new Date().toISOString(), chunkDays: 1 }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "No se pudieron actualizar las ventas.");
-      await loadData(true);
-      setMessage(`${Number(result.saved || 0)} ventas nuevas o modificadas. La disponibilidad de etiquetas se confirma al imprimir.`);
+      if (!data.session) { router.push("/login"); return; }
+      const response = await fetch(`/api/mercadolibre/logistics-board?day=${target}`, { headers: { Authorization: `Bearer ${data.session.access_token}` }, cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "No se pudo consultar Mercado Libre.");
+      if (currentRequest !== requestId.current) return;
+      setShipments(result.shipments || []);
+      setCheckedAt(result.checkedAt || null);
+      setIncomplete(Boolean(result.incomplete));
+      setSelected([]);
+      setMessage(null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo actualizar.");
-    } finally { setSyncing(false); }
+      if (currentRequest === requestId.current) setMessage(error instanceof Error ? error.message : "No se pudo actualizar el panel.");
+    } finally { if (currentRequest === requestId.current) setLoading(false); }
   }
+
+  useEffect(() => { void loadBoard(day); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [day]);
+
+  const counts = useMemo(() => {
+    const count = (mode: Shipment["mode"], status: Shipment["status"]) => shipments.filter((item) => item.mode === mode && item.status === status).length;
+    return {
+      flex: { unprinted: count("self_service", "ready_to_print"), printed: count("self_service", "printed") },
+      collection: { unprinted: count("cross_docking", "ready_to_print"), printed: count("cross_docking", "printed") },
+    };
+  }, [shipments]);
+  const filtered = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase("es-AR");
+    return shipments.filter((shipment) =>
+      (mode === "all" || shipment.mode === mode) &&
+      (statusFilter === "all" || shipment.status === statusFilter) &&
+      (!term || [shipment.id, shipment.buyer, ...shipment.orderIds, ...shipment.items.flatMap((item) => [item.sku, item.title])].some((text) => text.toLocaleLowerCase("es-AR").includes(term))),
+    );
+  }, [shipments, mode, statusFilter, query]);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
+  const pageItems = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const printableOnPage = pageItems.filter((item) => item.status === "ready_to_print");
+  const printableIds = printableOnPage.map((item) => item.id);
+  const selectedOnPage = selected.filter((id) => printableIds.includes(id));
+
+  function selectView(nextMode: Mode, nextStatus: StatusFilter) { setMode(nextMode); setStatusFilter(nextStatus); setPage(1); setSelected([]); }
+  function selectDay(next: Day) { setDay(next); selectView("all", "all"); }
+  function toggle(id: string) { setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]); }
 
   async function printLabels(ids: string[], format: "pdf" | "zpl") {
     if (!ids.length || ids.length > PAGE_SIZE || printing) return;
@@ -145,7 +109,8 @@ export default function LogisticaPage() {
         link.click();
       }
       window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
-      setMessage(format === "pdf" ? "PDF abierto: usá Imprimir en el visor del navegador." : "Archivo ZPL descargado para la impresora térmica.");
+      await loadBoard(day);
+      setMessage(format === "pdf" ? "PDF abierto. El estado se volvió a consultar en Mercado Libre; imprimí desde el visor." : "ZPL descargado. El estado se volvió a consultar en Mercado Libre.");
     } catch (error) {
       pdfTab?.close();
       setMessage(error instanceof Error ? error.message : "No se pudieron obtener las etiquetas.");
@@ -159,65 +124,41 @@ export default function LogisticaPage() {
     const doc = tab.document;
     doc.title = `Preparación de ${items.length} envíos`;
     const style = doc.createElement("style");
-    style.textContent = "body{font:12px Arial,sans-serif;margin:18mm;color:#111}h1{font-size:20px}h2{font-size:15px;margin-top:22px}table{border-collapse:collapse;width:100%;margin:10px 0 20px}th,td{border:1px solid #bbb;padding:6px;text-align:left}th{background:#eee}.check{width:28px}.order{page-break-inside:avoid}@media print{button{display:none}}";
+    style.textContent = "body{font:12px Arial,sans-serif;margin:18mm;color:#111}h1{font-size:20px}h2{font-size:15px;margin-top:22px}table{border-collapse:collapse;width:100%;margin:10px 0 20px}th,td{border:1px solid #bbb;padding:6px;text-align:left}th{background:#eee}";
     doc.head.append(style);
-    const heading = doc.createElement("h1");
-    heading.textContent = `Hoja de preparación · ${items.length} envíos`;
-    doc.body.append(heading);
-    const subheading = doc.createElement("p");
-    subheading.textContent = `Generada ${new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })} · Página ${currentPage} · ${mode === "all" ? "Colecta y Flex" : mode === "cross_docking" ? "Colecta" : "Flex"}`;
-    doc.body.append(subheading);
-    const totals = new Map<string, { title: string; quantity: number }>();
-    items.forEach((shipment) => shipment.items.forEach((sale) => {
-      const key = sale.sku || sale.meli_item_id || "Sin SKU";
-      const current = totals.get(key) || { title: sale.title || "", quantity: 0 };
-      current.quantity += Number(sale.quantity || 0);
-      totals.set(key, current);
-    }));
+    const addHeading = (tag: "h1" | "h2", text: string) => { const el = doc.createElement(tag); el.textContent = text; doc.body.append(el); };
     const table = (columns: string[], rows: string[][]) => {
       const element = doc.createElement("table");
-      const header = doc.createElement("tr");
-      columns.forEach((text) => { const th = doc.createElement("th"); th.textContent = text; header.append(th); });
-      element.append(header);
-      rows.forEach((values) => { const row = doc.createElement("tr"); values.forEach((text) => { const td = doc.createElement("td"); td.textContent = text; row.append(td); }); element.append(row); });
-      return element;
+      const header = doc.createElement("tr"); columns.forEach((text) => { const th = doc.createElement("th"); th.textContent = text; header.append(th); }); element.append(header);
+      rows.forEach((values) => { const row = doc.createElement("tr"); values.forEach((text) => { const td = doc.createElement("td"); td.textContent = text; row.append(td); }); element.append(row); }); doc.body.append(element);
     };
-    const totalsHeading = doc.createElement("h2"); totalsHeading.textContent = "Buscar en depósito · total por producto"; doc.body.append(totalsHeading);
-    doc.body.append(table(["✓", "SKU", "Producto", "Cantidad"], [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([sku, value]) => ["☐", sku, value.title, String(value.quantity)])));
-    const ordersHeading = doc.createElement("h2"); ordersHeading.textContent = "Control por paquete"; doc.body.append(ordersHeading);
-    doc.body.append(table(["✓", "Envío", "Modalidad", "Pedido", "SKU", "Producto", "Cantidad"], items.flatMap((shipment) => shipment.items.map((sale) => ["☐", shipment.id, modeLabel(shipment.mode), sale.order_id, sale.sku || "Sin SKU", sale.title || "", String(sale.quantity)]))));
+    addHeading("h1", `Hoja de preparación · ${items.length} envíos`);
+    const totals = new Map<string, { title: string; quantity: number }>();
+    items.forEach((shipment) => shipment.items.forEach((item) => { const sku = item.sku || item.itemId || "Sin SKU"; const current = totals.get(sku) || { title: item.title, quantity: 0 }; current.quantity += item.quantity; totals.set(sku, current); }));
+    addHeading("h2", "Buscar en depósito · total por producto");
+    table(["✓", "SKU", "Producto", "Cantidad"], [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([sku, value]) => ["☐", sku, value.title, String(value.quantity)]));
+    addHeading("h2", "Control por paquete");
+    table(["✓", "Envío", "Modalidad", "Pedido", "SKU", "Producto", "Cantidad"], items.flatMap((shipment) => shipment.items.map((item) => ["☐", shipment.id, modeLabel(shipment.mode), item.orderId, item.sku || "Sin SKU", item.title, String(item.quantity)])));
     tab.setTimeout(() => tab.print(), 300);
   }
 
-  return <main className="container wide logistics-page">
-    <header className="logistics-header">
-      <div><h1>Logística Mercado Libre</h1><p>Prepará envíos de Colecta y Flex. Se muestran ventas guardadas de los últimos 14 días; Mercado Libre confirma si cada etiqueta está lista al solicitarla.</p></div>
-      <button className="button" type="button" onClick={refresh} disabled={syncing}><RefreshCw size={16} /> {syncing ? "Actualizando..." : "Actualizar ventas"}</button>
-    </header>
-    <PricingDataStatus state={dataLoad.state} onRefresh={() => void loadData(true)} />
+  return <main className="container wide logistics-page logistics-ml-board">
+    <header className="logistics-header"><div><h1>Logística Mercado Libre</h1><p>Solo envíos con despacho {day === "today" ? "hoy" : "mañana"}, según la fecha límite informada por Mercado Libre.</p></div><button className="button" type="button" onClick={() => loadBoard(day)} disabled={loading}><RefreshCw size={16} /> {loading ? "Actualizando..." : "Actualizar"}</button></header>
+    <div className="logistics-day-tabs" role="tablist" aria-label="Día de despacho"><button type="button" role="tab" aria-selected={day === "today"} className={day === "today" ? "active" : ""} onClick={() => selectDay("today")}>Envíos de hoy</button><button type="button" role="tab" aria-selected={day === "tomorrow"} className={day === "tomorrow" ? "active" : ""} onClick={() => selectDay("tomorrow")}>Mañana</button></div>
+    <div className="logistics-summary">
+      {([{ key: "self_service", name: "Flex", counts: counts.flex }, { key: "cross_docking", name: "Colecta", counts: counts.collection }] as const).map((group) => <div className="logistics-summary-card" key={group.key}><strong>{group.name} | {day === "today" ? "Hoy" : "Mañana"}</strong><button type="button" className={mode === group.key && statusFilter === "ready_to_print" ? "active" : ""} onClick={() => selectView(group.key, "ready_to_print")}>Etiquetas por imprimir <b>{group.counts.unprinted}</b></button><button type="button" className={mode === group.key && statusFilter === "printed" ? "active" : ""} onClick={() => selectView(group.key, "printed")}>Listas para despachar <b>{group.counts.printed}</b></button></div>)}
+      <button className={`logistics-summary-all ${mode === "all" && statusFilter === "all" ? "active" : ""}`} type="button" onClick={() => selectView("all", "all")}>Ver todos <b>{shipments.length}</b></button>
+    </div>
+    <div className="logistics-status-line">{checkedAt ? `Actualizado ${dateLabel(checkedAt)} · ${shipments.length} envíos para ${day === "today" ? "hoy" : "mañana"}` : "Consultando envíos..."}{loading ? " · Actualizando" : ""}</div>
+    {incomplete && <div className="message info">Mercado Libre no respondió el estado de algunos envíos. Reintentá actualizar; la lista puede estar incompleta.</div>}
     {message && <div className="message info" role="status">{message}</div>}
-    {unclassified > 0 && <div className="message info">{unclassified} renglones de venta no aparecen aquí porque no tienen ID de envío o modalidad Colecta/Flex confirmada.</div>}
-    <div className="logistics-tabs" role="tablist" aria-label="Tipo de envío">
-      {(["all", "cross_docking", "self_service"] as Mode[]).map((value) => <button key={value} type="button" role="tab" aria-selected={mode === value} className={mode === value ? "active" : ""} onClick={() => changeView(value)}>{value === "all" ? "Todos" : value === "cross_docking" ? "Colecta" : "Flex"} <span>{counts[value]}</span></button>)}
-    </div>
-    <div className="logistics-toolbar">
-      <label className="logistics-search"><Search size={17} /><input value={query} onChange={(event) => changeQuery(event.target.value)} placeholder="Buscar pedido, envío, SKU o producto" /></label>
-      <div className="logistics-actions">
-        <button className="button ghost" type="button" onClick={() => printLabels(selectedOnPage, "pdf")} disabled={!selectedOnPage.length || printing}><Printer size={16} /> Imprimir seleccionadas ({selectedOnPage.length})</button>
-        <button className="button ghost" type="button" onClick={() => printLabels(pageIds, "pdf")} disabled={!pageIds.length || printing}><ClipboardList size={16} /> Imprimir página ({pageIds.length})</button>
-        <button className="button ghost" type="button" onClick={() => printPickList(pageItems)} disabled={!pageItems.length}><ClipboardList size={16} /> Hoja de preparación</button>
-        <button className="button ghost" type="button" onClick={() => printLabels(selectedOnPage.length ? selectedOnPage : pageIds, "zpl")} disabled={!pageIds.length || printing}><Download size={16} /> Descargar ZPL</button>
-      </div>
-    </div>
-    <div className="logistics-select-row"><label><input type="checkbox" checked={pageIds.length > 0 && selectedOnPage.length === pageIds.length} onChange={togglePage} disabled={!pageIds.length} /> Seleccionar los {pageIds.length} envíos de esta página</label><span>Máximo 50 etiquetas por solicitud</span></div>
-    <div className="logistics-list">
-      {pageItems.map((shipment) => <article className="logistics-order" key={shipment.id}>
-        <div className="logistics-order-head"><label><input type="checkbox" checked={selectedOnPage.includes(shipment.id)} onChange={() => toggle(shipment.id)} /><strong>Envío #{shipment.id}</strong></label><span className="logistics-mode"><Truck size={15} /> {modeLabel(shipment.mode)}</span><span>{dateLabel(shipment.date)}</span><button className="button ghost" type="button" onClick={() => printLabels([shipment.id], "pdf")} disabled={printing}><Printer size={15} /> Imprimir etiqueta</button></div>
-        <div className="logistics-order-meta">Pedido{shipment.orderIds.length > 1 ? "s" : ""} {shipment.orderIds.join(", ")} · {shipment.items.reduce((total, sale) => total + Number(sale.quantity || 0), 0)} unidades</div>
-        <div className="logistics-products">{shipment.items.map((sale, index) => <div key={sale.id || `${sale.order_id}-${index}`}><strong>{sale.sku || "Sin SKU"}</strong><span>{sale.title || sale.meli_item_id}</span><b>{sale.quantity} u.</b></div>)}</div>
-      </article>)}
-      {!pageItems.length && <div className="empty-state">No hay envíos de {mode === "all" ? "Colecta o Flex" : mode === "cross_docking" ? "Colecta" : "Flex"} que coincidan con la búsqueda.</div>}
-    </div>
-    <PricingPagination page={currentPage} total={filtered.length} size={PAGE_SIZE} onPage={changePage} />
+    <div className="logistics-toolbar"><label className="logistics-search"><Search size={17} /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); setSelected([]); }} placeholder="Buscar pedido, envío, cliente, SKU o producto" /></label><div className="logistics-actions"><button className="button ghost" type="button" onClick={() => printLabels(selectedOnPage, "pdf")} disabled={!selectedOnPage.length || printing}><Printer size={16} /> Imprimir seleccionadas ({selectedOnPage.length})</button><button className="button ghost" type="button" onClick={() => printLabels(printableIds, "pdf")} disabled={!printableIds.length || printing}><Printer size={16} /> Imprimir página ({printableIds.length})</button><button className="button ghost" type="button" onClick={() => printPickList(pageItems)} disabled={!pageItems.length}><ClipboardList size={16} /> Hoja de preparación</button><button className="button ghost" type="button" onClick={() => printLabels(selectedOnPage.length ? selectedOnPage : printableIds, "zpl")} disabled={!printableIds.length || printing}><Download size={16} /> Descargar ZPL</button></div></div>
+    <div className="logistics-select-row"><label><input type="checkbox" checked={printableIds.length > 0 && selectedOnPage.length === printableIds.length} onChange={() => setSelected(selectedOnPage.length === printableIds.length ? [] : printableIds)} disabled={!printableIds.length} /> Seleccionar etiquetas por imprimir de esta página ({printableIds.length})</label><span>Máximo 50 por solicitud</span></div>
+    <div className="logistics-list">{pageItems.map((shipment) => <article className="logistics-order logistics-ml-order" key={shipment.id}>
+      <div className="logistics-ml-order-top"><label><input type="checkbox" checked={selectedOnPage.includes(shipment.id)} onChange={() => toggle(shipment.id)} disabled={shipment.status !== "ready_to_print"} /> <strong>#{shipment.orderIds.join(", ")}</strong></label><span>{shipment.orderDate ? dateLabel(shipment.orderDate) : ""}</span><span className="logistics-ml-buyer">{shipment.buyer}</span><span>{modeLabel(shipment.mode)}</span></div>
+      <div className="logistics-ml-order-body"><div><strong className={shipment.status === "ready_to_print" ? "unprinted" : "printed"}>{shipment.status === "ready_to_print" ? "Etiqueta lista para imprimir" : shipment.status === "printed" ? "Lista para despachar" : "Verificar estado en Mercado Libre"}</strong><small>{shipment.mode === "cross_docking" ? "Prepará el paquete para la colecta." : "Prepará el paquete para Flex."} Despacho límite: {dateLabel(shipment.dispatchAt)}</small></div>{shipment.status !== "other" && <button className="button" type="button" onClick={() => printLabels([shipment.id], "pdf")} disabled={printing}><Printer size={15} /> {shipment.status === "printed" ? "Reimprimir etiqueta" : "Imprimir etiqueta"}</button>}</div>
+      <div className="logistics-ml-products">{shipment.items.map((item, index) => <div key={`${item.orderId}-${item.itemId}-${index}`}><div className="logistics-ml-thumb">{item.image ? <img src={item.image} alt="" /> : <span>📦</span>}</div><span className="logistics-ml-product-name">{item.title}<small>SKU: {item.sku || "Sin SKU"}</small></span><span>{money(item.unitPrice)}</span><span>{item.quantity} {item.quantity === 1 ? "unidad" : "unidades"}</span></div>)}</div>
+    </article>)}{!pageItems.length && !loading && <div className="empty-state">No hay envíos {day === "today" ? "para hoy" : "para mañana"} con este filtro.</div>}</div>
+    <PricingPagination page={currentPage} total={filtered.length} size={PAGE_SIZE} onPage={(next) => { setPage(next); setSelected([]); }} />
   </main>;
 }
