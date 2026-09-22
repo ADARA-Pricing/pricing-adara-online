@@ -2788,12 +2788,16 @@ export default function PromocionesMeliPage() {
                                 <div className="promociones-traffic-main">
                                   <strong>{item.installmentLabel}</strong>
                                   <span className="promo-date-badge">Actual</span>
+                                  <div className="promociones-traffic-primary">
+                                    <div><small>Precio final comprador</small><strong>{item.activeComparison.promoPrice ? moneyWithCents(item.activeComparison.promoPrice) : "-"}</strong></div>
+                                    <div><small>Ganancia</small><strong className={trafficMarginTone(item.activeComparison.margin)}>{percent(item.activeComparison.margin)}</strong></div>
+                                  </div>
                                   <span>
                                     {item.activeComparison.promotionName}
                                     {promoValidityLabel(item.activeComparison.startDate, item.activeComparison.endDate) ? ` | ${promoValidityLabel(item.activeComparison.startDate, item.activeComparison.endDate)}` : ""}
                                   </span>
                                   <span>
-                                    Comprador {item.activeComparison.promoPrice ? moneyWithCents(item.activeComparison.promoPrice) : "-"} | Venta {item.activeComparison.effectiveSalePrice ? moneyWithCents(item.activeComparison.effectiveSalePrice) : "-"}
+                                    Venta neta {item.activeComparison.effectiveSalePrice ? moneyWithCents(item.activeComparison.effectiveSalePrice) : "-"}
                                   </span>
                                   <span>
                                     ML {item.activeComparison.meliAmount ? moneyWithCents(item.activeComparison.meliAmount) : percent(item.activeComparison.meliRate)} | Vendedor {item.activeComparison.sellerAmount ? moneyWithCents(item.activeComparison.sellerAmount) : percent(item.activeComparison.sellerRate)}
@@ -2808,7 +2812,6 @@ export default function PromocionesMeliPage() {
                                   >
                                     {copiedItemId === item.itemId ? "Copiado" : item.itemId}
                                   </button>
-                                  <strong className={trafficMarginTone(item.activeComparison.margin)}>{percent(item.activeComparison.margin)}</strong>
                                 </div>
                               </div>
                             )}
@@ -2816,6 +2819,10 @@ export default function PromocionesMeliPage() {
                               <div className="promociones-traffic-main">
                                 <strong>{item.installmentLabel}</strong>
                                 {column.key === "yellow" && <span className="promo-date-badge">{item.joined ? "Adherida en ML" : item.needsReview ? "Revisar, no sugerida" : item.higherBuyerPrice ? "Suba posible, revisar" : "Sugerida"}</span>}
+                                <div className="promociones-traffic-primary">
+                                  <div><small>Precio final comprador</small><strong>{item.promoPrice ? moneyWithCents(item.promoPrice) : "-"}</strong></div>
+                                  <div><small>Ganancia</small><strong className={trafficMarginTone(item.margin)}>{percent(item.margin)}</strong></div>
+                                </div>
                                 <span>
                                   {item.promotionName}
                                   {column.key === "yellow" && validity ? ` | ${validity}` : ""}
@@ -2835,7 +2842,7 @@ export default function PromocionesMeliPage() {
                                 {item.joined && <span>Ya adherida; el beneficio es estimado hasta que Mercado Libre la aplique.</span>}
                                 {column.key === "yellow" && <span>Última consulta de promo: {formatDateTime(item.lastSyncAt)}{!item.lastSyncAt || rotationAsOf - new Date(item.lastSyncAt).getTime() > 6 * 3600000 ? " | Datos desactualizados; sincronizar antes de decidir" : ""}</span>}
                                 <span>
-                                  Comprador {item.promoPrice ? moneyWithCents(item.promoPrice) : "-"} | Venta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
+                                  Venta neta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
                                 </span>
                                 <span>
                                   ML {item.meliAmount ? moneyWithCents(item.meliAmount) : percent(item.meliRate)} | Vendedor {item.sellerAmount ? moneyWithCents(item.sellerAmount) : percent(item.sellerRate)}
@@ -2851,7 +2858,6 @@ export default function PromocionesMeliPage() {
                                 >
                                   {copiedItemId === item.itemId ? "Copiado" : item.itemId}
                                 </button>
-                                <strong className={trafficMarginTone(item.margin)}>{percent(item.margin)}</strong>
                               </div>
                             </div>
                             </Fragment>
