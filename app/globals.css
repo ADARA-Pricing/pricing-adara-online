@@ -9724,7 +9724,7 @@ textarea:focus-visible {
 
 .promociones-traffic-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -11006,7 +11006,7 @@ textarea:focus,
 }
 
 .promociones-traffic-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -14208,3 +14208,27 @@ body {
 .logistics-products > div:last-child { border-bottom: 0; }
 .logistics-products b { white-space: nowrap; }
 @media (max-width: 760px) { .logistics-header, .logistics-select-row { align-items: stretch; flex-direction: column; } .logistics-actions { width: 100%; } .logistics-actions .button { flex: 1 1 100%; justify-content: center; } .logistics-products > div { grid-template-columns: 1fr auto; } .logistics-products > div span { grid-column: 1 / -1; grid-row: 2; } }
+
+/* Priorizar el nombre completo del producto en el semáforo de promociones. */
+@media (min-width: 621px) {
+  .promociones-traffic-sku-head {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .promociones-traffic-sku-title { grid-column: 1; }
+  .promociones-traffic-count { grid-column: 2; }
+  .promociones-traffic-toggle { grid-column: 3; }
+  .promociones-traffic-sku-summary {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 5px 12px;
+  }
+}
+.promociones-traffic-sku-title small {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  white-space: normal;
+}

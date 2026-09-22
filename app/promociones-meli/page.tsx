@@ -6,7 +6,7 @@ import { BadgePercent, CalendarClock, ChevronRight, CircleAlert, Search, Trendin
 import { usePricingLoad } from '@/lib/usePricingLoad';
 import { PricingDataStatus, PricingPagination } from '@/components/PricingDataStatus';
 import { normalizeFilter, categoryOptions } from '@/lib/pricingData';
-import { comparisonPromotionKey, promotionState, promotionCoverage, promotionKey, promotionDateMs, validThresholds } from '@/lib/promotionState';
+import { comparisonPromotionKey, promotionState, promotionCoverage, promotionKey, promotionDateMs } from '@/lib/promotionState';
 import { useDialogFocus } from "@/lib/useDialogFocus";
 import { PageHero } from "@/components/PageHero";
 import { createClient } from "@/lib/supabase";
@@ -167,7 +167,6 @@ type MissingPromoGroup = {
 type PromoTrafficLights = {
   red: PromoTrafficLightGroup[];
   yellow: PromoTrafficLightGroup[];
-  review: PromoTrafficLightGroup[];
   scheduled: PromoTrafficLightGroup[];
   scheduledShared: PromoTrafficLightGroup[];
 };
@@ -791,7 +790,10 @@ export default function PromocionesMeliPage() {
   // El objetivo habitual es 5%, pero una promo apenas debajo del objetivo no
   // tiene la misma urgencia que una que ya pierde dinero.
   const [redThreshold, setRedThreshold] = useState(0);
-  const [yellowThreshold, setYellowThreshold] = useState(5);
+  const [yellowThresholdInput, setYellowThresholdInput] = useState("5");
+  const yellowThreshold = yellowThresholdInput.trim() && Number.isFinite(Number(yellowThresholdInput.replace(",", ".")))
+    ? Number(yellowThresholdInput.replace(",", "."))
+    : 5;
   const [syncingMeli, setSyncingMeli] = useState(false);
   const [promotionSyncProgress, setPromotionSyncProgress] = useState<{ completed: number; total: number } | null>(null);
   const [activatingPromotionKey, setActivatingPromotionKey] = useState<string | null>(null);
@@ -1790,11 +1792,7 @@ export default function PromocionesMeliPage() {
           candidatePromos
             // El umbral amarillo es la rentabilidad mínima que el usuario
             // acepta para una candidata. Las vigentes sólo son referencia.
-            .filter((candidate) => candidate.margin >= yellowThreshold ||
-              activePromos.some((activeItem) =>
-                candidate.netProfit > activeItem.netProfit + 1 &&
-                (promoImprovesMeliSupport(candidate.promo, activeItem.promo) || candidate.margin > activeItem.margin),
-              ))
+            .filter((candidate) => candidate.margin >= yellowThreshold)
             .sort((a, b) => {
               const priceA = Number(a.promo.effectiveSalePrice || a.promo.promoPrice || 0);
               const priceB = Number(b.promo.effectiveSalePrice || b.promo.promoPrice || 0);
@@ -1864,7 +1862,7 @@ export default function PromocionesMeliPage() {
       });
     });
 
-    function groupBySku(items: PromoTrafficLightItem[], mode: "best" | "worst" | "profit" = "best") {
+    function groupBySku(items: PromoTrafficLightItem[], mode: "best" | "worst" = "best") {
       const grouped = new Map<string, PromoTrafficLightGroup>();
       items.forEach((item) => {
         const current = grouped.get(item.sku) || {
@@ -1881,9 +1879,7 @@ export default function PromocionesMeliPage() {
         } else if (
           mode === "worst"
             ? item.margin < current.items[existingIndex].margin
-            : mode === "profit"
-              ? (item.profitDifference ?? item.netProfit) > (current.items[existingIndex].profitDifference ?? current.items[existingIndex].netProfit)
-              : item.margin > current.items[existingIndex].margin
+            : item.margin > current.items[existingIndex].margin
         ) {
           current.items[existingIndex] = item;
         }
@@ -1895,7 +1891,7 @@ export default function PromocionesMeliPage() {
           ...group,
           items: [...group.items].sort((a, b) => {
             if (a.installmentCount !== b.installmentCount) return a.installmentCount - b.installmentCount;
-            return mode === "profit" ? (b.profitDifference ?? b.netProfit) - (a.profitDifference ?? a.netProfit) : b.margin - a.margin;
+            return b.margin - a.margin;
           }),
         }))
         .sort((a, b) => a.sku.localeCompare(b.sku, "es"));
@@ -1917,7 +1913,10 @@ export default function PromocionesMeliPage() {
       });
 
       bySkuInstallment.forEach((sameInstallmentItems) => {
-        const marginWinner = [...sameInstallmentItems].sort((a, b) => (b.profitDifference ?? b.netProfit) - (a.profitDifference ?? a.netProfit))[0];
+        const marginWinner = [...sameInstallmentItems]
+          .filter((item) => !item.needsReview)
+          .sort((a, b) => (b.profitDifference ?? b.netProfit) - (a.profitDifference ?? a.netProfit))[0]
+          || [...sameInstallmentItems].sort((a, b) => (b.profitDifference ?? b.netProfit) - (a.profitDifference ?? a.netProfit))[0];
         if (!marginWinner) return;
         selected.push(marginWinner);
 
@@ -1947,6 +1946,11 @@ export default function PromocionesMeliPage() {
           })[0];
 
         if (betterMeliSupport) selected.push(betterMeliSupport);
+
+        const reviewCandidate = sameInstallmentItems
+          .filter((item) => item.needsReview && !selected.some((chosen) => chosen.key === item.key))
+          .sort((a, b) => (b.profitDifference ?? b.netProfit) - (a.profitDifference ?? a.netProfit))[0];
+        if (reviewCandidate) selected.push(reviewCandidate);
       });
 
       const grouped = new Map<string, PromoTrafficLightGroup>();
@@ -1973,8 +1977,7 @@ export default function PromocionesMeliPage() {
 
     return {
       red: groupBySku(red, "worst"),
-      yellow: groupYellowBySku(yellow),
-      review: groupBySku(review, "profit"),
+      yellow: groupYellowBySku([...yellow, ...review]),
       scheduled: groupBySku(scheduled),
       scheduledShared: groupBySku(scheduledShared),
     };
@@ -2648,7 +2651,7 @@ export default function PromocionesMeliPage() {
         <div className="promociones-traffic-head">
           <div>
             <h2>Ajustes pendientes</h2>
-            <p>Las sugerencias comparan ganancia neta, precio al comprador y rotación. Una suba de precio sólo pasa a «Suba posible» con al menos 3 unidades vendidas en 7 días o 10 en 30 días; de otro modo queda en «Revisar».</p>
+            <p>Filtrá las promos por margen mínimo. Las subas de precio que requieren revisar la rotación aparecen dentro del mismo producto.</p>
           </div>
           <div className="promociones-traffic-actions">
             <label>
@@ -2657,17 +2660,19 @@ export default function PromocionesMeliPage() {
                 type="number"
                 step="0.1"
                 value={redThreshold}
-                onChange={(event) => { const value = Number(event.target.value); if (validThresholds(value, yellowThreshold)) setRedThreshold(value); }}
+                onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value)) setRedThreshold(value); }}
               />
               <span>%</span>
             </label>
             <label>
-              Amarillo (hasta)
+              Margen mínimo sugeridas
               <input
-                type="number"
-                step="0.1"
-                value={yellowThreshold}
-                onChange={(event) => { const value = Number(event.target.value); if (validThresholds(redThreshold, value)) setYellowThreshold(value); }}
+                type="text"
+                inputMode="decimal"
+                aria-label="Margen mínimo de sugeridas en porcentaje"
+                value={yellowThresholdInput}
+                onChange={(event) => { const value = event.target.value; if (/^-?\d*(?:[.,]\d*)?$/.test(value)) setYellowThresholdInput(value); }}
+                onBlur={() => { if (!yellowThresholdInput.trim() || !Number.isFinite(Number(yellowThresholdInput.replace(",", ".")))) setYellowThresholdInput("5"); }}
               />
               <span>%</span>
             </label>
@@ -2698,16 +2703,9 @@ export default function PromocionesMeliPage() {
             {
               key: "yellow",
               title: "Sugeridas y adheridas",
-              subtitle: `Margen objetivo ${percent(yellowThreshold)}; verificar antes de activar`,
+              subtitle: `Desde ${percent(yellowThreshold)} de margen; incluye adheridas y subas para revisar`,
               groups: trafficLights.yellow,
               Icon: TrendingUp,
-            },
-            {
-              key: "review",
-              title: "Revisar precio y rotación",
-              subtitle: "Mayor precio al comprador con rotación lenta o nula",
-              groups: trafficLights.review,
-              Icon: CircleAlert,
             },
             {
               key: "scheduled",
@@ -2785,7 +2783,7 @@ export default function PromocionesMeliPage() {
                             const validity = promoValidityLabel(item.startDate, item.endDate);
                             return (
                             <Fragment key={item.key}>
-                            {(column.key === "yellow" || column.key === "review") && item.activeComparison && (
+                            {column.key === "yellow" && item.activeComparison && (
                               <div className="promociones-traffic-item promociones-traffic-item-active" key={item.activeComparison.key}>
                                 <div className="promociones-traffic-main">
                                   <strong>{item.installmentLabel}</strong>
@@ -2817,7 +2815,7 @@ export default function PromocionesMeliPage() {
                             <div className="promociones-traffic-item">
                               <div className="promociones-traffic-main">
                                 <strong>{item.installmentLabel}</strong>
-                                {(column.key === "yellow" || column.key === "review") && <span className="promo-date-badge">{item.joined ? "Adherida en ML" : item.needsReview ? "Revisar, no sugerida" : item.higherBuyerPrice ? "Suba posible, revisar" : "Sugerida"}</span>}
+                                {column.key === "yellow" && <span className="promo-date-badge">{item.joined ? "Adherida en ML" : item.needsReview ? "Revisar, no sugerida" : item.higherBuyerPrice ? "Suba posible, revisar" : "Sugerida"}</span>}
                                 <span>
                                   {item.promotionName}
                                   {column.key === "yellow" && validity ? ` | ${validity}` : ""}
@@ -2831,11 +2829,11 @@ export default function PromocionesMeliPage() {
                                 {item.profitDifference !== null && item.profitDifference !== undefined && (
                                   <span>{item.profitDifference >= 0 ? "Ganancia adicional estimada" : "Menor ganancia estimada"}: {moneyWithCents(Math.abs(item.profitDifference))} por unidad | Margen {percent(item.activeMargin || 0)} → {percent(item.margin)}</span>
                                 )}
-                                {(column.key === "yellow" || column.key === "review") && <span>Rotación: {item.units7 || 0} u. en 7 días · {item.units30 || 0} u. en 30 días{item.higherBuyerPrice ? " | Sube precio al comprador" : ""}</span>}
+                                {column.key === "yellow" && <span>Rotación: {item.units7 || 0} u. en 7 días · {item.units30 || 0} u. en 30 días{item.higherBuyerPrice ? " | Sube precio al comprador" : ""}</span>}
                                 {item.needsReview && <span>Sin rotación suficiente para sugerir una suba de precio. Evaluar manualmente demanda y competencia.</span>}
                                 {item.higherBuyerPrice && !item.needsReview && <span>La rotación reciente permite evaluar una suba, pero no garantiza conservar las ventas.</span>}
                                 {item.joined && <span>Ya adherida; el beneficio es estimado hasta que Mercado Libre la aplique.</span>}
-                                {(column.key === "yellow" || column.key === "review") && <span>Última consulta de promo: {formatDateTime(item.lastSyncAt)}{!item.lastSyncAt || rotationAsOf - new Date(item.lastSyncAt).getTime() > 6 * 3600000 ? " | Datos desactualizados; sincronizar antes de decidir" : ""}</span>}
+                                {column.key === "yellow" && <span>Última consulta de promo: {formatDateTime(item.lastSyncAt)}{!item.lastSyncAt || rotationAsOf - new Date(item.lastSyncAt).getTime() > 6 * 3600000 ? " | Datos desactualizados; sincronizar antes de decidir" : ""}</span>}
                                 <span>
                                   Comprador {item.promoPrice ? moneyWithCents(item.promoPrice) : "-"} | Venta {item.effectiveSalePrice ? moneyWithCents(item.effectiveSalePrice) : "-"}
                                 </span>
