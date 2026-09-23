@@ -16,6 +16,7 @@
     "jszip": "^3.10.2",
     "lucide-react": "^1.31.0",
     "next": "latest",
+    "pdf-lib": "^1.17.1",
     "react": "latest",
     "react-dom": "latest",
     "recharts": "^3.10.1",

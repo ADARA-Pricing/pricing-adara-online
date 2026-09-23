@@ -4,6 +4,7 @@ import { requireApiUser } from "@/lib/serverAuth";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { getConnectedMeliAccount, meliFetch, refreshAccessToken } from "@/lib/mercadolibre";
 import { controlPath, LOGISTICS_CONTROLS_BUCKET } from "@/lib/logisticsControlArchive";
+import { batchPdf } from "@/lib/logisticsBatchPdf";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -11,22 +12,6 @@ export const maxDuration = 60;
 type Item = { sku: string; title: string; quantity: number };
 type Shipment = { id: string; orderIds: string[]; buyer: string; items: Item[] };
 type Batch = { id: string; status: string; mode: string; dispatch_day: string; shipments: Shipment[] };
-
-function escapeHtml(value: unknown) {
-  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] || character);
-}
-
-function orderSummary(batch: Batch) {
-  const rows = batch.shipments.flatMap((shipment) => shipment.items.map((item) =>
-    `<tr><td>${escapeHtml(shipment.id)}</td><td>${escapeHtml(shipment.orderIds.join(", "))}</td><td>${escapeHtml(shipment.buyer)}</td><td>${escapeHtml(item.sku)}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.quantity)}</td></tr>`)).join("");
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Resumen de pedidos · lote ${escapeHtml(batch.id)}</title><style>body{font:13px Arial,sans-serif;margin:25mm;color:#111}h1{font-size:22px}p{line-height:1.5}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{padding:7px;border:1px solid #aaa;text-align:left;vertical-align:top}th{background:#eee}@media print{body{margin:12mm}}</style></head><body><h1>Resumen de pedidos</h1><p>Lote: ${escapeHtml(batch.id)}<br>Modalidad: ${batch.mode === "self_service" ? "Flex" : "Colecta"}<br>Despacho: ${escapeHtml(batch.dispatch_day)}<br>Envíos verificados: ${batch.shipments.length}</p><table><thead><tr><th>Envío</th><th>Venta</th><th>Cliente</th><th>SKU</th><th>Producto</th><th>Cantidad</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
-}
-
-function adaraControl(batch: Batch) {
-  const rows = batch.shipments.flatMap((shipment) => shipment.items.map((item) =>
-    `<tr><td>☐</td><td><strong>${escapeHtml(shipment.id)}</strong><br>Venta: ${escapeHtml(shipment.orderIds.join(", "))}<br>${escapeHtml(shipment.buyer)}</td><td>${escapeHtml(item.title)}<br>SKU: ${escapeHtml(item.sku)} · Cantidad: ${escapeHtml(item.quantity)}</td></tr>`)).join("");
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Control ADARA · lote ${escapeHtml(batch.id)}</title><style>body{font:12px Arial,sans-serif;margin:20mm;color:#111}h1{font-size:20px}p{line-height:1.5}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{padding:8px;border-bottom:1px solid #bbb;text-align:left;vertical-align:top}th{background:#ddd}@media print{body{margin:12mm}}</style></head><body><h1>Hoja de control ADARA</h1><p>No es la hoja oficial de Mercado Libre. Mercado Libre ya no permite descargarla cuando los envíos figuran como despachados.<br>Lote: ${escapeHtml(batch.id)} · Despacho: ${escapeHtml(batch.dispatch_day)} · ${batch.shipments.length} envíos</p><table><thead><tr><th>✓</th><th>Identificación</th><th>Producto</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,8 +67,8 @@ export async function POST(request: NextRequest) {
       if (!notPrintable) return NextResponse.json({ error: `Mercado Libre no pudo generar la hoja de control (${response.status}).` }, { status: 502 });
       }
     }
-    if (!officialControl) archive.file("control-adara.html", adaraControl(batch));
-    archive.file("resumen-pedidos.html", orderSummary(batch));
+    if (!officialControl) archive.file("control-adara.pdf", await batchPdf(batch, "control"));
+    archive.file("resumen-pedidos.pdf", await batchPdf(batch, "summary"));
     const zip = await archive.generateAsync({ type: "uint8array", compression: "DEFLATE" });
     return new NextResponse(Uint8Array.from(zip).buffer, { headers: {
       "Content-Type": "application/zip",
