@@ -21,6 +21,8 @@ type MeliShipment = {
   date_first_printed?: string | null;
   logistic_type?: string | null;
   logistic?: { type?: string | null } | null;
+  receiver_address?: { city?: { name?: string | null } | null; state?: { name?: string | null } | null } | null;
+  destination?: { shipping_address?: { city?: { name?: string | null } | null; state?: { name?: string | null } | null } | null } | null;
 };
 type MeliSla = { expected_date?: string | null };
 
@@ -66,7 +68,11 @@ export async function GET(request: NextRequest) {
       const batch = await Promise.all(ids.slice(index, index + 10).map(async (id) => {
         let shipment: MeliShipment;
         try {
-          shipment = await meliFetch(`/shipments/${id}`, account, { headers: { "x-format-new": "true" } }) as MeliShipment;
+          try {
+            shipment = await meliFetch(`/shipments/${id}?views=destination`, account, { headers: { "x-format-new": "true" } }) as MeliShipment;
+          } catch {
+            shipment = await meliFetch(`/shipments/${id}`, account, { headers: { "x-format-new": "true" } }) as MeliShipment;
+          }
         } catch { return { kind: "failed" as const }; }
         if (!logisticsLabelState(shipment)) {
           return { kind: "ignored" as const };
@@ -115,6 +121,8 @@ export async function GET(request: NextRequest) {
         orderIds: ordersForShipment.map((order) => String(order.id)),
         orderDate: ordersForShipment.map((order) => order.date_created || "").sort().at(0) || "",
         buyer: ordersForShipment.map((order) => [order.buyer?.first_name, order.buyer?.last_name].filter(Boolean).join(" ") || order.buyer?.nickname || "").find(Boolean) || "Cliente no informado",
+        locality: shipment.destination?.shipping_address?.city?.name || shipment.receiver_address?.city?.name || null,
+        province: shipment.destination?.shipping_address?.state?.name || shipment.receiver_address?.state?.name || null,
         items: ordersForShipment.flatMap((order) => (order.order_items || []).map((item) => ({
           orderId: String(order.id),
           itemId: item.item?.id || "",

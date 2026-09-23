@@ -14238,6 +14238,18 @@ body {
 .logistics-ean-dialog { background:#fff8e6; border:1px solid #f2ca73; border-radius:10px; padding:14px; margin-top:16px; display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
 .logistics-ean-dialog h4, .logistics-ean-dialog p { width:100%; margin:2px 0; }
 @media (max-width:800px) { .logistics-batch-layout { grid-template-columns:1fr; } }
+.logistics-daily-summary { padding:8px 0 32px; }
+.logistics-daily-cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:18px 0; }
+.logistics-daily-cards>div { background:#fff; border:1px solid #dbe4f2; border-radius:12px; padding:18px; display:grid; gap:8px; }
+.logistics-daily-cards span { color:#52627a; font-weight:700; }
+.logistics-daily-cards strong { font-size:28px; color:#17243c; }
+.logistics-daily-table { background:#fff; border:1px solid #dbe4f2; border-radius:12px; padding:18px; }
+.logistics-daily-table h3 { margin:0 0 14px; }
+.logistics-daily-table table { border-collapse:collapse; width:100%; }
+.logistics-daily-table th,.logistics-daily-table td { padding:10px; border-bottom:1px solid #e3eaf4; text-align:left; }
+.logistics-daily-table th:last-child,.logistics-daily-table td:last-child { text-align:right; }
+.logistics-summary-note { color:#52627a; font-size:12px; line-height:1.5; margin:14px 0; }
+@media (max-width:700px) { .logistics-daily-cards { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 .logistics-header, .logistics-toolbar, .logistics-select-row, .logistics-order-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .logistics-header { margin-bottom: 18px; align-items: flex-start; }
 .logistics-header h1 { margin: 0 0 6px; }
