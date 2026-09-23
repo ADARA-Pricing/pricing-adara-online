@@ -110,14 +110,15 @@ export default function LogisticaPage() {
       const bridge = "https://localhost:9101";
       let printer: Record<string, unknown> | null = null;
       if (format === "zebra") {
+        let printerResponse: Response;
         try {
-          const printerResponse = await fetch(`${bridge}/default?type=printer`, { signal: AbortSignal.timeout(5000) });
-          if (!printerResponse.ok) throw new Error("Sin impresora configurada.");
-          printer = await printerResponse.json();
-          if (!printer?.uid) throw new Error("Sin impresora predeterminada.");
+          printerResponse = await fetch(`${bridge}/default?type=printer`, { signal: AbortSignal.timeout(5000) });
         } catch {
-          throw new Error("No se encontró la Zebra. Instalá Zebra Browser Print en esta PC, conectá la impresora y elegila como predeterminada. Podés usar ‘Descargar ZPL’ mientras tanto.");
+          throw new Error("El navegador no puede comunicarse con Zebra Browser Print. Comprobá que esté abierto (ícono de Zebra junto al reloj) y autorizá el acceso de este sitio. Si el navegador muestra un problema de certificado local, revisalo en Browser Print. No se pidió ninguna etiqueta a Mercado Libre.");
         }
+        if (!printerResponse.ok) throw new Error(`Zebra Browser Print respondió con error ${printerResponse.status}. Revisá su configuración; no se pidió ninguna etiqueta a Mercado Libre.`);
+        printer = await printerResponse.json();
+        if (!printer?.uid) throw new Error("Zebra Browser Print está abierto, pero no tiene una impresora predeterminada. En el ícono de Zebra junto al reloj: Settings → Default Devices → Change → elegí la ZD220 → Set. No se pidió ninguna etiqueta a Mercado Libre.");
       }
       const { data } = await supabase.auth.getSession();
       if (!data.session) throw new Error("Sesión vencida. Volvé a iniciar sesión.");
