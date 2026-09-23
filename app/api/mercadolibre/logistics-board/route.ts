@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConnectedMeliAccount, meliFetch, refreshAccessToken } from "@/lib/mercadolibre";
 import { requireApiUser } from "@/lib/serverAuth";
 import { createAdminClient } from "@/lib/supabaseAdmin";
+import { logisticsLabelState } from "@/lib/logisticsShipmentState";
 
 export const runtime = "nodejs";
 
@@ -60,25 +61,27 @@ export async function GET(request: NextRequest) {
     }
     const ids = [...byShipment.keys()];
     const checked: Array<{ id: string; shipment: MeliShipment; sla: MeliSla }> = [];
+    let incomplete = false;
     for (let index = 0; index < ids.length; index += 10) {
       const batch = await Promise.all(ids.slice(index, index + 10).map(async (id) => {
+        let shipment: MeliShipment;
         try {
-          const [shipment, sla] = await Promise.all([
-            meliFetch(`/shipments/${id}`, account, { headers: { "x-format-new": "true" } }) as Promise<MeliShipment>,
-            meliFetch(`/shipments/${id}/sla`, account) as Promise<MeliSla>,
-          ]);
-          return { id, shipment, sla };
-        } catch { return null; }
+          shipment = await meliFetch(`/shipments/${id}`, account, { headers: { "x-format-new": "true" } }) as MeliShipment;
+        } catch { return { kind: "failed" as const }; }
+        if (!logisticsLabelState(shipment)) {
+          return { kind: "ignored" as const };
+        }
+        try {
+          const sla = await meliFetch(`/shipments/${id}/sla`, account) as MeliSla;
+          return { kind: "checked" as const, id, shipment, sla };
+        } catch { return { kind: "failed" as const }; }
       }));
-      checked.push(...batch.filter((row): row is NonNullable<typeof row> => row !== null));
+      incomplete ||= batch.some((row) => row.kind === "failed");
+      checked.push(...batch.filter((row): row is Extract<typeof row, { kind: "checked" }> => row.kind === "checked"));
     }
 
     const relevant = checked.filter(({ shipment, sla }) => {
-      const logistic = shipment.logistic?.type || shipment.logistic_type;
-      return sla.expected_date && dayKey(sla.expected_date) === targetKey &&
-        ["cross_docking", "self_service"].includes(logistic || "") &&
-        shipment.status === "ready_to_ship" &&
-        ["ready_to_print", "printed"].includes(shipment.substatus || "");
+      return sla.expected_date && dayKey(sla.expected_date) === targetKey && Boolean(logisticsLabelState(shipment));
     });
     // La búsqueda puede omitir el nombre del comprador. Completamos sólo los
     // pedidos del día seleccionado, nunca todo el historial de ventas.
@@ -102,11 +105,11 @@ export async function GET(request: NextRequest) {
     const shipments = relevant.map(({ id, shipment, sla }) => {
       const ordersForShipment = byShipment.get(id) || [];
       const logistic = shipment.logistic?.type || shipment.logistic_type;
-      const printed = shipment.substatus === "printed" || Boolean(shipment.date_first_printed);
+      const labelState = logisticsLabelState(shipment);
       return {
         id,
         mode: logistic,
-        status: printed ? "printed" : shipment.substatus === "ready_to_print" ? "ready_to_print" : "other",
+        status: labelState || "other",
         substatus: shipment.substatus || null,
         dispatchAt: sla.expected_date,
         orderIds: ordersForShipment.map((order) => String(order.id)),
@@ -123,7 +126,7 @@ export async function GET(request: NextRequest) {
         }))),
       };
     }).sort((a, b) => String(a.dispatchAt).localeCompare(String(b.dispatchAt)));
-    return NextResponse.json({ day: targetKey, shipments, checkedAt: new Date().toISOString(), incomplete: checked.length !== ids.length }, { headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json({ day: targetKey, shipments, checkedAt: new Date().toISOString(), incomplete }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo consultar la logística.";
     return NextResponse.json({ error: message }, { status: message === "No autorizado." ? 401 : 500 });

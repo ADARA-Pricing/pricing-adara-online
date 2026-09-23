@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConnectedMeliAccount, meliFetch, refreshAccessToken } from "@/lib/mercadolibre";
 import { requireApiUser } from "@/lib/serverAuth";
+import { logisticsLabelState } from "@/lib/logisticsShipmentState";
 
 export const runtime = "nodejs";
 
@@ -37,11 +38,8 @@ export async function POST(request: NextRequest) {
       }>));
       for (const shipment of batch) {
         const sellerId = shipment.sender_id || shipment.origin?.sender_id;
-        const logistic = shipment.logistic?.type || shipment.logistic_type;
         if ((sellerId && String(sellerId) !== String(account.meli_user_id)) ||
-          !["cross_docking", "self_service"].includes(logistic || "") ||
-          shipment.status !== "ready_to_ship" ||
-          !["ready_to_print", "printed"].includes(shipment.substatus || "")) {
+          !logisticsLabelState(shipment)) {
           return NextResponse.json({ error: "Una de las etiquetas ya no está disponible para imprimir. Actualizá el panel." }, { status: 409 });
         }
       }
