@@ -9922,17 +9922,8 @@ textarea:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px 22px;
-  margin: 9px 0 7px;
-  padding: 9px 11px;
-  border: 1px solid #dbeafe;
-  border-radius: 9px;
-  background: #f8fbff;
-}
-
-.promociones-traffic-item-active .promociones-traffic-primary {
-  border-color: #bbf7d0;
-  background: #ffffff;
+  gap: 4px 16px;
+  margin: 6px 0 5px;
 }
 
 .promociones-traffic-primary small {
@@ -9946,9 +9937,9 @@ textarea:focus-visible {
 .promociones-traffic-main .promociones-traffic-primary strong {
   display: block;
   color: #0f172a;
-  font-size: clamp(16px, 1.35vw, 20px);
-  font-weight: 850;
-  line-height: 1.15;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
