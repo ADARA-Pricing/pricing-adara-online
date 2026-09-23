@@ -20,6 +20,67 @@ export async function batchPdf(batch: Batch, kind: "control" | "summary") {
   let y = height - margin;
   const lineHeight = 15;
 
+  if (kind === "control") {
+    const leftX = margin;
+    const rightX = 250;
+    const rightWidth = width - margin - rightX;
+    const gray = rgb(0.62, 0.62, 0.62);
+    const ink = rgb(0.13, 0.13, 0.13);
+    const wrap = (value: unknown, font: typeof regular, size: number, maxWidth: number) => {
+      const lines: string[] = [];
+      let segment = "";
+      for (const word of printable(value).split(/\s+/)) {
+        const candidate = segment ? `${segment} ${word}` : word;
+        if (segment && font.widthOfTextAtSize(candidate, size) > maxWidth) { lines.push(segment); segment = word; }
+        else segment = candidate;
+      }
+      if (segment) lines.push(segment);
+      return lines;
+    };
+    const drawLines = (lines: string[], x: number, top: number, font: typeof regular, size: number, spacing: number) => {
+      lines.forEach((value, index) => page.drawText(value, { x, y: top - index * spacing, font, size, color: ink }));
+    };
+    const header = () => {
+      page.drawText("Control de preparación de envíos", { x: margin, y: height - 64, font: regular, size: 9, color: ink });
+      page.drawText("ADARA", { x: width - margin - 48, y: height - 64, font: bold, size: 11, color: ink });
+      page.drawText(`${batch.mode === "self_service" ? "Flex" : "Colecta"}  |  Despacho ${batch.dispatch_day}  |  ${batch.shipments.length} envíos`, { x: margin, y: height - 82, font: regular, size: 8, color: rgb(0.35, 0.35, 0.35) });
+      page.drawRectangle({ x: margin, y: height - 124, width: width - 2 * margin, height: 22, color: gray });
+      page.drawText("Identificación", { x: leftX + 5, y: height - 117, font: bold, size: 9, color: rgb(1, 1, 1) });
+      page.drawText("Productos", { x: rightX + 5, y: height - 117, font: bold, size: 9, color: rgb(1, 1, 1) });
+      y = height - 142;
+    };
+    header();
+    for (const shipment of batch.shipments) {
+      const leftBuyer = wrap(shipment.buyer, regular, 8, rightX - leftX - 17);
+      const leftHeight = 12 + 11 + leftBuyer.length * 10;
+      const products = shipment.items.map((item) => ({ item, title: wrap(item.title, bold, 8, rightWidth - 27) }));
+      const productsHeight = products.reduce((total, product) => total + product.title.length * 10 + 22 + 7, 0);
+      const rowHeight = Math.max(leftHeight, productsHeight) + 12;
+      if (y - rowHeight < margin + 12) { page = pdf.addPage([width, height]); header(); }
+      const top = y;
+      page.drawText(printable(shipment.id), { x: leftX + 5, y: top, font: bold, size: 9, color: ink });
+      drawLines(wrap(`Venta: ${shipment.orderIds.join(", ")}`, regular, 8, rightX - leftX - 17), leftX + 5, top - 12, regular, 8, 10);
+      drawLines(leftBuyer, leftX + 5, top - 25, regular, 8, 10);
+      let productY = top;
+      for (const product of products) {
+        page.drawRectangle({ x: rightX + 4, y: productY - 7, width: 10, height: 10, borderWidth: 1, borderColor: ink });
+        drawLines(product.title, rightX + 21, productY, bold, 8, 10);
+        productY -= product.title.length * 10 + 2;
+        page.drawText(`SKU: ${printable(product.item.sku)}`, { x: rightX + 21, y: productY, font: regular, size: 8, color: ink });
+        page.drawText(`Cantidad: ${product.item.quantity}`, { x: rightX + 21, y: productY - 10, font: regular, size: 8, color: ink });
+        productY -= 29;
+      }
+      y = top - rowHeight;
+      page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 0.6, color: rgb(0.76, 0.76, 0.76) });
+      y -= 14;
+    }
+    for (const [index, sheet] of pdf.getPages().entries()) {
+      sheet.drawText("Control generado por ADARA; no es la hoja oficial de Mercado Libre.", { x: margin, y: 25, font: regular, size: 7, color: rgb(0.42, 0.42, 0.42) });
+      sheet.drawText(`${index + 1} / ${pdf.getPageCount()}`, { x: width - margin - 24, y: 25, font: regular, size: 7, color: rgb(0.42, 0.42, 0.42) });
+    }
+    return pdf.save();
+  }
+
   function nextPage() {
     page = pdf.addPage([width, height]);
     y = height - margin;
@@ -41,15 +102,13 @@ export async function batchPdf(batch: Batch, kind: "control" | "summary") {
     }
     if (segment) draw(segment);
   }
-  const control = kind === "control";
-  line(control ? "HOJA DE CONTROL ADARA" : "RESUMEN DE PEDIDOS", true, 17);
+  line("RESUMEN DE PEDIDOS", true, 17);
   y -= 4;
-  if (control) line("Documento ADARA: no reemplaza la hoja oficial de Mercado Libre.", false, 9);
   line(`Lote: ${batch.id}`);
   line(`Modalidad: ${batch.mode === "self_service" ? "Flex" : "Colecta"}  |  Despacho: ${batch.dispatch_day}  |  Envios: ${batch.shipments.length}`);
   y -= 12;
 
-  if (!control) {
+  {
     const totals = new Map<string, { title: string; quantity: number }>();
     for (const shipment of batch.shipments) for (const item of shipment.items) {
       const current = totals.get(item.sku) || { title: item.title, quantity: 0 };
@@ -67,10 +126,10 @@ export async function batchPdf(batch: Batch, kind: "control" | "summary") {
   for (const shipment of batch.shipments) {
     if (y < margin + 80) nextPage();
     y -= 8;
-    line(`${control ? "[ ] " : ""}Envio ${shipment.id}  |  Venta ${shipment.orderIds.join(", ")}`, true, 11);
+    line(`Envio ${shipment.id}  |  Venta ${shipment.orderIds.join(", ")}`, true, 11);
     line(`Cliente: ${shipment.buyer}`, false, 9, 12);
     for (const item of shipment.items) {
-      line(`${control ? "[ ] " : ""}${item.quantity} x ${item.sku} - ${item.title}`, false, 10, 12);
+      line(`${item.quantity} x ${item.sku} - ${item.title}`, false, 10, 12);
     }
     y -= 4;
   }
