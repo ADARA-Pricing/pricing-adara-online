@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConnectedMeliAccount, meliFetch, refreshAccessToken } from "@/lib/mercadolibre";
 import { requireApiUser } from "@/lib/serverAuth";
 import { logisticsLabelState } from "@/lib/logisticsShipmentState";
+import JSZip from "jszip";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     if (!ids.length || ids.length > 50 || ids.length !== rawIds.length) {
       return NextResponse.json({ error: "Seleccioná entre 1 y 50 envíos válidos, sin duplicados." }, { status: 400 });
     }
-    const format = body.format === "zpl" ? "zpl2" : body.format === "pdf" ? "pdf" : null;
+    const format = body.format === "zpl" || body.format === "control" ? "zpl2" : body.format === "pdf" ? "pdf" : null;
     if (!format) return NextResponse.json({ error: "Formato no válido." }, { status: 400 });
 
     const connected = await getConnectedMeliAccount();
@@ -53,6 +54,28 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const message = await response.text();
       return NextResponse.json({ error: `Mercado Libre no pudo generar las etiquetas (${response.status}). ${message.slice(0, 300)}` }, { status: response.status });
+    }
+    if (format === "zpl2") {
+      const bytes = Buffer.from(await response.arrayBuffer());
+      let payload: Buffer;
+      if (bytes.subarray(0, 2).toString() === "PK") {
+        const archive = await JSZip.loadAsync(bytes);
+        const files = Object.values(archive.files).filter((file) => !file.dir);
+        const matches = files.filter((entry) => body.format === "control" ? /\.pdf$/i.test(entry.name) : /\.(txt|zpl)$/i.test(entry.name));
+        if (!matches.length) return NextResponse.json({ error: body.format === "control" ? "Mercado Libre no incluyó la hoja de control en el archivo." : "Mercado Libre no incluyó etiquetas ZPL en el archivo." }, { status: 502 });
+        payload = body.format === "control"
+          ? Buffer.from(await matches[0].async("uint8array"))
+          : Buffer.concat(await Promise.all(matches.map(async (file) => Buffer.from(await file.async("uint8array")))));
+      } else if (body.format === "zpl" && bytes.toString("utf8", 0, 100).includes("^XA")) {
+        payload = bytes;
+      } else {
+        return NextResponse.json({ error: "Mercado Libre devolvió un formato de etiquetas inesperado." }, { status: 502 });
+      }
+      return new NextResponse(Uint8Array.from(payload).buffer, { headers: {
+        "Content-Type": body.format === "control" ? "application/pdf" : "text/plain; charset=utf-8",
+        "Content-Disposition": `inline; filename="${body.format === "control" ? "control-ml.pdf" : "etiquetas-ml.zpl"}"`,
+        "Cache-Control": "private, no-store",
+      } });
     }
     return new NextResponse(response.body, {
       status: 200,
