@@ -22,6 +22,12 @@ function dayKey(value: string | Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
 }
 
+function flexLocality(city: string, state: string) {
+  const normalizedState = state.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (["capital federal", "caba", "ciudad autonoma de buenos aires", "ciudad de buenos aires"].includes(normalizedState)) return "Capital Federal";
+  return city;
+}
+
 export async function GET(request: NextRequest) {
   try {
     await requireApiUser(request);
@@ -105,10 +111,11 @@ export async function GET(request: NextRequest) {
         else if ("unresolved" in result) unresolved++;
       }
     }
-    const flexByLocality = new Map<string, { locality: string; province: string; count: number }>();
+    const flexByLocality = new Map<string, { locality: string; count: number }>();
     for (const entry of entries.filter((item) => item.mode === "self_service")) {
-      const key = `${entry.locality}|${entry.province}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      const current = flexByLocality.get(key) || { locality: entry.locality, province: entry.province, count: 0 };
+      const locality = flexLocality(entry.locality, entry.province);
+      const key = locality.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      const current = flexByLocality.get(key) || { locality, count: 0 };
       current.count++;
       flexByLocality.set(key, current);
     }
