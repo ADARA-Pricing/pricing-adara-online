@@ -124,6 +124,7 @@ export default function PricesPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [salePriceInputDrafts, setSalePriceInputDrafts] = useState<Record<string, string>>({});
   const [refreshingProductSku, setRefreshingProductSku] = useState<string | null>(null);
   const [productSyncMessage, setProductSyncMessage] = useState<string | null>(null);
   const [publishingPriceChannel, setPublishingPriceChannel] = useState<string | null>(null);
@@ -322,6 +323,20 @@ export default function PricesPage() {
     return fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
   }
 
+  function validSalePriceInput(value: string) {
+    return /^\d+(?:[.,]\d{0,2})?$/.test(value.trim()) && Number(toNumber(value)) > 0;
+  }
+
+  function finishSalePriceInput(channelCode: string) {
+    setSalePriceInputDrafts((current) => {
+      const value = current[channelCode];
+      if (value !== undefined && value.trim() !== "" && !validSalePriceInput(value)) return current;
+      const next = { ...current };
+      delete next[channelCode];
+      return next;
+    });
+  }
+
   function allowsExtraSalesCommission(option?: MercadoLibrePriceOption | null) {
     if (!option) return false;
     return !normalizeOption(option).applies_marketplace_fee;
@@ -445,6 +460,7 @@ export default function PricesPage() {
   }
 
   function openProductModal(product: Product) {
+    setSalePriceInputDrafts({});
     const margins: Record<string, number> = {};
     const netProfits: Record<string, number | null> = {};
     const priceOverrides: Record<string, number | null> = {};
@@ -458,7 +474,7 @@ export default function PricesPage() {
       const setting = getChannelSetting(product.id, option.code);
       margins[option.code] = getMargin(product.id, option.code);
       netProfits[option.code] = getNetProfit(product.id, option.code);
-      priceOverrides[option.code] = null;
+      priceOverrides[option.code] = setting?.manual_sale_price ?? null;
       structureAmounts[option.code] = Number(setting?.structure_amount || 0);
       manualShippingAmounts[option.code] = Number(
         setting?.manual_shipping_amount || 0,
@@ -860,7 +876,11 @@ export default function PricesPage() {
   }
 
   async function saveMargins() {
-    if (!modal || !modal.product.id) return;
+    if (!modal || !modal.product.id) return false;
+    if (Object.values(salePriceInputDrafts).some((value) => value.trim() !== "" && !validSalePriceInput(value))) {
+      setError("El precio debe ser mayor a cero y tener como máximo dos decimales.");
+      return false;
+    }
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -873,6 +893,7 @@ export default function PricesPage() {
         ? Number(result.marginOnNetSale || 0)
         : effectiveMargin(option.code),
       desired_net_profit: effectiveNetProfit(option.code),
+      manual_sale_price: modal.priceOverrides[option.code] ?? null,
       structure_amount: Number(modal.structureAmounts[option.code] || 0),
       manual_shipping_amount: Number(
         modal.manualShippingAmounts[option.code] || 0,
@@ -892,7 +913,10 @@ export default function PricesPage() {
       .upsert(rows, { onConflict: "product_id,channel_code" })
       .select("*");
     setSaving(false);
-    if (error) setError(error.message);
+    if (error) {
+      setError(error.message);
+      return false;
+    }
     else {
       const savedRows = (data || []) as ProductChannelMargin[];
       setMarginSettings((current) => {
@@ -906,11 +930,14 @@ export default function PricesPage() {
       });
       setMessage("Márgenes guardados correctamente.");
       await loadData();
+      setSalePriceInputDrafts({});
+      return true;
     }
   }
 
   function updateMargin(channelCode: string, value: string) {
     if (!modal) return;
+    setSalePriceInputDrafts((current) => { const next = { ...current }; delete next[channelCode]; return next; });
     const margin = Number(toNumber(value) ?? 0);
     setModal({
       ...modal,
@@ -923,6 +950,7 @@ export default function PricesPage() {
 
   function updateNetProfit(channelCode: string, value: string) {
     if (!modal) return;
+    setSalePriceInputDrafts((current) => { const next = { ...current }; delete next[channelCode]; return next; });
     const net = toNumber(value);
 
     if (net === null) {
@@ -979,6 +1007,8 @@ export default function PricesPage() {
 
   function updateSalePrice(channelCode: string, value: string) {
     if (!modal) return;
+    setSalePriceInputDrafts((current) => ({ ...current, [channelCode]: value }));
+    if (value.trim() !== "" && !/^\d+(?:[.,]\d{0,2})?$/.test(value.trim())) return;
     const salePrice = toNumber(value);
     if (salePrice === null) {
       setModal({
@@ -987,6 +1017,7 @@ export default function PricesPage() {
       });
       return;
     }
+    if (salePrice <= 0) return;
 
     const product = modal.product;
     const option = pricingOptions.find((item) => item.code === channelCode);
@@ -1207,6 +1238,7 @@ export default function PricesPage() {
         {
           desiredMarginRate: getMargin(product.id, normalizedOption.code),
           desiredNetProfit: getNetProfit(product.id, normalizedOption.code),
+          salePrice: setting?.manual_sale_price ?? null,
           structureAmount: Number(setting?.structure_amount || 0),
           manualShippingAmount: Number(setting?.manual_shipping_amount || 0),
           salesCommissionRate: allowsExtraSalesCommission(normalizedOption)
@@ -1450,6 +1482,7 @@ export default function PricesPage() {
       {
         desiredMarginRate: getMargin(product.id, "MC"),
         desiredNetProfit: getNetProfit(product.id, "MC"),
+        salePrice: getChannelSetting(product.id, "MC")?.manual_sale_price ?? null,
         roundTo: 100,
         roundingMode: "nearest",
       },
@@ -2371,11 +2404,12 @@ export default function PricesPage() {
                         <input
                           type="text"
                           inputMode="decimal"
-                          value={formatInputNumber(
+                          value={salePriceInputDrafts[selectedSummaryRow.option.code] ?? formatInputNumber(
                             modal.priceOverrides[selectedSummaryRow.option.code] ?? selectedSummaryRow.result.roundedPrice,
-                            0,
+                            2,
                           )}
                           onChange={(e) => updateSalePrice(selectedSummaryRow.option.code, e.target.value)}
+                          onBlur={() => finishSalePriceInput(selectedSummaryRow.option.code)}
                         />
                       </div>
                       <div className={`summary-kpi-card result ${marginClass(selectedSummaryRow.result.marginOnNetSale)}`}>
@@ -2550,11 +2584,12 @@ export default function PricesPage() {
                             <input
                               type="text"
                               inputMode="decimal"
-                              value={formatInputNumber(
+                              value={salePriceInputDrafts[option.code] ?? formatInputNumber(
                                 modal.priceOverrides[option.code] ?? (result.valid ? result.roundedPrice : null),
-                                0,
+                                2,
                               )}
                               onChange={(e) => updateSalePrice(option.code, e.target.value)}
+                              onBlur={() => finishSalePriceInput(option.code)}
                               disabled={lockMargin || lockNet}
                               className={lockMargin || lockNet ? "input-disabled" : ""}
                             />
@@ -2647,8 +2682,7 @@ export default function PricesPage() {
                   className="button"
                   disabled={saving}
                   onClick={async () => {
-                    await saveMargins();
-                    setModal(null);
+                    if (await saveMargins()) setModal(null);
                   }}
                 >
                   {saving ? "Guardando..." : "Guardar y cerrar"}

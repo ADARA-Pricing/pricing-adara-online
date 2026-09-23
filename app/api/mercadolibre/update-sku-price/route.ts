@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     const installmentCount = Number(body?.installmentCount);
     const price = Number(body?.price);
 
-    if (!sku || !Number.isInteger(installmentCount) || installmentCount < 1 || !Number.isFinite(price) || price <= 0) {
+    if (!sku || !Number.isInteger(installmentCount) || installmentCount < 1 || !Number.isFinite(price) || price <= 0 || Math.abs(price * 100 - Math.round(price * 100)) > 1e-6) {
       return NextResponse.json({ error: "SKU, cuota y precio válido son obligatorios." }, { status: 400 });
     }
 
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       // operación en error. La UI la informa como omitida.
       return NextResponse.json({
         ok: true,
-        price: Math.round(price),
+        price,
         updated: [],
         skipped: [{ itemId: sku, reason: `No hay publicaciones activas para ${installmentCount === 1 ? "Clásica / 1 pago" : `${installmentCount} cuotas`}.` }],
       });
@@ -95,8 +95,6 @@ export async function POST(request: NextRequest) {
     const automated = await automatedItemIds(account.meli_user_id, account);
     const updated: string[] = [];
     const skipped: Array<{ itemId: string; reason: string }> = [];
-    const roundedPrice = Math.round(price);
-
     for (const publication of targets) {
       const itemId = String(publication.meli_item_id).toUpperCase();
       if (automated.has(itemId)) {
@@ -108,8 +106,8 @@ export async function POST(request: NextRequest) {
         const item = await meliFetch(`/items/${itemId}`, account) as MeliItem;
         const variations = Array.isArray(item.variations) ? item.variations.filter((variation) => variation.id !== null && variation.id !== undefined) : [];
         const payload = variations.length
-          ? { variations: variations.map((variation) => ({ id: variation.id, price: roundedPrice })) }
-          : { price: roundedPrice };
+          ? { variations: variations.map((variation) => ({ id: variation.id, price })) }
+          : { price };
         const updatedItem = await meliFetch(`/items/${itemId}`, account, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -118,7 +116,7 @@ export async function POST(request: NextRequest) {
 
         await supabase
           .from("mercadolibre_shipping_costs")
-          .update({ meli_price: roundedPrice, meli_last_sync_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .update({ meli_price: price, meli_last_sync_at: new Date().toISOString(), updated_at: new Date().toISOString() })
           .eq("id", publication.id);
         updated.push(String(updatedItem.id || itemId));
       } catch (error) {
@@ -126,7 +124,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: updated.length > 0, price: roundedPrice, updated, skipped });
+    return NextResponse.json({ ok: updated.length > 0, price, updated, skipped });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo actualizar el precio en MercadoLibre.";
     return NextResponse.json({ error: message }, { status: message === "No autorizado." ? 401 : 500 });
