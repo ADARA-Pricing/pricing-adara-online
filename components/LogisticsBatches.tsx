@@ -18,6 +18,10 @@ function totals(shipments: Shipment[]) {
   return [...map.values()];
 }
 
+function shipmentComplete(shipment: Shipment, packed: Record<string, Record<string, number>>) {
+  return totals([shipment]).every((item) => (packed[shipment.id]?.[item.sku] || 0) >= item.quantity);
+}
+
 function matchLabel(code: string, shipments: Shipment[]) {
   const trimmed = code.trim().replace(/^LA,/, "");
   try {
@@ -45,10 +49,12 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
+  const labelRef = useRef<HTMLInputElement>(null);
   const batch = batches.find((item) => item.id === activeId);
   const products = useMemo(() => batch ? totals(batch.shipments) : [], [batch]);
   const selectedShipment = batch?.shipments.find((item) => item.id === shipmentId);
   const stagedComplete = products.length > 0 && products.every((item) => (batch?.staged[item.sku] || 0) >= item.quantity);
+  useEffect(() => { if (batch?.status === "packing" && !shipmentId) labelRef.current?.focus(); }, [activeId, batch?.status, shipmentId]);
 
   const load = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -63,6 +69,7 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
   async function action(name: string, code?: string, sku?: string) {
     if (!batch || busy) return;
     setBusy(true); setMessage("");
+    let focusNextLabel = false;
     try {
       const { data } = await supabase.auth.getSession();
       if (!data.session) throw new Error("Sesión vencida.");
@@ -78,9 +85,22 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
       setBatches((current) => current.map((item) => item.id === batch.id ? result.batch : item));
       setScan("");
       if (name === "assign_ean") { setUnknownEan(""); setAssignSku(""); setMessage(`EAN ${code} asignado a ${sku}. Volvé a escanearlo para registrar la unidad.`); }
-      else if (name === "stage" || name === "pack") setMessage(name === "stage" ? "Producto correcto ✓" : "Producto correcto para esta etiqueta ✓");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Error al escanear."); }
-    finally { setBusy(false); scanRef.current?.focus(); }
+      else if (name === "pack" && shipmentId) {
+        const updated = result.batch as Batch;
+        const shipment = updated.shipments.find((item) => item.id === shipmentId);
+        if (shipment && shipmentComplete(shipment, updated.packed)) {
+          setShipmentId(null);
+          setLabelScan("");
+          focusNextLabel = true;
+          const remaining = updated.shipments.filter((item) => !shipmentComplete(item, updated.packed)).length;
+          setMessage(remaining ? `Paquete correcto y completo ✓ Quedan ${remaining}. Escaneá el QR del siguiente.` : "Todos los paquetes están completos ✓");
+        } else setMessage("Producto correcto ✓ Escaneá la siguiente unidad de esta misma etiqueta.");
+      } else if (name === "stage") setMessage("Producto correcto ✓");
+    } catch (error) { setScan(""); setMessage(error instanceof Error ? error.message : "Error al escanear."); }
+    finally {
+      setBusy(false);
+      window.setTimeout(() => (focusNextLabel ? labelRef.current : scanRef.current)?.focus(), 0);
+    }
   }
 
   return <section className="logistics-batches">
@@ -95,9 +115,9 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
           <div className="logistics-batch-products">{products.map((item) => <div key={item.sku}><span>{item.image && <img src={item.image} alt="" />}<b>{item.sku}</b> · {item.title}</span><strong>{batch.staged[item.sku] || 0} / {item.quantity}</strong></div>)}</div>
           <button className="button" disabled={!stagedComplete || busy} onClick={() => void action("packing")}>Pasar al paso 2 · Empaquetar</button></>}
         {batch.status === "packing" && <><h4>Paso 2 · Etiqueta y producto de cada bolsa</h4><p>Escaneá la etiqueta de ML; luego cada EAN que va en ese paquete.</p>
-          <form onSubmit={(event) => { event.preventDefault(); const match = matchLabel(labelScan, batch.shipments); if (!match) setMessage("Ese QR no corresponde a un envío de este lote. No empaquetes esta venta."); else { setShipmentId(match.id); setLabelScan(""); setMessage(`Etiqueta ${match.id} reconocida.`); } }}><input value={labelScan} onChange={(event) => setLabelScan(event.target.value)} placeholder="Escanear QR o número de envío" aria-label="Etiqueta de Mercado Libre" /><button className="button" disabled={!labelScan.trim()}>Elegir etiqueta</button></form>
+          <form onSubmit={(event) => { event.preventDefault(); const match = matchLabel(labelScan, batch.shipments); setLabelScan(""); if (!match) { setMessage("Ese QR no corresponde a un envío de este lote. No empaquetes esta venta."); labelRef.current?.focus(); } else if (shipmentComplete(match, batch.packed)) { setShipmentId(null); setMessage(`El envío ${match.id} ya está completo. Escaneá otra etiqueta.`); labelRef.current?.focus(); } else { setShipmentId(match.id); setMessage(`Etiqueta ${match.id} reconocida. Escaneá el producto.`); window.setTimeout(() => scanRef.current?.focus(), 0); } }}><input ref={labelRef} value={labelScan} onChange={(event) => setLabelScan(event.target.value)} placeholder="Escanear QR o número de envío" aria-label="Etiqueta de Mercado Libre" /><button className="button" disabled={!labelScan.trim()}>Elegir etiqueta</button></form>
           {selectedShipment && <div className="logistics-batch-selected"><h4>Envío #{selectedShipment.id} · {selectedShipment.buyer}</h4>{selectedShipment.items.map((item, index) => <div key={`${item.sku}-${index}`}>{item.image && <img src={item.image} alt="" />}<span><b>{item.sku}</b> · {item.title}</span><strong>{batch.packed[selectedShipment.id]?.[item.sku] || 0} / {item.quantity}</strong></div>)}<form onSubmit={(event) => { event.preventDefault(); void action("pack", scan.trim()); }}><input ref={scanRef} autoFocus value={scan} onChange={(event) => setScan(event.target.value)} placeholder="Escanear EAN del producto para esta bolsa" aria-label="EAN para empaquetar" /><button className="button" disabled={!scan.trim() || busy}>Verificar y guardar</button></form></div>}
-          <p>Paquetes completos: {batch.shipments.filter((shipment) => totals([shipment]).every((item) => (batch.packed[shipment.id]?.[item.sku] || 0) >= item.quantity)).length} / {batch.shipments.length}</p></>}
+          <p>Paquetes completos: {batch.shipments.filter((shipment) => shipmentComplete(shipment, batch.packed)).length} / {batch.shipments.length}</p></>}
         {batch.status === "completed" && <p>Todos los paquetes fueron verificados. Listos para despachar.</p>}
         {unknownEan && <div className="logistics-ean-dialog" role="dialog" aria-label="Asignar EAN desconocido"><h4>EAN {unknownEan} no registrado</h4><p>Asignalo a un SKU existente de este lote. Un SKU puede tener varios EAN.</p><select value={assignSku} onChange={(event) => setAssignSku(event.target.value)}><option value="">Elegir SKU</option>{products.map((item) => <option key={item.sku} value={item.sku}>{item.sku} · {item.title}</option>)}</select><button className="button" disabled={!assignSku || busy} onClick={() => void action("assign_ean", unknownEan, assignSku)}>Guardar EAN</button><button className="button ghost" onClick={() => setUnknownEan("")}>Cancelar</button></div>}
       </div>}
