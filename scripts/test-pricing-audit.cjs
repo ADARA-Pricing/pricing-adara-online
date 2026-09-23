@@ -10,6 +10,9 @@ function load(name) {
   return mod.exports;
 }
 async function main() {
+  const { priceForMercadoLibreUpload } = load('pricing');
+  assert.equal(priceForMercadoLibreUpload(73210.37, 0), 73210.37, 'manual PVP must keep its cents');
+  assert.equal(priceForMercadoLibreUpload(73210.37, 5), Math.round((73210.37 / 0.95) * 100) / 100, 'calculated list price must have at most two decimals');
   const { categoryOptions, normalizeFilter, LatestRequest, readPages, freshness } = load('pricingData');
   assert.equal(normalizeFilter('  ILUMINACIÓN   LED '), 'iluminacion led');
   assert.deepEqual(categoryOptions(['Audio', ' AUDIO ', 'Audío', 'Audio profesional']), ['Audio', 'Audio profesional']);

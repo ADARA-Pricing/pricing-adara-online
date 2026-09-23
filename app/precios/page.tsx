@@ -33,6 +33,7 @@ import {
   moneyWithCents,
   normalizeOption,
   percent,
+  priceForMercadoLibreUpload,
   promoListPrice,
   toNumber,
 } from "@/lib/pricing";
@@ -734,9 +735,7 @@ export default function PricesPage() {
     const normalizedOption = normalizeOption(option);
     const installmentCount = Number(normalizedOption.installment_count || 0) || 1;
     const parsedSalePrice = Number(salePrice || 0);
-    const price = promoDiscountRate > 0
-      ? promoListPrice(parsedSalePrice, promoDiscountRate)
-      : parsedSalePrice;
+    const price = priceForMercadoLibreUpload(parsedSalePrice, promoDiscountRate);
     if (!Number.isFinite(price) || price <= 0) {
       setError("No hay un precio válido para cargar en Mercado Libre.");
       return;
@@ -787,9 +786,7 @@ export default function PricesPage() {
       .map(({ option, result, promoDiscountRate }) => ({
         option,
         installmentCount: Number(option.installment_count || 0) || 1,
-        price: promoDiscountRate > 0
-          ? promoListPrice(result.roundedPrice, promoDiscountRate)
-          : result.roundedPrice,
+        price: priceForMercadoLibreUpload(result.roundedPrice, promoDiscountRate),
       }))
       .filter(({ price }) => Number.isFinite(Number(price)) && Number(price) > 0);
     if (!prices.length) {

@@ -42,6 +42,14 @@ export function promoListPrice(
   return price / (1 - discount / 100);
 }
 
+// Only a calculated promotion list price needs cent-level normalization before
+// being sent to ML. An explicit PVP already has the precision entered by the user.
+export function priceForMercadoLibreUpload(finalPrice: number, discountRate: number) {
+  if (discountRate <= 0) return finalPrice;
+  const listPrice = promoListPrice(finalPrice, discountRate);
+  return listPrice === null ? null : Math.round(listPrice * 100) / 100;
+}
+
 export function toNumber(value: string): number | null {
   if (value.trim() === "") return null;
   const normalized = value.replace(",", ".");
