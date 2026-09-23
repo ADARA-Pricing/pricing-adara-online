@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ClipboardList, Download, Printer, RefreshCw, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { PricingPagination } from "@/components/PricingDataStatus";
+import { LogisticsBatches } from "@/components/LogisticsBatches";
 
 type Day = "today" | "tomorrow";
 type Mode = "all" | "cross_docking" | "self_service";
@@ -34,6 +35,10 @@ export default function LogisticaPage() {
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [tab, setTab] = useState<"sales" | "batches">("sales");
+  const [batchRefresh, setBatchRefresh] = useState(0);
+  const [pendingPrinted, setPendingPrinted] = useState<Shipment[]>([]);
+  const [pendingLoaded, setPendingLoaded] = useState(false);
   const requestId = useRef(0);
 
   async function loadBoard(target: Day = day) {
@@ -57,6 +62,11 @@ export default function LogisticaPage() {
   }
 
   useEffect(() => { void loadBoard(day); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [day]);
+  useEffect(() => {
+    try { setPendingPrinted(JSON.parse(window.localStorage.getItem("adara-pending-printed-batch") || "[]") as Shipment[]); } catch { /* Ignorar estado local dañado. */ }
+    setPendingLoaded(true);
+  }, []);
+  useEffect(() => { if (pendingLoaded) window.localStorage.setItem("adara-pending-printed-batch", JSON.stringify(pendingPrinted)); }, [pendingPrinted, pendingLoaded]);
 
   const counts = useMemo(() => {
     const count = (mode: Shipment["mode"], status: Shipment["status"]) => shipments.filter((item) => item.mode === mode && item.status === status).length;
@@ -78,6 +88,10 @@ export default function LogisticaPage() {
   const printableOnPage = pageItems.filter((item) => item.status === "ready_to_print");
   const printableIds = printableOnPage.map((item) => item.id);
   const selectedOnPage = selected.filter((id) => printableIds.includes(id));
+  const printedIds = pageItems.filter((item) => item.status === "printed").map((item) => item.id);
+  const selectedPrintedOnPage = selected.filter((id) => printedIds.includes(id));
+  const selectableIds = statusFilter === "printed" ? printedIds : printableIds;
+  const selectedSelectable = selected.filter((id) => selectableIds.includes(id));
 
   function selectView(nextMode: Mode, nextStatus: StatusFilter) { setMode(nextMode); setStatusFilter(nextStatus); setPage(1); setSelected([]); }
   function selectDay(next: Day) { setDay(next); selectView("all", "all"); }
@@ -85,6 +99,10 @@ export default function LogisticaPage() {
 
   async function printLabels(ids: string[], format: "zebra" | "zpl" | "control") {
     if (!ids.length || ids.length > PAGE_SIZE || printing) return;
+    if (format === "zebra" && pendingPrinted.length && (ids.length !== pendingPrinted.length || ids.some((id) => !pendingPrinted.some((item) => item.id === id)))) {
+      setMessage("Primero confirmá la tanda anterior o reimprimí esas mismas etiquetas antes de crear otra.");
+      return;
+    }
     const pdfTab = format === "control" ? window.open("", "_blank") : null;
     setPrinting(true);
     setMessage(`Solicitando ${ids.length} etiqueta${ids.length === 1 ? "" : "s"} a Mercado Libre...`);
@@ -122,6 +140,7 @@ export default function LogisticaPage() {
           signal: AbortSignal.timeout(30000),
         });
         if (!writeResponse.ok) throw new Error("La Zebra no aceptó el trabajo de impresión. Revisá Browser Print y reintentá.");
+        setPendingPrinted(ids.map((id) => shipments.find((item) => item.id === id)).filter((item): item is Shipment => Boolean(item)));
       } else {
         const url = URL.createObjectURL(await response.blob());
         if (format === "control" && pdfTab) pdfTab.location.href = url;
@@ -139,6 +158,53 @@ export default function LogisticaPage() {
       pdfTab?.close();
       setMessage(error instanceof Error ? error.message : "No se pudieron obtener las etiquetas.");
     } finally { setPrinting(false); }
+  }
+
+  async function confirmPrinted() {
+    if (!pendingPrinted.length || printing) return;
+    setPrinting(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) throw new Error("Sesión vencida.");
+      for (const mode of ["self_service", "cross_docking"] as const) {
+        const group = pendingPrinted.filter((item) => item.mode === mode);
+        if (!group.length) continue;
+        const response = await fetch("/api/mercadolibre/logistics-batches", {
+          method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` },
+          body: JSON.stringify({ shipments: group }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "No se pudo crear el lote.");
+        setPendingPrinted((current) => current.filter((item) => item.mode !== mode));
+      }
+      setBatchRefresh((value) => value + 1);
+      setTab("batches");
+      setMessage("Lote creado. Ya podés comenzar la preparación.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo crear el lote."); }
+    finally { setPrinting(false); }
+  }
+
+  async function createBatchFromPrinted() {
+    const group = selectedPrintedOnPage.map((id) => shipments.find((item) => item.id === id)).filter((item): item is Shipment => Boolean(item));
+    if (!group.length || printing) return;
+    setPrinting(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) throw new Error("Sesión vencida.");
+      for (const mode of ["self_service", "cross_docking"] as const) {
+        const byMode = group.filter((item) => item.mode === mode);
+        if (!byMode.length) continue;
+        const response = await fetch("/api/mercadolibre/logistics-batches", {
+          method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` },
+          body: JSON.stringify({ shipments: byMode }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "No se pudo crear el lote.");
+      }
+      setSelected([]); setBatchRefresh((value) => value + 1); setTab("batches");
+      setMessage("Lote creado con las etiquetas que ya estaban impresas.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo crear el lote."); }
+    finally { setPrinting(false); }
   }
 
   function printPickList(items: Shipment[]) {
@@ -168,6 +234,9 @@ export default function LogisticaPage() {
 
   return <main className="container wide logistics-page logistics-ml-board">
     <header className="logistics-header"><div><h1>Logística Mercado Libre</h1><p>Solo envíos con despacho {day === "today" ? "hoy" : "mañana"}, según la fecha límite informada por Mercado Libre.</p></div><button className="button" type="button" onClick={() => loadBoard(day)} disabled={loading}><RefreshCw size={16} /> {loading ? "Actualizando..." : "Actualizar"}</button></header>
+    <div className="logistics-main-tabs" role="tablist" aria-label="Secciones de logística"><button type="button" role="tab" aria-selected={tab === "sales"} className={tab === "sales" ? "active" : ""} onClick={() => setTab("sales")}>Ventas</button><button type="button" role="tab" aria-selected={tab === "batches"} className={tab === "batches" ? "active" : ""} onClick={() => setTab("batches")}>Lotes</button></div>
+    {tab === "batches" ? <LogisticsBatches refreshKey={batchRefresh} /> : <>
+    {pendingPrinted.length > 0 && <div className="logistics-confirm-print"><strong>Se enviaron {pendingPrinted.length} etiquetas a la Zebra.</strong><span>Confirmá que todas salieron bien para crear el lote. Si hubo un problema, reimprimí la misma tanda antes de confirmar.</span><button className="button ghost" type="button" onClick={() => void printLabels(pendingPrinted.map((item) => item.id), "zebra")} disabled={printing}>Reimprimir tanda</button><button className="button" type="button" onClick={() => void confirmPrinted()} disabled={printing}>Sí, salieron bien · crear lote</button></div>}
     <div className="logistics-day-tabs" role="tablist" aria-label="Día de despacho"><button type="button" role="tab" aria-selected={day === "today"} className={day === "today" ? "active" : ""} onClick={() => selectDay("today")}>Envíos de hoy</button><button type="button" role="tab" aria-selected={day === "tomorrow"} className={day === "tomorrow" ? "active" : ""} onClick={() => selectDay("tomorrow")}>Mañana</button></div>
     <div className="logistics-summary">
       {([{ key: "self_service", name: "Flex", counts: counts.flex }, { key: "cross_docking", name: "Colecta", counts: counts.collection }] as const).map((group) => <div className="logistics-summary-card" key={group.key}><strong>{group.name} | {day === "today" ? "Hoy" : "Mañana"}</strong><button type="button" className={mode === group.key && statusFilter === "ready_to_print" ? "active" : ""} onClick={() => selectView(group.key, "ready_to_print")}>Etiquetas por imprimir <b>{group.counts.unprinted}</b></button><button type="button" className={mode === group.key && statusFilter === "printed" ? "active" : ""} onClick={() => selectView(group.key, "printed")}>Listas para despachar <b>{group.counts.printed}</b></button></div>)}
@@ -176,13 +245,14 @@ export default function LogisticaPage() {
     <div className="logistics-status-line">{checkedAt ? `Actualizado ${dateLabel(checkedAt)} · ${shipments.length} envíos para ${day === "today" ? "hoy" : "mañana"}` : "Consultando envíos..."}{loading ? " · Actualizando" : ""}</div>
     {incomplete && <div className="message info">Mercado Libre no respondió el estado de algunos envíos. Reintentá actualizar; la lista puede estar incompleta.</div>}
     {message && <div className="message info" role="status">{message}</div>}
-    <div className="logistics-toolbar"><label className="logistics-search"><Search size={17} /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); setSelected([]); }} placeholder="Buscar pedido, envío, cliente, SKU o producto" /></label><div className="logistics-actions"><button className="button ghost" type="button" onClick={() => printLabels(selectedOnPage, "zebra")} disabled={!selectedOnPage.length || printing}><Printer size={16} /> Imprimir seleccionadas ({selectedOnPage.length})</button><button className="button ghost" type="button" onClick={() => printLabels(printableIds, "zebra")} disabled={!printableIds.length || printing}><Printer size={16} /> Imprimir página ({printableIds.length})</button><button className="button ghost" type="button" onClick={() => printLabels(selectedOnPage.length ? selectedOnPage : printableIds, "control")} disabled={!printableIds.length || printing}><ClipboardList size={16} /> Hoja de control ML</button><button className="button ghost" type="button" onClick={() => printPickList(pageItems)} disabled={!pageItems.length}><ClipboardList size={16} /> Hoja de preparación</button><button className="button ghost" type="button" onClick={() => printLabels(selectedOnPage.length ? selectedOnPage : printableIds, "zpl")} disabled={!printableIds.length || printing}><Download size={16} /> Descargar ZPL</button></div></div>
-    <div className="logistics-select-row"><label><input type="checkbox" checked={printableIds.length > 0 && selectedOnPage.length === printableIds.length} onChange={() => setSelected(selectedOnPage.length === printableIds.length ? [] : printableIds)} disabled={!printableIds.length} /> Seleccionar etiquetas por imprimir de esta página ({printableIds.length})</label><span>Máximo 50 por solicitud</span></div>
+    <div className="logistics-toolbar"><label className="logistics-search"><Search size={17} /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); setSelected([]); }} placeholder="Buscar pedido, envío, cliente, SKU o producto" /></label><div className="logistics-actions"><button className="button ghost" type="button" onClick={() => printLabels(selectedOnPage, "zebra")} disabled={!selectedOnPage.length || printing}><Printer size={16} /> Imprimir seleccionadas ({selectedOnPage.length})</button><button className="button ghost" type="button" onClick={() => printLabels(printableIds, "zebra")} disabled={!printableIds.length || printing}><Printer size={16} /> Imprimir página ({printableIds.length})</button><button className="button ghost" type="button" onClick={() => void createBatchFromPrinted()} disabled={!selectedPrintedOnPage.length || printing}>Crear lote de impresas ({selectedPrintedOnPage.length})</button><button className="button ghost" type="button" onClick={() => printLabels(selectedOnPage.length ? selectedOnPage : printableIds, "control")} disabled={!printableIds.length || printing}><ClipboardList size={16} /> Hoja de control ML</button><button className="button ghost" type="button" onClick={() => printPickList(pageItems)} disabled={!pageItems.length}><ClipboardList size={16} /> Hoja de preparación</button><button className="button ghost" type="button" onClick={() => printLabels(selectedOnPage.length ? selectedOnPage : printableIds, "zpl")} disabled={!printableIds.length || printing}><Download size={16} /> Descargar ZPL</button></div></div>
+    <div className="logistics-select-row"><label><input type="checkbox" checked={selectableIds.length > 0 && selectedSelectable.length === selectableIds.length} onChange={() => setSelected(selectedSelectable.length === selectableIds.length ? [] : selectableIds)} disabled={!selectableIds.length} /> {statusFilter === "printed" ? "Seleccionar listas para despachar" : "Seleccionar etiquetas por imprimir"} de esta página ({selectableIds.length})</label><span>Máximo 50 por lote</span></div>
     <div className="logistics-list">{pageItems.map((shipment) => <article className="logistics-order logistics-ml-order" key={shipment.id}>
-      <div className="logistics-ml-order-top"><label><input type="checkbox" checked={selectedOnPage.includes(shipment.id)} onChange={() => toggle(shipment.id)} disabled={shipment.status !== "ready_to_print"} /> <strong>#{shipment.orderIds.join(", ")}</strong></label><span>{shipment.orderDate ? dateLabel(shipment.orderDate) : ""}</span><span className="logistics-ml-buyer">{shipment.buyer}</span><span>{modeLabel(shipment.mode)}</span></div>
+      <div className="logistics-ml-order-top"><label><input type="checkbox" checked={selected.includes(shipment.id)} onChange={() => toggle(shipment.id)} disabled={shipment.status === "other"} /> <strong>#{shipment.orderIds.join(", ")}</strong></label><span>{shipment.orderDate ? dateLabel(shipment.orderDate) : ""}</span><span className="logistics-ml-buyer">{shipment.buyer}</span><span>{modeLabel(shipment.mode)}</span></div>
       <div className="logistics-ml-order-body"><div><strong className={shipment.status === "ready_to_print" ? "unprinted" : "printed"}>{shipment.status === "ready_to_print" ? "Etiqueta lista para imprimir" : shipment.status === "printed" ? "Lista para despachar" : "Verificar estado en Mercado Libre"}</strong><small>{shipment.mode === "cross_docking" ? "Prepará el paquete para la colecta." : "Prepará el paquete para Flex."} Despacho límite: {dateLabel(shipment.dispatchAt)}</small></div>{shipment.status !== "other" && <button className="button" type="button" onClick={() => printLabels([shipment.id], "zebra")} disabled={printing}><Printer size={15} /> {shipment.status === "printed" ? "Reimprimir etiqueta" : "Imprimir etiqueta"}</button>}</div>
       <div className="logistics-ml-products">{shipment.items.map((item, index) => <div key={`${item.orderId}-${item.itemId}-${index}`}><div className="logistics-ml-thumb">{item.image ? <img src={item.image} alt="" /> : <span>📦</span>}</div><span className="logistics-ml-product-name">{item.title}<small>SKU: {item.sku || "Sin SKU"}</small></span><span>{money(item.unitPrice)}</span><span>{item.quantity} {item.quantity === 1 ? "unidad" : "unidades"}</span></div>)}</div>
     </article>)}{!pageItems.length && !loading && <div className="empty-state">{incomplete ? "No se pudo confirmar que no haya envíos. Reintentá actualizar." : `No hay envíos ${day === "today" ? "para hoy" : "para mañana"} con este filtro.`}</div>}</div>
     <PricingPagination page={currentPage} total={filtered.length} size={PAGE_SIZE} onPage={(next) => { setPage(next); setSelected([]); }} />
+    </>}
   </main>;
 }

@@ -14215,6 +14215,29 @@ body {
 @media (max-width:820px) { .sales-monitor-sale-main { position:relative; gap:10px; padding-right:0; }.sales-monitor-logistic-column { position:absolute; top:0; right:0; display:flex; min-width:68px; flex-direction:column; align-items:flex-end; gap:4px; }.sales-monitor-time { position:static; padding:5px 7px; font-size:11px; }.sales-monitor-thumbnail { flex-basis:48px; width:48px; height:48px; border-radius:10px; }.sales-monitor-sale-title { flex:1; min-width:0; }.sales-monitor-sale-main strong { max-width:none; display:block; overflow:hidden; padding-right:76px; white-space:nowrap; text-overflow:ellipsis; line-height:1.2; font-size:15px; }.sales-monitor-sale-main small { overflow:visible; white-space:nowrap; font-size:11px; }.sales-monitor-logistic { margin-left:0; }.sales-monitor-sale-values { padding:10px 12px; border-radius:11px; background:#f8fafc; }.sales-monitor-sale-values strong { font-size:16px; }.sales-monitor-sale-values span { font-size:10px; } }
 /* Preparación de pedidos de Mercado Libre */
 .logistics-page { padding-bottom: 40px; }
+.logistics-main-tabs { display:flex; gap:8px; margin:16px 0; border-bottom:1px solid #dbe4f2; }
+.logistics-main-tabs button { border:0; background:transparent; padding:10px 18px; color:#42526d; cursor:pointer; font-weight:700; }
+.logistics-main-tabs button.active { color:#1957cf; border-bottom:3px solid #1957cf; }
+.logistics-confirm-print { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:14px; margin:14px 0; border:1px solid #f0c36b; background:#fff7e7; border-radius:12px; }
+.logistics-confirm-print span { flex:1; min-width:240px; }
+.logistics-batch-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:20px 0; }
+.logistics-batch-head p { margin:4px 0; color:#52627a; }
+.logistics-batch-layout { display:grid; grid-template-columns:minmax(260px,320px) minmax(0,1fr); gap:18px; align-items:start; }
+.logistics-batch-list { display:grid; gap:8px; }
+.logistics-batch-card { display:grid; text-align:left; gap:4px; background:white; border:1px solid #dbe4f2; border-radius:10px; padding:14px; cursor:pointer; color:#17243c; }
+.logistics-batch-card.active { border-color:#2160e0; background:#f1f6ff; }
+.logistics-batch-card small, .logistics-batch-card span { color:#52627a; }
+.logistics-batch-work { background:white; border:1px solid #dbe4f2; border-radius:12px; padding:20px; }
+.logistics-batch-work h3 { margin-top:0; }
+.logistics-batch-work form { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.logistics-batch-work input, .logistics-ean-dialog select { flex:1; min-width:220px; padding:10px; border:1px solid #c9d6e9; border-radius:8px; font:inherit; }
+.logistics-batch-products { display:grid; gap:6px; margin:14px 0; }
+.logistics-batch-products>div, .logistics-batch-selected>div { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px; border:1px solid #e1e8f3; border-radius:8px; }
+.logistics-batch-products img, .logistics-batch-selected img { width:42px; height:42px; object-fit:contain; margin-right:8px; vertical-align:middle; }
+.logistics-batch-selected { border:1px solid #afc8fa; background:#f7faff; padding:14px; border-radius:10px; margin:14px 0; }
+.logistics-ean-dialog { background:#fff8e6; border:1px solid #f2ca73; border-radius:10px; padding:14px; margin-top:16px; display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.logistics-ean-dialog h4, .logistics-ean-dialog p { width:100%; margin:2px 0; }
+@media (max-width:800px) { .logistics-batch-layout { grid-template-columns:1fr; } }
 .logistics-header, .logistics-toolbar, .logistics-select-row, .logistics-order-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .logistics-header { margin-bottom: 18px; align-items: flex-start; }
 .logistics-header h1 { margin: 0 0 6px; }
