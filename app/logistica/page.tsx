@@ -173,6 +173,7 @@ export default function LogisticaPage() {
     try {
       const { data } = await supabase.auth.getSession();
       if (!data.session) throw new Error("Sesión vencida.");
+      const warnings: string[] = [];
       for (const mode of ["self_service", "cross_docking"] as const) {
         const group = pendingPrinted.filter((item) => item.mode === mode);
         if (!group.length) continue;
@@ -182,11 +183,12 @@ export default function LogisticaPage() {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "No se pudo crear el lote.");
+        if (result.warning) warnings.push(result.warning);
         setPendingPrinted((current) => current.filter((item) => item.mode !== mode));
       }
       setBatchRefresh((value) => value + 1);
       setTab("batches");
-      setMessage("Lote creado. Ya podés comenzar la preparación.");
+      setMessage(warnings.length ? warnings.join(" ") : "Lote creado y hoja de control oficial guardada. Ya podés comenzar la preparación.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo crear el lote."); }
     finally { setPrinting(false); }
   }
@@ -198,6 +200,7 @@ export default function LogisticaPage() {
     try {
       const { data } = await supabase.auth.getSession();
       if (!data.session) throw new Error("Sesión vencida.");
+      const warnings: string[] = [];
       for (const mode of ["self_service", "cross_docking"] as const) {
         const byMode = group.filter((item) => item.mode === mode);
         if (!byMode.length) continue;
@@ -207,9 +210,10 @@ export default function LogisticaPage() {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "No se pudo crear el lote.");
+        if (result.warning) warnings.push(result.warning);
       }
       setSelected([]); setBatchRefresh((value) => value + 1); setTab("batches");
-      setMessage("Lote creado con las etiquetas que ya estaban impresas.");
+      setMessage(warnings.length ? warnings.join(" ") : "Lote creado con las etiquetas impresas y hoja de control oficial guardada.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo crear el lote."); }
     finally { setPrinting(false); }
   }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/serverAuth";
 import { createAdminClient } from "@/lib/supabaseAdmin";
+import { getConnectedMeliAccount, refreshAccessToken } from "@/lib/mercadolibre";
+import { controlPath, fetchOfficialControl, LOGISTICS_CONTROLS_BUCKET } from "@/lib/logisticsControlArchive";
 
 export const runtime = "nodejs";
 
@@ -58,7 +60,20 @@ export async function POST(request: NextRequest) {
       created_by: user.id,
     }).select("*").single();
     if (error) throw error;
-    return NextResponse.json({ batch: data }, { status: 201 });
+    let warning: string | undefined;
+    try {
+      const connected = await getConnectedMeliAccount();
+      if (!connected) throw new Error("No hay una cuenta de Mercado Libre conectada.");
+      const account = await refreshAccessToken(connected);
+      const pdf = await fetchOfficialControl(shipments.map((shipment) => shipment.id), account);
+      const { error: uploadError } = await admin.storage.from(LOGISTICS_CONTROLS_BUCKET).upload(controlPath(data.id), pdf, {
+        contentType: "application/pdf", upsert: false,
+      });
+      if (uploadError) throw uploadError;
+    } catch (archiveError) {
+      warning = `El lote se creó, pero no se pudo guardar la hoja oficial: ${archiveError instanceof Error ? archiveError.message : "error desconocido"}. Descargala desde Ventas mientras Mercado Libre todavía la permita.`;
+    }
+    return NextResponse.json({ batch: data, warning }, { status: 201 });
   } catch (error) { return errorResponse(error); }
 }
 
