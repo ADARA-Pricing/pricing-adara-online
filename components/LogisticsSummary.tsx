@@ -9,7 +9,6 @@ type Summary = {
   counts: { flex: number; collection: number; full: number };
   flexByLocality: Array<{ locality: string; province: string; count: number }>;
   unresolved: number;
-  coverageDays: number;
 };
 
 export function LogisticsSummary() {
@@ -37,7 +36,7 @@ export function LogisticsSummary() {
     {error && <div className="message info" role="alert">{error}</div>}
     {summary && <><div className="logistics-daily-cards"><div><span>Colecta</span><strong>{summary.counts.collection}</strong></div><div><span>Full</span><strong>{summary.counts.full}</strong></div><div><span>Flex</span><strong>{summary.counts.flex}</strong></div><div><span>Total</span><strong>{summary.counts.collection + summary.counts.full + summary.counts.flex}</strong></div></div>
       <div className="logistics-daily-table"><h3>Flex por localidad</h3><table><thead><tr><th>Localidad</th><th>Provincia</th><th>Envíos Flex</th></tr></thead><tbody>{summary.flexByLocality.map((row) => <tr key={`${row.locality}-${row.province}`}><td>{row.locality}</td><td>{row.province || "—"}</td><td><strong>{row.count}</strong></td></tr>)}{!summary.flexByLocality.length && <tr><td colSpan={3}>No hay envíos Flex para hoy en los datos consultados.</td></tr>}</tbody></table></div>
-      <p className="logistics-summary-note">Fecha: {summary.day} · actualizado {new Date(summary.checkedAt).toLocaleString("es-AR")}. Flex y Colecta: fecha real de salida si Mercado Libre la informó; si siguen pendientes, fecha límite prevista. Full: fecha real en que Mercado Libre marcó el envío como despachado. Se consultan ventas de los últimos {summary.coverageDays} días.</p>
+      <p className="logistics-summary-note">Fecha: {summary.day} · actualizado {new Date(summary.checkedAt).toLocaleString("es-AR")}. Flex y Colecta: fecha real de salida si Mercado Libre la informó; si siguen pendientes, fecha límite prevista. Full: fecha real en que Mercado Libre marcó el envío como despachado. Se consultan ventas de ayer y hoy, más los lotes con despacho hoy; solo se cuentan envíos de hoy.</p>
       {summary.unresolved > 0 && <div className="message info" role="status">Mercado Libre no confirmó fecha o estado de {summary.unresolved} envíos. El resumen puede estar incompleto; reintentá actualizar.</div>}
     </>}
   </section>;

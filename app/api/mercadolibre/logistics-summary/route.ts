@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConnectedMeliAccount, meliFetch, refreshAccessToken } from "@/lib/mercadolibre";
 import { requireApiUser } from "@/lib/serverAuth";
+import { createAdminClient } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,9 +30,9 @@ export async function GET(request: NextRequest) {
     const account = await refreshAccessToken(connected);
     const target = request.nextUrl.searchParams.get("day") || dayKey(new Date());
     if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) return NextResponse.json({ error: "Fecha inválida." }, { status: 400 });
-    // Incluye ventas anteriores cuyo despacho efectivo o previsto cae en el día.
+    // Buscar solo ventas de ayer y hoy; los lotes cubren ventas más antiguas preparadas para hoy.
     const fromDate = new Date(`${target}T12:00:00-03:00`);
-    fromDate.setUTCDate(fromDate.getUTCDate() - 30);
+    fromDate.setUTCDate(fromDate.getUTCDate() - 1);
     const from = `${dayKey(fromDate)}T00:00:00.000-03:00`;
     const to = `${target}T23:59:59.999-03:00`;
     const ids = new Set<string>();
@@ -48,6 +49,16 @@ export async function GET(request: NextRequest) {
       if (!result.results?.length || offset + limit >= total) break;
     }
     if (total > 1000) return NextResponse.json({ error: "Hay más de 1000 ventas en el período de búsqueda. No se muestra un resumen parcial; hace falta ampliar la consulta." }, { status: 422 });
+
+    const { data: batches, error: batchesError } = await createAdminClient()
+      .from("logistics_batches").select("shipments").eq("dispatch_day", target);
+    if (batchesError) throw batchesError;
+    for (const batch of batches || []) {
+      for (const shipment of (batch.shipments || []) as Array<{ id?: string }>) {
+        const id = String(shipment.id || "");
+        if (/^\d{5,25}$/.test(id)) ids.add(id);
+      }
+    }
 
     const entries: Array<{ id: string; mode: string; locality: string; province: string; source: "actual" | "scheduled" }> = [];
     let unresolved = 0;
@@ -107,7 +118,6 @@ export async function GET(request: NextRequest) {
       counts: { flex: entries.filter((item) => item.mode === "self_service").length, collection: entries.filter((item) => item.mode === "cross_docking").length, full: entries.filter((item) => item.mode === "fulfillment").length },
       flexByLocality: [...flexByLocality.values()].sort((a, b) => b.count - a.count || a.locality.localeCompare(b.locality, "es-AR")),
       unresolved,
-      coverageDays: 30,
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo generar el resumen.";
