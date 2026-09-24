@@ -27,14 +27,14 @@ async function request(accessToken: string, url: string, init: RequestInit = {})
 }
 async function folder(accessToken: string, name: string, parent: string) {
   const q = `'${parent}' in parents and name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-  const found = await request(accessToken, `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`);
+  const found = await request(accessToken, `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
   const files = (await found.json() as { files?: Array<{ id: string }> }).files || [];
   if (files[0]) return files[0].id;
-  const created = await request(accessToken, "https://www.googleapis.com/drive/v3/files", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: [parent] }) });
+  const created = await request(accessToken, "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: [parent] }) });
   return (await created.json() as { id: string }).id;
 }
 async function upload(accessToken: string, parent: string, name: string, bytes: Uint8Array, mimeType: string) {
-  await request(accessToken, `https://www.googleapis.com/upload/drive/v3/files?uploadType=media&fields=id&name=${encodeURIComponent(name)}&parents=${encodeURIComponent(parent)}`, { method: "POST", headers: { "Content-Type": mimeType }, body: Buffer.from(bytes) });
+  await request(accessToken, `https://www.googleapis.com/upload/drive/v3/files?uploadType=media&fields=id&name=${encodeURIComponent(name)}&parents=${encodeURIComponent(parent)}&supportsAllDrives=true`, { method: "POST", headers: { "Content-Type": mimeType }, body: Buffer.from(bytes) });
 }
 const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
