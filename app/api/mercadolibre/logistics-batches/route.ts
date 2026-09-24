@@ -10,6 +10,10 @@ type Item = { sku: string; quantity: number; title: string; image?: string | nul
 type Shipment = { id: string; mode: "cross_docking" | "self_service"; dispatchAt: string; orderIds: string[]; buyer: string; items: Item[] };
 type Batch = { id: string; status: "printed" | "collecting" | "packing" | "completed"; shipments: Shipment[]; staged: Record<string, number>; packed: Record<string, Record<string, number>> };
 
+function argentinaDayKey(value = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
+}
+
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "No se pudo actualizar el lote.";
   return NextResponse.json({ error: message }, { status: message === "No autorizado." ? 401 : 500 });
@@ -30,7 +34,7 @@ function complete(actual: Record<string, number>, expected: Record<string, numbe
 export async function GET(request: NextRequest) {
   try {
     await requireApiUser(request);
-    const { data, error } = await createAdminClient().from("logistics_batches").select("*").order("created_at", { ascending: false }).limit(100);
+    const { data, error } = await createAdminClient().from("logistics_batches").select("*").eq("dispatch_day", argentinaDayKey()).order("created_at", { ascending: false }).limit(100);
     if (error) throw error;
     return NextResponse.json({ batches: data || [] }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return errorResponse(error); }
@@ -54,7 +58,15 @@ export async function POST(request: NextRequest) {
     if (existingError) throw existingError;
     const alreadyBatched = new Set((existing || []).flatMap((batch) => (batch.shipments as Shipment[]).map((shipment) => shipment.id)));
     const repeated = shipments.find((shipment) => alreadyBatched.has(shipment.id));
-    if (repeated) return NextResponse.json({ error: `El envío ${repeated.id} ya pertenece a un lote. Abrí ese lote o actualizá la pestaña.` }, { status: 409 });
+    if (repeated) {
+      const existingBatch = (existing || []).find((batch) => (batch.shipments as Shipment[]).some((shipment) => shipment.id === repeated.id));
+      const requestedIds = new Set(shipments.map((shipment) => shipment.id));
+      const existingIds = new Set(((existingBatch?.shipments || []) as Shipment[]).map((shipment) => shipment.id));
+      if (existingBatch && requestedIds.size === existingIds.size && [...requestedIds].every((id) => existingIds.has(id))) {
+        return NextResponse.json({ batch: existingBatch, existing: true });
+      }
+      return NextResponse.json({ error: `El envío ${repeated.id} ya pertenece a otro lote. Abrí ese lote o actualizá la pestaña.` }, { status: 409 });
+    }
     const { data, error } = await admin.from("logistics_batches").insert({
       mode: shipments[0].mode, dispatch_day: dispatchDay, shipments,
       created_by: user.id,
