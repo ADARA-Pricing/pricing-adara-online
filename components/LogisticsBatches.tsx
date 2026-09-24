@@ -176,6 +176,25 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
     finally { setBusy(false); }
   }
 
+  async function downloadZpl() {
+    if (!batch || busy) return;
+    setBusy(true); setMessage(""); setFeedbackTone("info");
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) throw new Error("Sesión vencida.");
+      const response = await fetch("/api/mercadolibre/shipment-labels", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` },
+        body: JSON.stringify({ shipmentIds: batch.shipments.map((shipment) => shipment.id), format: "zpl" }),
+      });
+      if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error || "Mercado Libre no pudo volver a generar las etiquetas ZPL."); }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a"); link.href = url; link.download = `etiquetas-${batch.mode === "self_service" ? "flex" : "colecta"}-${batch.dispatch_day}.zpl`; document.body.append(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setMessage("Etiquetas ZPL descargadas.");
+    } catch (error) { setFeedbackTone("error"); setMessage(error instanceof Error ? error.message : "No se pudieron descargar las etiquetas ZPL."); }
+    finally { setBusy(false); }
+  }
+
   return <section className="logistics-batches">
     <div className="logistics-batch-head"><div><h2>Lotes de empaquetado</h2><p>Cada tanda impresa y confirmada queda separada. Los envíos nuevos generan otro lote.</p></div><button className="button ghost" onClick={() => void load()} type="button">Actualizar lotes</button></div>
     {message && <div className={`logistics-scan-feedback ${feedbackTone}`} role="status">{feedbackTone === "success" ? <CheckCircle2 /> : feedbackTone === "error" ? <AlertTriangle /> : <ScanBarcode />}<span>{message}</span></div>}
@@ -186,6 +205,7 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
         <div className="logistics-batch-actions">
           {batch.status === "printed" && <button className="button" type="button" onClick={() => void action("start")} disabled={busy}>Comenzar preparación</button>}
           <button className="button ghost" type="button" onClick={printPreparation} disabled={busy}>Reimprimir hoja de preparación</button>
+          <button className="button ghost" type="button" onClick={() => void downloadZpl()} disabled={busy}>Descargar etiquetas ZPL</button>
           <button className="button ghost" type="button" onClick={() => void downloadControl()} disabled={busy}>Descargar hoja de control ML</button>
         </div>
         {batch.status === "collecting" && <><h4>Paso 1 · Verificar productos traídos del depósito</h4><p>Escaneá el EAN de cada unidad. El sistema marca faltantes y rechaza productos que no pertenecen al lote.</p>

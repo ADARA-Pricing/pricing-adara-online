@@ -3,6 +3,8 @@ import { requireApiUser } from "@/lib/serverAuth";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { getConnectedMeliAccount, refreshAccessToken } from "@/lib/mercadolibre";
 import { controlPath, fetchOfficialControl, LOGISTICS_CONTROLS_BUCKET } from "@/lib/logisticsControlArchive";
+import { archiveBatchToDrive } from "@/lib/googleDriveArchive";
+import { batchPdf } from "@/lib/logisticsBatchPdf";
 
 export const runtime = "nodejs";
 
@@ -161,6 +163,19 @@ export async function PATCH(request: NextRequest) {
     } else return NextResponse.json({ error: "Acción no válida para el estado actual del lote." }, { status: 409 });
     const { data: updated, error: updateError } = await admin.from("logistics_batches").update({ ...update, updated_at: new Date().toISOString() }).eq("id", batch.id).select("*").single();
     if (updateError) throw updateError;
-    return NextResponse.json({ batch: updated });
+    let archiveWarning: string | undefined;
+    if (updated.status === "completed") {
+      try {
+        const finished = updated as unknown as { id: string; mode: string; dispatch_day: string; shipments: Shipment[]; created_at?: string };
+        const files = [
+          { name: "hoja-deposito-adara.pdf", bytes: await batchPdf(finished, "control"), mimeType: "application/pdf" },
+          { name: "resumen-lote.pdf", bytes: await batchPdf(finished, "summary"), mimeType: "application/pdf" },
+        ];
+        const { data: official } = await admin.storage.from(LOGISTICS_CONTROLS_BUCKET).download(controlPath(finished.id));
+        if (official) files.push({ name: "hoja-control-mercado-libre.pdf", bytes: new Uint8Array(await official.arrayBuffer()), mimeType: "application/pdf" });
+        await archiveBatchToDrive(finished, files);
+      } catch (archiveError) { archiveWarning = `El lote se completó, pero no se pudo archivar en Drive: ${archiveError instanceof Error ? archiveError.message : "error desconocido"}`; }
+    }
+    return NextResponse.json({ batch: updated, archiveWarning });
   } catch (error) { return errorResponse(error); }
 }
