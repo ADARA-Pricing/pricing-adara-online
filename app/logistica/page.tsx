@@ -112,6 +112,7 @@ export default function LogisticaPage() {
     setPrinting(true);
     setMessage(`Solicitando ${ids.length} etiqueta${ids.length === 1 ? "" : "s"} a Mercado Libre...`);
     try {
+      let zplBatchMessage: string | null = null;
       const bridge = "https://localhost:9101";
       let printer: Record<string, unknown> | null = null;
       if (format === "zebra") {
@@ -159,47 +160,23 @@ export default function LogisticaPage() {
           link.click();
         }
         window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
+        if (format === "zpl") {
+          const downloadedShipments = ids.map((id) => shipments.find((item) => item.id === id)).filter((item): item is Shipment => Boolean(item));
+          zplBatchMessage = await createBatches(downloadedShipments);
+          setBatchRefresh((value) => value + 1);
+          setTab("batches");
+        }
       }
       await loadBoard(day);
-      setMessage(format === "zebra" ? `Se enviaron ${ids.length} etiquetas ZPL a la Zebra. Confirmá que salieron correctamente para crear o abrir el lote.` : format === "control" ? "Hoja de control de Mercado Libre abierta para imprimir en papel." : "ZPL descargado.");
+      setMessage(format === "zebra" ? `Se enviaron ${ids.length} etiquetas ZPL a la Zebra. Confirmá que salieron correctamente para crear o abrir el lote.` : format === "control" ? "Hoja de control de Mercado Libre abierta para imprimir en papel." : zplBatchMessage || "ZPL descargado.");
     } catch (error) {
       pdfTab?.close();
       setMessage(error instanceof Error ? error.message : "No se pudieron obtener las etiquetas.");
     } finally { setPrinting(false); }
   }
 
-  async function confirmPrinted() {
-    if (!pendingPrinted.length || printing) return;
-    setPrinting(true);
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) throw new Error("Sesión vencida.");
-      const warnings: string[] = [];
-      for (const mode of ["self_service", "cross_docking"] as const) {
-        const group = pendingPrinted.filter((item) => item.mode === mode);
-        if (!group.length) continue;
-        const response = await fetch("/api/mercadolibre/logistics-batches", {
-          method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` },
-          body: JSON.stringify({ shipments: group }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "No se pudo crear el lote.");
-        if (result.warning) warnings.push(result.warning);
-        if (result.existing) warnings.push(`El lote de ${mode === "self_service" ? "Flex" : "colecta"} ya existía; se abrió sin duplicarlo.`);
-        setPendingPrinted((current) => current.filter((item) => item.mode !== mode));
-      }
-      setBatchRefresh((value) => value + 1);
-      setTab("batches");
-      setMessage(warnings.length ? warnings.join(" ") : "Lote creado y hoja de control oficial guardada. Ya podés comenzar la preparación.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo crear el lote."); }
-    finally { setPrinting(false); }
-  }
-
-  async function createBatchFromPrinted() {
-    const group = selectedPrintedOnPage.map((id) => shipments.find((item) => item.id === id)).filter((item): item is Shipment => Boolean(item));
-    if (!group.length || printing) return;
-    setPrinting(true);
-    try {
+  async function createBatches(group: Shipment[]) {
+    if (!group.length) throw new Error("No hay envíos para crear el lote.");
       const { data } = await supabase.auth.getSession();
       if (!data.session) throw new Error("Sesión vencida.");
       const warnings: string[] = [];
@@ -213,9 +190,34 @@ export default function LogisticaPage() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "No se pudo crear el lote.");
         if (result.warning) warnings.push(result.warning);
+        if (result.existing) warnings.push(`El lote de ${mode === "self_service" ? "Flex" : "colecta"} ya existía; se abrió sin duplicarlo.`);
       }
+      return warnings.length ? warnings.join(" ") : "ZPL descargado y lote creado. Ya podés comenzar la preparación.";
+  }
+
+  async function confirmPrinted() {
+    if (!pendingPrinted.length || printing) return;
+    setPrinting(true);
+    try {
+      const message = await createBatches(pendingPrinted);
+      for (const mode of ["self_service", "cross_docking"] as const) {
+        setPendingPrinted((current) => current.filter((item) => item.mode !== mode));
+      }
+      setBatchRefresh((value) => value + 1);
+      setTab("batches");
+      setMessage(message);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo crear el lote."); }
+    finally { setPrinting(false); }
+  }
+
+  async function createBatchFromPrinted() {
+    const group = selectedPrintedOnPage.map((id) => shipments.find((item) => item.id === id)).filter((item): item is Shipment => Boolean(item));
+    if (!group.length || printing) return;
+    setPrinting(true);
+    try {
+      const message = await createBatches(group);
       setSelected([]); setBatchRefresh((value) => value + 1); setTab("batches");
-      setMessage(warnings.length ? warnings.join(" ") : "Lote creado con las etiquetas impresas y hoja de control oficial guardada.");
+      setMessage(message);
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo crear el lote."); }
     finally { setPrinting(false); }
   }
