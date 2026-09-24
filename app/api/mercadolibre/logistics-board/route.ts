@@ -107,6 +107,12 @@ export async function GET(request: NextRequest) {
       : { data: [] as Array<{ meli_item_id: string; meli_thumbnail: string | null; sku: string | null }>, error: null };
     if (publicationError) throw new Error(publicationError.message);
     const imageByItem = new Map((publications || []).map((row) => [row.meli_item_id, row]));
+    const skus = [...new Set(relevant.flatMap(({ id }) => (byShipment.get(id) || []).flatMap((order) => (order.order_items || []).map((item) => item.item?.seller_sku || imageByItem.get(item.item?.id || "")?.sku).filter(Boolean))))] as string[];
+    const { data: products, error: productsError } = skus.length
+      ? await createAdminClient().from("products").select("sku,name,description").in("sku", skus)
+      : { data: [] as Array<{ sku: string; name: string; description: string | null }>, error: null };
+    if (productsError) throw new Error(productsError.message);
+    const productBySku = new Map((products || []).map((product) => [product.sku, product]));
 
     const shipments = relevant.map(({ id, shipment, sla }) => {
       const ordersForShipment = byShipment.get(id) || [];
@@ -123,15 +129,18 @@ export async function GET(request: NextRequest) {
         buyer: ordersForShipment.map((order) => [order.buyer?.first_name, order.buyer?.last_name].filter(Boolean).join(" ") || order.buyer?.nickname || "").find(Boolean) || "Cliente no informado",
         locality: shipment.destination?.shipping_address?.city?.name || shipment.receiver_address?.city?.name || null,
         province: shipment.destination?.shipping_address?.state?.name || shipment.receiver_address?.state?.name || null,
-        items: ordersForShipment.flatMap((order) => (order.order_items || []).map((item) => ({
+        items: ordersForShipment.flatMap((order) => (order.order_items || []).map((item) => {
+          const sku = item.item?.seller_sku || imageByItem.get(item.item?.id || "")?.sku || "";
+          const product = productBySku.get(sku);
+          return {
           orderId: String(order.id),
           itemId: item.item?.id || "",
-          sku: item.item?.seller_sku || imageByItem.get(item.item?.id || "")?.sku || "",
-          title: item.item?.title || "Producto",
+          sku,
+          title: product?.name || item.item?.title || "Producto",
           image: imageByItem.get(item.item?.id || "")?.meli_thumbnail || null,
           quantity: Number(item.quantity || 0),
           unitPrice: Number(item.unit_price || 0),
-        }))),
+        }; })),
       };
     }).sort((a, b) => String(a.dispatchAt).localeCompare(String(b.dispatchAt)));
     return NextResponse.json({ day: targetKey, shipments, checkedAt: new Date().toISOString(), incomplete }, { headers: { "Cache-Control": "private, no-store" } });

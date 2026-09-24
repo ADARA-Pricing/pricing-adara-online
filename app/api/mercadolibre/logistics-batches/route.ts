@@ -31,6 +31,12 @@ function complete(actual: Record<string, number>, expected: Record<string, numbe
   return Object.entries(expected).every(([sku, quantity]) => (actual[sku] || 0) >= quantity);
 }
 
+function barcodeProblem(code: string) {
+  return !/^\d{8}$|^\d{12,14}$/.test(code)
+    ? "Código rechazado: no tiene el formato de un EAN/UPC válido. Parece un número de serie u otro identificador; escaneá el código de barras del producto."
+    : null;
+}
+
 async function skuForEan(admin: ReturnType<typeof createAdminClient>, ean: string) {
   // El EAN principal de Productos es la fuente vigente: puede corregirse aun
   // después de haber creado un lote. La tabla auxiliar conserva EAN adicionales.
@@ -45,7 +51,15 @@ export async function GET(request: NextRequest) {
     await requireApiUser(request);
     const { data, error } = await createAdminClient().from("logistics_batches").select("*").eq("dispatch_day", argentinaDayKey()).order("created_at", { ascending: false }).limit(100);
     if (error) throw error;
-    return NextResponse.json({ batches: data || [] }, { headers: { "Cache-Control": "private, no-store" } });
+    const batches = data || [];
+    const skus = [...new Set(batches.flatMap((batch) => ((batch.shipments || []) as Shipment[]).flatMap((shipment) => shipment.items.map((item) => item.sku)).filter(Boolean)))];
+    const { data: products, error: productsError } = skus.length
+      ? await createAdminClient().from("products").select("sku,name,description").in("sku", skus)
+      : { data: [] as Array<{ sku: string; name: string; description: string | null }>, error: null };
+    if (productsError) throw productsError;
+    const productBySku = new Map((products || []).map((product) => [product.sku, product]));
+    const withInternalNames = batches.map((batch) => ({ ...batch, shipments: ((batch.shipments || []) as Shipment[]).map((shipment) => ({ ...shipment, items: shipment.items.map((item) => ({ ...item, title: productBySku.get(item.sku)?.name || item.title })) })) }));
+    return NextResponse.json({ batches: withInternalNames }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return errorResponse(error); }
 }
 
@@ -123,16 +137,20 @@ export async function PATCH(request: NextRequest) {
       if (!product.ean) await admin.from("products").update({ ean: code }).eq("sku", body.sku).is("ean", null);
       return NextResponse.json({ batch, assigned: { ean: code, sku: body.sku } });
     } else if (body.action === "stage" && batch.status === "collecting") {
+      const invalidBarcode = barcodeProblem(code);
+      if (invalidBarcode) return NextResponse.json({ error: invalidBarcode }, { status: 409 });
       const sku = await skuForEan(admin, code);
-      if (!sku) return NextResponse.json({ error: "EAN desconocido. Asignalo a un SKU de este lote.", unknownEan: code }, { status: 409 });
+      if (!sku) return NextResponse.json({ error: "Código no reconocido. Puede ser un número de serie: usá el EAN/UPC del producto o asignalo manualmente.", unknownEan: code }, { status: 409 });
       if (!expected[sku]) return NextResponse.json({ error: `El SKU ${sku} no pertenece a este lote.` }, { status: 409 });
       if ((batch.staged[sku] || 0) >= expected[sku]) return NextResponse.json({ error: `Ya se verificaron todas las unidades de ${sku}.` }, { status: 409 });
       update = { staged: { ...batch.staged, [sku]: (batch.staged[sku] || 0) + 1 } };
     } else if (body.action === "pack" && batch.status === "packing") {
       const shipment = batch.shipments.find((item) => item.id === body.shipmentId);
       if (!shipment) return NextResponse.json({ error: "Primero escaneá una etiqueta de este lote." }, { status: 409 });
+      const invalidBarcode = barcodeProblem(code);
+      if (invalidBarcode) return NextResponse.json({ error: invalidBarcode }, { status: 409 });
       const sku = await skuForEan(admin, code);
-      if (!sku) return NextResponse.json({ error: "EAN desconocido. Asignalo a un SKU de este lote.", unknownEan: code }, { status: 409 });
+      if (!sku) return NextResponse.json({ error: "Código no reconocido. Puede ser un número de serie: usá el EAN/UPC del producto o asignalo manualmente.", unknownEan: code }, { status: 409 });
       const needed = required([shipment]);
       if (!needed[sku]) return NextResponse.json({ error: `Producto incorrecto: ${sku} no corresponde a esta etiqueta.` }, { status: 409 });
       const current = batch.packed[shipment.id] || {};
