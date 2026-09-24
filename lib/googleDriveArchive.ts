@@ -56,7 +56,7 @@ export async function archiveBatchToDrive(batch: Batch, files: Array<{ name: str
   const year = get("year"), month = Number(get("month")), day = get("day"), hour = get("hour"), minute = get("minute");
   const yearFolder = await folder(accessToken, year, setup.parent);
   const monthFolder = await folder(accessToken, `${String(month).padStart(2, "0")}_${months[month - 1]}`, yearFolder);
-  const dayFolder = await folder(accessToken, `${day}_${months[month - 1]}`, monthFolder);
+  const dayFolder = await folder(accessToken, day, monthFolder);
   const batchFolder = await folder(accessToken, `${hour}-${minute} · ${batch.mode === "self_service" ? "Flex" : "Colecta"} · Lote ${batch.id.slice(0, 8)}`, dayFolder);
   for (const file of files) await upload(accessToken, batchFolder, file.name, file.bytes, file.mimeType);
   return true;
