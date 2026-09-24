@@ -2079,21 +2079,24 @@ export async function POST(request: NextRequest) {
         if (saveError) throw new Error(saveError.message);
 
         updated += 1;
-        logs.push({
-          sku: product.sku,
-          meli_item_id: item.id,
-          old_shipping_cost: oldShippingCost,
-          new_shipping_cost: newShippingCost,
-          status: "updated",
-          message: `Costo de envío actualizado desde MercadoLibre. Fuente: ${shippingSource || "endpoint compatible"}`,
-          created_at: now,
-        });
       }
     }
 
     if (logs.length) {
-      await supabase.from("mercadolibre_shipping_sync_logs").insert(logs);
+      for (const batch of chunk(logs, 500)) {
+        const { error: logError } = await supabase.from("mercadolibre_shipping_sync_logs").insert(batch);
+        if (logError) console.error("No se pudieron guardar incidencias de sincronización", logError);
+      }
     }
+
+    // El dashboard solo consulta incidencias recientes; no conservar un historial
+    // indefinido de sincronizaciones.
+    const logCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { error: cleanupError } = await supabase
+      .from("mercadolibre_shipping_sync_logs")
+      .delete()
+      .lt("created_at", logCutoff);
+    if (cleanupError) console.error("No se pudieron borrar logs vencidos", cleanupError);
 
     const categoryFeeRows = [...categoryFeeObservations.entries()].map(([category, observation]) => {
       const meliCategoryIds = [...observation.meliCategories.keys()];
