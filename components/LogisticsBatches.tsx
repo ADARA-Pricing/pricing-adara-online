@@ -57,6 +57,11 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
   const selectedShipment = batch?.shipments.find((item) => item.id === shipmentId);
   const stagedComplete = products.length > 0 && products.every((item) => (batch?.staged[item.sku] || 0) >= item.quantity);
   useEffect(() => { if (batch?.status === "packing" && !shipmentId) labelRef.current?.focus(); }, [activeId, batch?.status, shipmentId]);
+  useEffect(() => {
+    if (!message || feedbackTone === "info") return;
+    const timeout = window.setTimeout(() => setMessage(""), 3800);
+    return () => window.clearTimeout(timeout);
+  }, [message, feedbackTone]);
 
   const load = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -174,6 +179,7 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
   return <section className="logistics-batches">
     <div className="logistics-batch-head"><div><h2>Lotes de empaquetado</h2><p>Cada tanda impresa y confirmada queda separada. Los envíos nuevos generan otro lote.</p></div><button className="button ghost" onClick={() => void load()} type="button">Actualizar lotes</button></div>
     {message && <div className={`logistics-scan-feedback ${feedbackTone}`} role="status">{feedbackTone === "success" ? <CheckCircle2 /> : feedbackTone === "error" ? <AlertTriangle /> : <ScanBarcode />}<span>{message}</span></div>}
+    {message && feedbackTone !== "info" && <div className={`logistics-scan-popup ${feedbackTone}`} role="alert">{feedbackTone === "success" ? <CheckCircle2 /> : <AlertTriangle />}<div><strong>{feedbackTone === "success" ? "¡CORRECTO!" : "ATENCIÓN"}</strong><span>{message}</span></div></div>}
     <div className="logistics-batch-layout">
       <div className="logistics-batch-list">{batches.map((item) => <button key={item.id} type="button" className={`logistics-batch-card ${activeId === item.id ? "active" : ""}`} onClick={() => { setActiveId(item.id); setShipmentId(null); setMessage(""); }}><strong>{item.mode === "self_service" ? "Flex" : "Colecta"} · {item.shipments.length} {item.shipments.length === 1 ? "envío" : "envíos"}</strong><span>{statusLabel[item.status]}</span><small>Despacho {item.dispatch_day} · creado {new Date(item.created_at).toLocaleString("es-AR")}</small></button>)}{!batches.length && <p>Todavía no hay lotes. Imprimí etiquetas en Ventas y confirmá la tanda.</p>}</div>
       {batch && <div className="logistics-batch-work"><h3>{batch.mode === "self_service" ? "Flex" : "Colecta"} · {batch.shipments.length} envíos</h3><p>Estado: {statusLabel[batch.status]}</p>
