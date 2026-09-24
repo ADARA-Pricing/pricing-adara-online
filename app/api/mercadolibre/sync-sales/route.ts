@@ -660,8 +660,9 @@ export async function POST(request: Request) {
           offset: String(offset),
         });
         const data = await meliFetch(`/orders/search?${params.toString()}`, account);
-        const orders = (Array.isArray(data?.results) ? data.results : []) as MeliOrder[];
-        scanned += orders.length;
+        const searchOrders = (Array.isArray(data?.results) ? data.results : []) as MeliOrder[];
+        const orders = onlyOrderId ? searchOrders.filter((order) => asString(order.id) === onlyOrderId) : searchOrders;
+        scanned += searchOrders.length;
 
         // La búsqueda no siempre incluye cuotas ni cargos. Pedimos el detalle
         // de los pedidos en grupos chicos para no demorar toda la ventana por
@@ -781,7 +782,7 @@ export async function POST(request: Request) {
 
         const pagingTotal = Number(data?.paging?.total || 0);
         offset += limit;
-        if (!orders.length || offset >= pagingTotal) break;
+        if (!searchOrders.length || offset >= pagingTotal) break;
       }
 
       const windowRows = [...windowRowsByKey.values()];
