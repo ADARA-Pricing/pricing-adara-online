@@ -9,7 +9,7 @@ function printable(value: unknown) {
     .replace(/[^\x20-\x7e\xa0-\xff]/g, "?");
 }
 
-export async function batchPdf(batch: Batch, kind: "control" | "summary") {
+export async function batchPdf(batch: Batch, kind: "control" | "preparation" | "summary") {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -19,6 +19,41 @@ export async function batchPdf(batch: Batch, kind: "control" | "summary") {
   let page = pdf.addPage([width, height]);
   let y = height - margin;
   const lineHeight = 15;
+
+  if (kind === "preparation") {
+    const ink = rgb(0.13, 0.13, 0.13);
+    const gray = rgb(0.62, 0.62, 0.62);
+    const columns = { check: margin + 6, sku: margin + 38, product: margin + 125, quantity: width - margin - 58 };
+    const totals = new Map<string, { title: string; quantity: number }>();
+    for (const shipment of batch.shipments) for (const item of shipment.items) {
+      const current = totals.get(item.sku) || { title: item.title, quantity: 0 };
+      current.quantity += item.quantity;
+      totals.set(item.sku, current);
+    }
+    const header = () => {
+      page.drawText("Hoja de preparación", { x: margin, y: height - 62, font: bold, size: 17, color: ink });
+      page.drawText("Buscar en depósito · total por producto", { x: margin, y: height - 82, font: regular, size: 10, color: rgb(0.35, 0.35, 0.35) });
+      page.drawText(`${batch.mode === "self_service" ? "Flex" : "Colecta"} | Despacho ${batch.dispatch_day} | ${batch.shipments.length} envíos`, { x: margin, y: height - 98, font: regular, size: 8, color: rgb(0.35, 0.35, 0.35) });
+      page.drawRectangle({ x: margin, y: height - 128, width: width - 2 * margin, height: 20, color: gray });
+      page.drawText("✓", { x: columns.check, y: height - 121, font: bold, size: 9, color: rgb(1, 1, 1) });
+      page.drawText("SKU", { x: columns.sku, y: height - 121, font: bold, size: 9, color: rgb(1, 1, 1) });
+      page.drawText("PRODUCTO", { x: columns.product, y: height - 121, font: bold, size: 9, color: rgb(1, 1, 1) });
+      page.drawText("CANT.", { x: columns.quantity, y: height - 121, font: bold, size: 9, color: rgb(1, 1, 1) });
+      y = height - 148;
+    };
+    header();
+    for (const [sku, item] of [...totals].sort(([a], [b]) => a.localeCompare(b))) {
+      if (y < margin + 30) { page = pdf.addPage([width, height]); header(); }
+      page.drawRectangle({ x: margin + 5, y: y - 7, width: 10, height: 10, borderWidth: 1, borderColor: ink });
+      page.drawText(printable(sku), { x: columns.sku, y, font: bold, size: 9, color: ink });
+      const product = printable(item.title).slice(0, 58);
+      page.drawText(product, { x: columns.product, y, font: regular, size: 9, color: ink });
+      page.drawText(String(item.quantity), { x: columns.quantity, y, font: bold, size: 9, color: ink });
+      y -= 19;
+      page.drawLine({ start: { x: margin, y: y + 5 }, end: { x: width - margin, y: y + 5 }, thickness: 0.5, color: rgb(0.78, 0.78, 0.78) });
+    }
+    return pdf.save();
+  }
 
   if (kind === "control") {
     const leftX = margin;

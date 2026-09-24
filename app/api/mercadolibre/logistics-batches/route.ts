@@ -33,6 +33,21 @@ function complete(actual: Record<string, number>, expected: Record<string, numbe
   return Object.entries(expected).every(([sku, quantity]) => (actual[sku] || 0) >= quantity);
 }
 
+async function withInternalProductNames<T extends { shipments: Shipment[] }>(admin: ReturnType<typeof createAdminClient>, batch: T): Promise<T> {
+  const skus = [...new Set(batch.shipments.flatMap((shipment) => shipment.items.map((item) => item.sku)).filter(Boolean))];
+  if (!skus.length) return batch;
+  const { data, error } = await admin.from("products").select("sku,name").in("sku", skus);
+  if (error) throw error;
+  const names = new Map((data || []).map((product) => [product.sku, product.name]));
+  return {
+    ...batch,
+    shipments: batch.shipments.map((shipment) => ({
+      ...shipment,
+      items: shipment.items.map((item) => ({ ...item, title: names.get(item.sku) || item.title })),
+    })),
+  } as T;
+}
+
 function barcodeProblem(code: string) {
   return !/^\d{8}$|^\d{12,14}$/.test(code)
     ? "Código rechazado: no tiene el formato de un EAN/UPC válido. Parece un número de serie u otro identificador; escaneá el código de barras del producto."
@@ -129,9 +144,10 @@ export async function PATCH(request: NextRequest) {
     if (body.action === "archive") {
       if (batch.status !== "completed") return NextResponse.json({ error: "El lote debe estar completado antes de archivarlo." }, { status: 409 });
       const finished = data as unknown as { id: string; mode: string; dispatch_day: string; shipments: Shipment[]; created_at?: string };
+      const prepared = await withInternalProductNames(admin, finished);
       const files = [
-        { name: "hoja-deposito-adara.pdf", bytes: await batchPdf(finished, "control"), mimeType: "application/pdf" },
-        { name: "resumen-lote.pdf", bytes: await batchPdf(finished, "summary"), mimeType: "application/pdf" },
+        { name: "hoja-preparacion.pdf", bytes: await batchPdf(prepared, "preparation"), mimeType: "application/pdf" },
+        { name: "resumen-lote.pdf", bytes: await batchPdf(prepared, "summary"), mimeType: "application/pdf" },
       ];
       const { data: official } = await admin.storage.from(LOGISTICS_CONTROLS_BUCKET).download(controlPath(finished.id));
       if (official) files.push({ name: "hoja-control-mercado-libre.pdf", bytes: new Uint8Array(await official.arrayBuffer()), mimeType: "application/pdf" });
@@ -179,9 +195,10 @@ export async function PATCH(request: NextRequest) {
     if (updated.status === "completed") {
       try {
         const finished = updated as unknown as { id: string; mode: string; dispatch_day: string; shipments: Shipment[]; created_at?: string };
+        const prepared = await withInternalProductNames(admin, finished);
         const files = [
-          { name: "hoja-deposito-adara.pdf", bytes: await batchPdf(finished, "control"), mimeType: "application/pdf" },
-          { name: "resumen-lote.pdf", bytes: await batchPdf(finished, "summary"), mimeType: "application/pdf" },
+          { name: "hoja-preparacion.pdf", bytes: await batchPdf(prepared, "preparation"), mimeType: "application/pdf" },
+          { name: "resumen-lote.pdf", bytes: await batchPdf(prepared, "summary"), mimeType: "application/pdf" },
         ];
         const { data: official } = await admin.storage.from(LOGISTICS_CONTROLS_BUCKET).download(controlPath(finished.id));
         if (official) files.push({ name: "hoja-control-mercado-libre.pdf", bytes: new Uint8Array(await official.arrayBuffer()), mimeType: "application/pdf" });
