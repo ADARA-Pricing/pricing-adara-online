@@ -126,7 +126,19 @@ export async function PATCH(request: NextRequest) {
     const expected = required(batch.shipments);
     const code = (body.code || "").trim();
     let update: Record<string, unknown> = {};
-    if (body.action === "start" && batch.status === "printed") update = { status: "collecting" };
+    if (body.action === "archive") {
+      if (batch.status !== "completed") return NextResponse.json({ error: "El lote debe estar completado antes de archivarlo." }, { status: 409 });
+      const finished = data as unknown as { id: string; mode: string; dispatch_day: string; shipments: Shipment[]; created_at?: string };
+      const files = [
+        { name: "hoja-deposito-adara.pdf", bytes: await batchPdf(finished, "control"), mimeType: "application/pdf" },
+        { name: "resumen-lote.pdf", bytes: await batchPdf(finished, "summary"), mimeType: "application/pdf" },
+      ];
+      const { data: official } = await admin.storage.from(LOGISTICS_CONTROLS_BUCKET).download(controlPath(finished.id));
+      if (official) files.push({ name: "hoja-control-mercado-libre.pdf", bytes: new Uint8Array(await official.arrayBuffer()), mimeType: "application/pdf" });
+      const saved = await archiveBatchToDrive(finished, files);
+      if (!saved) return NextResponse.json({ error: "Falta configurar Google Drive en Vercel." }, { status: 503 });
+      return NextResponse.json({ batch: data, archived: true });
+    } else if (body.action === "start" && batch.status === "printed") update = { status: "collecting" };
     else if (body.action === "packing" && batch.status === "collecting") {
       if (!complete(batch.staged, expected)) return NextResponse.json({ error: "Todavía faltan productos por verificar en el paso 1." }, { status: 409 });
       update = { status: "packing" };
