@@ -4,6 +4,7 @@ import { PricingDataStatus } from "@/components/PricingDataStatus";
 import { useDialogFocus } from "@/lib/useDialogFocus";
 import { freshness } from "@/lib/pricingData";
 import { categoryOptions, normalizeFilter } from "@/lib/pricingData";
+import { canonicalCategory } from "@/lib/productCategories";
 
 import { ChangeEvent, FormEvent, Fragment, KeyboardEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
@@ -482,6 +483,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
   const [form, setForm] = useState<Product>(emptyProduct);
+  const [newCategory, setNewCategory] = useState("");
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [meliStatusFilter, setMeliStatusFilter] = useState("");
@@ -580,19 +582,22 @@ export default function ProductsPage() {
   }
 
   function editProduct(product: Product) {
+    setNewCategory("");
     setActiveProductTab("manual");
     setEditorOpen(true);
-    setForm({ ...emptyProduct, ...product });
+    setForm({ ...emptyProduct, ...product, category: canonicalCategory(product.category, products.map((item) => item.category).filter((value): value is string => Boolean(value))) });
     setMessage(`Editando SKU ${product.sku}. Al guardar se actualiza el producto.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function duplicateProduct(product: Product) {
+    setNewCategory("");
     setActiveProductTab("manual");
     setEditorOpen(true);
     setForm({
       ...emptyProduct,
       ...product,
+      category: canonicalCategory(product.category, products.map((item) => item.category).filter((value): value is string => Boolean(value))),
       id: undefined,
       sku: `${product.sku}-COPY`,
       name: `${product.name} copia`,
@@ -602,6 +607,7 @@ export default function ProductsPage() {
   }
 
   function openNewProductModal() {
+    setNewCategory("");
     setForm(emptyProduct);
     setActiveProductTab("manual");
     setEditorOpen(true);
@@ -689,6 +695,14 @@ export default function ProductsPage() {
       return;
     }
 
+    const selectedCategory = form.category === "__new__" ? newCategory : form.category;
+    const category = canonicalCategory(selectedCategory, categories);
+    if (form.category === "__new__" && !category) {
+      setError("Escribí el nombre de la nueva categoría.");
+      setSaving(false);
+      return;
+    }
+
     const payload = {
       sku: cleanSku,
       ean: form.ean?.trim() || null,
@@ -696,7 +710,7 @@ export default function ProductsPage() {
       description: form.description?.trim() || null,
       brand: form.brand?.trim() || null,
       model: form.model?.trim() || null,
-      category: form.category?.trim() || null,
+      category,
       cost_without_vat: Number(form.cost_without_vat),
       vat_rate: Number(form.vat_rate),
       weight_kg: form.weight_kg ?? null,
@@ -841,7 +855,7 @@ export default function ProductsPage() {
     setMessage(null);
     setError(null);
 
-    const payload = importRows.map((row) => row.payload);
+    const payload = importRows.map((row) => ({ ...row.payload, category: canonicalCategory(row.payload.category, categories) }));
     const { error } = await supabase.from("products").upsert(payload, { onConflict: "sku" });
 
     setImporting(false);
@@ -919,7 +933,7 @@ export default function ProductsPage() {
     }
   }
 
-  const categories = useMemo(() => categoryOptions(products.map(product => product.category)), [products]);
+  const categories = useMemo(() => categoryOptions(products.map((product) => canonicalCategory(product.category, []))), [products]);
 
   const enriched = useMemo(() => {
     const groupedProducts = new Map<string, Product[]>();
@@ -1142,7 +1156,7 @@ export default function ProductsPage() {
                 <div className="grid" style={{ marginTop: 12 }}>
                   <div className="field"><label>Marca</label><input value={form.brand || ""} onChange={(e) => update("brand", e.target.value)} placeholder="Enova" /></div>
                   <div className="field"><label>Modelo</label><input value={form.model || ""} onChange={(e) => update("model", e.target.value)} placeholder="43GTV" /></div>
-                  <div className="field"><label>Categoría</label><input value={form.category || ""} onChange={(e) => update("category", e.target.value)} placeholder="TV" /></div>
+                  <div className="field"><label>Categoría</label><select value={form.category && form.category !== "__new__" && !categories.includes(form.category) ? "__new__" : form.category || ""} onChange={(e) => { update("category", e.target.value); setNewCategory(""); }}><option value="">Sin categoría</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}<option value="__new__">+ Crear categoría nueva</option></select>{(form.category === "__new__" || Boolean(form.category && !categories.includes(form.category))) && <input value={form.category === "__new__" ? newCategory : newCategory || form.category || ""} onChange={(e) => { setNewCategory(e.target.value); if (form.category !== "__new__") update("category", "__new__"); }} placeholder="Nombre de la nueva categoría" aria-label="Nueva categoría" />}</div>
                   <div className="field"><label>Proveedor</label><input value={form.supplier || ""} onChange={(e) => update("supplier", e.target.value)} placeholder="Radio Victoria" /></div>
                 </div>
 

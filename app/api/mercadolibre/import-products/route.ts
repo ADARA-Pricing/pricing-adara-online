@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { getConnectedMeliAccount, meliFetch } from "@/lib/mercadolibre";
 import type { Product } from "@/lib/types";
+import { canonicalCategory } from "@/lib/productCategories";
 
 type MeliAttribute = {
   id?: string;
@@ -204,6 +205,7 @@ async function buildPreview() {
 
   const items = await getItems(itemIds, account);
   const categories = await getCategories(items, account);
+  const existingCategoryNames = (products || []).map((product: ExistingProduct) => product.category).filter((value): value is string => Boolean(value));
   const existingBySku = new Map<string, ExistingProduct>();
   (products || []).forEach((product: ExistingProduct) => {
     existingBySku.set(normalizeSku(product.sku), product);
@@ -215,6 +217,7 @@ async function buildPreview() {
     const existing = existingBySku.get(sku) || null;
     const category = item.category_id ? categories.get(item.category_id) || null : null;
     const payload = buildImportedProduct(item, category, existing);
+    payload.category = canonicalCategory(payload.category, existingCategoryNames);
 
     return {
       meli_item_id: item.id,
