@@ -1,4 +1,4 @@
-import { createSign } from "crypto";
+import { createSign, randomUUID } from "crypto";
 
 type Batch = { id: string; mode: string; dispatch_day: string; created_at?: string; shipments: unknown[] };
 
@@ -34,7 +34,16 @@ async function folder(accessToken: string, name: string, parent: string) {
   return (await created.json() as { id: string }).id;
 }
 async function upload(accessToken: string, parent: string, name: string, bytes: Uint8Array, mimeType: string) {
-  await request(accessToken, `https://www.googleapis.com/upload/drive/v3/files?uploadType=media&fields=id&name=${encodeURIComponent(name)}&parents=${encodeURIComponent(parent)}&supportsAllDrives=true`, { method: "POST", headers: { "Content-Type": mimeType }, body: Buffer.from(bytes) });
+  const boundary = `adara-drive-${randomUUID()}`;
+  const metadata = JSON.stringify({ name, parents: [parent] });
+  const prefix = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`;
+  const suffix = `\r\n--${boundary}--`;
+  const body = Buffer.concat([Buffer.from(prefix), Buffer.from(bytes), Buffer.from(suffix)]);
+  await request(accessToken, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true", {
+    method: "POST",
+    headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+    body,
+  });
 }
 const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
