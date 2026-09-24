@@ -31,6 +31,15 @@ function complete(actual: Record<string, number>, expected: Record<string, numbe
   return Object.entries(expected).every(([sku, quantity]) => (actual[sku] || 0) >= quantity);
 }
 
+async function skuForEan(admin: ReturnType<typeof createAdminClient>, ean: string) {
+  // El EAN principal de Productos es la fuente vigente: puede corregirse aun
+  // después de haber creado un lote. La tabla auxiliar conserva EAN adicionales.
+  const { data: product } = await admin.from("products").select("sku").eq("ean", ean).maybeSingle();
+  if (product?.sku) return product.sku;
+  const { data: extraEan } = await admin.from("product_eans").select("sku").eq("ean", ean).maybeSingle();
+  return extraEan?.sku || null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     await requireApiUser(request);
@@ -114,21 +123,21 @@ export async function PATCH(request: NextRequest) {
       if (!product.ean) await admin.from("products").update({ ean: code }).eq("sku", body.sku).is("ean", null);
       return NextResponse.json({ batch, assigned: { ean: code, sku: body.sku } });
     } else if (body.action === "stage" && batch.status === "collecting") {
-      const { data: match } = await admin.from("product_eans").select("sku").eq("ean", code).maybeSingle();
-      if (!match) return NextResponse.json({ error: "EAN desconocido. Asignalo a un SKU de este lote.", unknownEan: code }, { status: 409 });
-      if (!expected[match.sku]) return NextResponse.json({ error: `El SKU ${match.sku} no pertenece a este lote.` }, { status: 409 });
-      if ((batch.staged[match.sku] || 0) >= expected[match.sku]) return NextResponse.json({ error: `Ya se verificaron todas las unidades de ${match.sku}.` }, { status: 409 });
-      update = { staged: { ...batch.staged, [match.sku]: (batch.staged[match.sku] || 0) + 1 } };
+      const sku = await skuForEan(admin, code);
+      if (!sku) return NextResponse.json({ error: "EAN desconocido. Asignalo a un SKU de este lote.", unknownEan: code }, { status: 409 });
+      if (!expected[sku]) return NextResponse.json({ error: `El SKU ${sku} no pertenece a este lote.` }, { status: 409 });
+      if ((batch.staged[sku] || 0) >= expected[sku]) return NextResponse.json({ error: `Ya se verificaron todas las unidades de ${sku}.` }, { status: 409 });
+      update = { staged: { ...batch.staged, [sku]: (batch.staged[sku] || 0) + 1 } };
     } else if (body.action === "pack" && batch.status === "packing") {
       const shipment = batch.shipments.find((item) => item.id === body.shipmentId);
       if (!shipment) return NextResponse.json({ error: "Primero escaneá una etiqueta de este lote." }, { status: 409 });
-      const { data: match } = await admin.from("product_eans").select("sku").eq("ean", code).maybeSingle();
-      if (!match) return NextResponse.json({ error: "EAN desconocido. Asignalo a un SKU de este lote.", unknownEan: code }, { status: 409 });
+      const sku = await skuForEan(admin, code);
+      if (!sku) return NextResponse.json({ error: "EAN desconocido. Asignalo a un SKU de este lote.", unknownEan: code }, { status: 409 });
       const needed = required([shipment]);
-      if (!needed[match.sku]) return NextResponse.json({ error: `Producto incorrecto: ${match.sku} no corresponde a esta etiqueta.` }, { status: 409 });
+      if (!needed[sku]) return NextResponse.json({ error: `Producto incorrecto: ${sku} no corresponde a esta etiqueta.` }, { status: 409 });
       const current = batch.packed[shipment.id] || {};
-      if ((current[match.sku] || 0) >= needed[match.sku]) return NextResponse.json({ error: "Ese producto ya está completo para esta etiqueta." }, { status: 409 });
-      const packed = { ...batch.packed, [shipment.id]: { ...current, [match.sku]: (current[match.sku] || 0) + 1 } };
+      if ((current[sku] || 0) >= needed[sku]) return NextResponse.json({ error: "Ese producto ya está completo para esta etiqueta." }, { status: 409 });
+      const packed = { ...batch.packed, [shipment.id]: { ...current, [sku]: (current[sku] || 0) + 1 } };
       update = { packed };
       if (batch.shipments.every((item) => complete(packed[item.id] || {}, required([item])))) update.status = "completed";
     } else return NextResponse.json({ error: "Acción no válida para el estado actual del lote." }, { status: 409 });
