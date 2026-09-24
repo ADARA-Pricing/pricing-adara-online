@@ -264,6 +264,7 @@ function normalizedProfitability({
   saleFeeAmount,
   actualShippingAmount,
   shippingSellerCredit,
+  shippingCostMissing,
 }: {
   product: Product | null;
   publication: SalesPublication | null;
@@ -278,7 +279,33 @@ function normalizedProfitability({
   saleFeeAmount?: number | null;
   actualShippingAmount?: number | null;
   shippingSellerCredit?: number | null;
+  shippingCostMissing?: boolean;
 }) {
+  if (shippingCostMissing) {
+    return {
+      normalized_option_code: "MC",
+      real_unit_price: unitPrice,
+      real_net_sale_price: null,
+      real_net_profit: null,
+      real_total_net_profit: null,
+      real_margin_on_net_sale: null,
+      normalized_unit_price: null,
+      normalized_net_sale_price: null,
+      normalized_net_profit: null,
+      normalized_total_net_profit: null,
+      normalized_margin_on_net_sale: null,
+      normalized_margin_on_cost: null,
+      normalized_cost_for_profit: null,
+      normalized_product_cost_without_vat: null,
+      normalized_product_vat_rate: null,
+      normalized_marketplace_fee_amount: null,
+      normalized_shipping_cost_amount: null,
+      normalized_fixed_fee_amount: null,
+      normalized_income_tax_amount: null,
+      normalized_profit_error: "Falta tarifa de logística Flex para la localidad; no se muestra una ganancia sobreestimada.",
+      profitability_calculated_at: new Date().toISOString(),
+    };
+  }
   if (!product || unitPrice <= 0) {
     return {
       normalized_option_code: "MC",
@@ -464,7 +491,7 @@ function flexZoneForAddress(stateName?: string | null, cityName?: string | null)
       "san isidro", "martinez", "beccar", "boulogne", "acassuso", "san fernando", "victoria", "virreyes",
       "san martin", "villa ballester", "billinghurst", "jose leon suarez", "tres de febrero", "caseros", "ciudadela", "santos lugares",
       "hurlingham", "villa tesei", "william morris", "moron", "haedo", "el palomar", "castelar", "ituzaingo",
-      "avellaneda", "lanus", "lomas de zamora",
+      "avellaneda", "lanus", "lomas de zamora", "temperley",
     ]],
     ["gba2", [
       "tigre", "general pacheco", "el talar", "benavidez", "don torcuato", "nordelta", "malvinas argentinas", "los polvorines",
@@ -515,6 +542,10 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
     const zoneRate = flexRateForZone(flexRates, flexZone);
     const fallbackFlexCost = isFlex && flexCharge <= 0 ? Number(zoneRate?.amount || 0) : 0;
     const resolvedCost = isFlex && flexCharge > 0 ? flexCharge : fallbackFlexCost || senderCost;
+    if (isFlex && resolvedCost <= 0) return {
+      shipmentId, mode: shipment.mode || null, logisticType: shipment.logistic_type || null,
+      cost: null, sellerCredit, source: "flex_tariff_missing",
+    };
     return {
       shipmentId,
       mode: shipment.mode || null,
@@ -536,6 +567,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
+    const onlyOrderId = /^\d{5,25}$/.test(String(body?.orderId || "")) ? String(body.orderId) : null;
     // La sincronización programada sólo necesita el día reciente; las
     // sincronizaciones manuales continúan usando 60 días por defecto.
     const days = Math.max(7, Math.min(Number(body?.days || 60), 180));
@@ -645,7 +677,7 @@ export async function POST(request: Request) {
 
         for (const { searchOrder, order } of ordersWithDetails) {
           const orderId = asString(order.id || searchOrder.id);
-          if (!orderId || !order.date_created) continue;
+          if (!orderId || !order.date_created || (onlyOrderId && orderId !== onlyOrderId)) continue;
 
           const shipment = await shipmentCostForOrder(order, account, flexRates);
           const orderGrossTotal = (order.order_items || []).reduce(
@@ -710,6 +742,7 @@ export async function POST(request: Request) {
               saleFeeAmount: Number(orderItem.sale_fee || 0),
               actualShippingAmount: shippingPerUnit,
               shippingSellerCredit: shippingCreditPerUnit,
+              shippingCostMissing: shipment?.source === "flex_tariff_missing",
             });
 
             windowRowsByKey.set(key, {
