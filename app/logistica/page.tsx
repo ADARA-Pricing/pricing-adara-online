@@ -103,16 +103,12 @@ export default function LogisticaPage() {
 
   async function printLabels(ids: string[], format: "zebra" | "zpl" | "control", includePreparation = false) {
     if (!ids.length || ids.length > PAGE_SIZE || printing) return;
-    if (format === "zebra" && pendingPrinted.length && (ids.length !== pendingPrinted.length || ids.some((id) => !pendingPrinted.some((item) => item.id === id)))) {
-      setMessage("Primero confirmá la tanda anterior o reimprimí esas mismas etiquetas antes de crear otra.");
-      return;
-    }
     const pdfTab = format === "control" ? window.open("", "_blank") : null;
     if (includePreparation) printPickList(ids.map((id) => shipments.find((item) => item.id === id)).filter((item): item is Shipment => Boolean(item)));
     setPrinting(true);
     setMessage(`Solicitando ${ids.length} etiqueta${ids.length === 1 ? "" : "s"} a Mercado Libre...`);
     try {
-      let zplBatchMessage: string | null = null;
+      let batchMessage: string | null = null;
       const bridge = "https://localhost:9101";
       let printer: Record<string, unknown> | null = null;
       if (format === "zebra") {
@@ -147,9 +143,11 @@ export default function LogisticaPage() {
           signal: AbortSignal.timeout(30000),
         });
         if (!writeResponse.ok) throw new Error("La Zebra no aceptó el trabajo de impresión. Revisá Browser Print y reintentá.");
-        // Una etiqueta ya impresa puede no tener aún un lote (por ejemplo, si se
-        // imprimió antes de cerrar la tanda). También debe poder confirmarse.
-        setPendingPrinted(ids.map((id) => shipments.find((item) => item.id === id)).filter((item): item is Shipment => Boolean(item)));
+        const printedShipments = ids.map((id) => shipments.find((item) => item.id === id)).filter((item): item is Shipment => Boolean(item));
+        batchMessage = await createBatches(printedShipments);
+        setPendingPrinted([]);
+        setBatchRefresh((value) => value + 1);
+        setTab("batches");
       } else {
         const url = URL.createObjectURL(await response.blob());
         if (format === "control" && pdfTab) pdfTab.location.href = url;
@@ -162,13 +160,13 @@ export default function LogisticaPage() {
         window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
         if (format === "zpl") {
           const downloadedShipments = ids.map((id) => shipments.find((item) => item.id === id)).filter((item): item is Shipment => Boolean(item));
-          zplBatchMessage = await createBatches(downloadedShipments);
+          batchMessage = await createBatches(downloadedShipments);
           setBatchRefresh((value) => value + 1);
           setTab("batches");
         }
       }
       await loadBoard(day);
-      setMessage(format === "zebra" ? `Se enviaron ${ids.length} etiquetas ZPL a la Zebra. Confirmá que salieron correctamente para crear o abrir el lote.` : format === "control" ? "Hoja de control de Mercado Libre abierta para imprimir en papel." : zplBatchMessage || "ZPL descargado.");
+      setMessage(format === "control" ? "Hoja de control de Mercado Libre abierta para imprimir en papel." : batchMessage || "ZPL descargado.");
     } catch (error) {
       pdfTab?.close();
       setMessage(error instanceof Error ? error.message : "No se pudieron obtener las etiquetas.");
