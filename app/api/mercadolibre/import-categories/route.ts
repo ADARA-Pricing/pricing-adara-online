@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { getConnectedMeliAccount, meliFetch } from "@/lib/mercadolibre";
+import { canonicalCategory } from "@/lib/productCategories";
 
 type MeliItem = {
   id: string;
@@ -201,7 +202,7 @@ async function buildPreview() {
         meli_category_id: categoryId,
         meli_category_name: name,
         meli_category_path: path,
-        suggested_category: existing?.category || name,
+        suggested_category: canonicalCategory(existing?.category || name, []) || name,
         marketplace_fee_rate: marketplaceFeeRateValue,
         publication_count: categoryItems.length,
         active_publications: categoryItems.filter((item) => item.status === "active").length,
@@ -252,7 +253,7 @@ export async function POST(request: NextRequest) {
     const selectedById = new Map<string, string>();
     selected.forEach((entry: any) => {
       const id = String(entry?.meli_category_id || "").trim();
-      const category = String(entry?.category || "").trim();
+      const category = canonicalCategory(entry?.category, []);
       if (id && category) selectedById.set(id, category);
     });
 
@@ -266,7 +267,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
     const rowsToImport = preview.rows.filter((row) => selectedById.has(row.meli_category_id));
     const payload = rowsToImport.map((row) => {
-      const category = selectedById.get(row.meli_category_id) || row.suggested_category;
+      const category = canonicalCategory(selectedById.get(row.meli_category_id) || row.suggested_category, []) || row.suggested_category;
       return {
         category,
         marketplace_fee_rate: Number(row.marketplace_fee_rate || 0),
