@@ -130,6 +130,45 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
     finally { setBusy(false); }
   }
 
+  function printPreparation() {
+    if (!batch) return;
+    const tab = window.open("", "_blank");
+    if (!tab) { setMessage("Permití las ventanas emergentes para imprimir la hoja de preparación."); return; }
+    const doc = tab.document;
+    doc.title = `Preparación de ${batch.shipments.length} envíos`;
+    const style = doc.createElement("style");
+    style.textContent = "body{font:12px Arial,sans-serif;margin:18mm;color:#111}h1{font-size:20px}h2{font-size:15px;margin-top:22px}table{border-collapse:collapse;width:100%;margin:10px 0 20px}th,td{border:1px solid #bbb;padding:6px;text-align:left}th{background:#eee}";
+    doc.head.append(style);
+    const heading = doc.createElement("h1"); heading.textContent = `Hoja de preparación · ${batch.shipments.length} envíos`; doc.body.append(heading);
+    const subtitle = doc.createElement("h2"); subtitle.textContent = "Buscar en depósito · total por producto"; doc.body.append(subtitle);
+    const table = doc.createElement("table");
+    const header = doc.createElement("tr"); ["✓", "SKU", "Producto", "Cantidad"].forEach((text) => { const cell = doc.createElement("th"); cell.textContent = text; header.append(cell); }); table.append(header);
+    for (const item of totals(batch.shipments).sort((a, b) => a.sku.localeCompare(b.sku))) {
+      const row = doc.createElement("tr"); ["☐", item.sku, item.title, String(item.quantity)].forEach((text) => { const cell = doc.createElement("td"); cell.textContent = text; row.append(cell); }); table.append(row);
+    }
+    doc.body.append(table);
+    tab.setTimeout(() => tab.print(), 300);
+  }
+
+  async function downloadControl() {
+    if (!batch || busy) return;
+    setBusy(true); setMessage("");
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) throw new Error("Sesión vencida.");
+      const response = await fetch("/api/mercadolibre/shipment-labels", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` },
+        body: JSON.stringify({ shipmentIds: batch.shipments.map((shipment) => shipment.id), format: "control" }),
+      });
+      if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error || "No se pudo descargar la hoja de control de Mercado Libre."); }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a"); link.href = url; link.download = `hoja-control-ml-${batch.dispatch_day}.pdf`; document.body.append(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setMessage("Hoja de control de Mercado Libre descargada.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo descargar la hoja de control."); }
+    finally { setBusy(false); }
+  }
+
   return <section className="logistics-batches">
     <div className="logistics-batch-head"><div><h2>Lotes de empaquetado</h2><p>Cada tanda impresa y confirmada queda separada. Los envíos nuevos generan otro lote.</p></div><button className="button ghost" onClick={() => void load()} type="button">Actualizar lotes</button></div>
     {message && <div className="message info" role="status">{message}</div>}
@@ -137,6 +176,7 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
       <div className="logistics-batch-list">{batches.map((item) => <button key={item.id} type="button" className={`logistics-batch-card ${activeId === item.id ? "active" : ""}`} onClick={() => { setActiveId(item.id); setShipmentId(null); setMessage(""); }}><strong>{item.mode === "self_service" ? "Flex" : "Colecta"} · {item.shipments.length} {item.shipments.length === 1 ? "envío" : "envíos"}</strong><span>{statusLabel[item.status]}</span><small>Despacho {item.dispatch_day} · creado {new Date(item.created_at).toLocaleString("es-AR")}</small></button>)}{!batches.length && <p>Todavía no hay lotes. Imprimí etiquetas en Ventas y confirmá la tanda.</p>}</div>
       {batch && <div className="logistics-batch-work"><h3>{batch.mode === "self_service" ? "Flex" : "Colecta"} · {batch.shipments.length} envíos</h3><p>Estado: {statusLabel[batch.status]}</p>
         {batch.status === "printed" && <button className="button" onClick={() => void action("start")} disabled={busy}>Comenzar preparación</button>}
+        <div className="logistics-actions"><button className="button ghost" type="button" onClick={printPreparation} disabled={busy}>Reimprimir hoja de preparación</button><button className="button ghost" type="button" onClick={() => void downloadControl()} disabled={busy}>Descargar hoja de control ML</button></div>
         {batch.status === "collecting" && <><h4>Paso 1 · Verificar productos traídos del depósito</h4><p>Escaneá el EAN de cada unidad. El sistema marca faltantes y rechaza productos que no pertenecen al lote.</p>
           <form onSubmit={(event) => { event.preventDefault(); void action("stage", scan.trim()); }}><input ref={scanRef} autoFocus value={scan} onChange={(event) => setScan(event.target.value)} placeholder="Escanear EAN y Enter" aria-label="EAN del producto" /><button className="button" disabled={!scan.trim() || busy}>Verificar</button></form>
           <div className="logistics-batch-products">{products.map((item) => <div key={item.sku}><span>{item.image && <img src={item.image} alt="" />}<b>{item.sku}</b> · {item.title}</span><strong>{batch.staged[item.sku] || 0} / {item.quantity}</strong></div>)}</div>
