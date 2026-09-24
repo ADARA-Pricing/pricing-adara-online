@@ -488,15 +488,17 @@ function flexZoneForAddress(stateName?: string | null, cityName?: string | null)
   const zones: Array<[string, string[]]> = [
     ["gba1", [
       "vicente lopez", "olivos", "florida", "munro", "villa martelli", "carapachay", "la lucila",
-      "san isidro", "martinez", "beccar", "boulogne", "acassuso", "san fernando", "victoria", "virreyes",
-      "san martin", "villa ballester", "billinghurst", "jose leon suarez", "tres de febrero", "caseros", "ciudadela", "santos lugares",
+      "san isidro", "martinez", "beccar", "boulogne", "acassuso", "villa adelina", "san fernando", "victoria", "virreyes",
+      "san martin", "villa ballester", "billinghurst", "jose leon suarez", "villa lynch", "villa maipu", "san andres", "loma hermosa", "tres de febrero", "caseros", "ciudadela", "santos lugares",
       "hurlingham", "villa tesei", "william morris", "moron", "haedo", "el palomar", "castelar", "ituzaingo",
-      "avellaneda", "lanus", "lomas de zamora", "temperley",
+      "avellaneda", "wilde", "sarandi", "lanus", "valentin alsina", "monte chingolo",
+      "lomas de zamora", "lomas de zamoda", "temperley", "banfield", "turdera", "villa centenario", "ingeniero budge",
     ]],
     ["gba2", [
-      "tigre", "general pacheco", "el talar", "benavidez", "don torcuato", "nordelta", "malvinas argentinas", "los polvorines",
+      "tigre", "general pacheco", "el talar", "benavidez", "don torcuato", "nordelta", "malvinas argentinas", "los polvorines", "grand bourg",
       "jose c paz", "san miguel", "moreno", "merlo", "la matanza", "ramos mejia", "san justo", "gonzalez catan",
-      "ezeiza", "esteban echeverria", "monte grande", "almirante brown", "adrogue", "quilmes", "berazategui", "florencio varela",
+      "lomas del mirador", "villa luzuriaga", "villa madero", "gregorio de laferrere",
+      "ezeiza", "esteban echeverria", "monte grande", "almirante brown", "adrogue", "quilmes", "ezpeleta oeste", "berazategui", "sourigues", "florencio varela", "bosques",
     ]],
     ["gba3", [
       "pilar", "escobar", "general rodriguez", "marcos paz", "canuelas", "san vicente", "presidente peron",
