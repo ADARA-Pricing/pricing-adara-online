@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabaseAdmin";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-type Order = { id?: string | number; shipping?: { id?: string | number | null } | null };
+type Order = { id?: string | number; date_created?: string | null; shipping?: { id?: string | number | null } | null };
 type Shipment = {
   id?: string | number;
   status?: string | null;
@@ -28,6 +28,11 @@ function flexLocality(city: string, state: string) {
   return city;
 }
 
+function validDate(value: string | null | undefined) {
+  const timestamp = value ? Date.parse(value) : NaN;
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     await requireApiUser(request);
@@ -42,6 +47,8 @@ export async function GET(request: NextRequest) {
     const from = `${dayKey(fromDate)}T00:00:00.000-03:00`;
     const to = `${target}T23:59:59.999-03:00`;
     const ids = new Set<string>();
+    const orderCreatedByShipment = new Map<string, number>();
+    const batchOrderIds = new Map<string, string[]>();
     const limit = 50;
     let total = 0;
     for (let offset = 0; offset < 1000; offset += limit) {
@@ -50,7 +57,11 @@ export async function GET(request: NextRequest) {
       total = Number(result.paging?.total || 0);
       for (const order of result.results || []) {
         const id = String(order.shipping?.id || "");
-        if (/^\d{5,25}$/.test(id)) ids.add(id);
+        if (/^\d{5,25}$/.test(id)) {
+          ids.add(id);
+          const createdAt = validDate(order.date_created);
+          if (createdAt !== null) orderCreatedByShipment.set(id, Math.min(orderCreatedByShipment.get(id) ?? createdAt, createdAt));
+        }
       }
       if (!result.results?.length || offset + limit >= total) break;
     }
@@ -60,9 +71,12 @@ export async function GET(request: NextRequest) {
       .from("logistics_batches").select("shipments").eq("dispatch_day", target);
     if (batchesError) throw batchesError;
     for (const batch of batches || []) {
-      for (const shipment of (batch.shipments || []) as Array<{ id?: string }>) {
+      for (const shipment of (batch.shipments || []) as Array<{ id?: string; orderIds?: string[] }>) {
         const id = String(shipment.id || "");
-        if (/^\d{5,25}$/.test(id)) ids.add(id);
+        if (/^\d{5,25}$/.test(id)) {
+          ids.add(id);
+          batchOrderIds.set(id, shipment.orderIds || []);
+        }
       }
     }
 
@@ -111,19 +125,41 @@ export async function GET(request: NextRequest) {
         else if ("unresolved" in result) unresolved++;
       }
     }
-    const flexByLocality = new Map<string, { locality: string; count: number }>();
-    for (const entry of entries.filter((item) => item.mode === "self_service")) {
+    const flexEntries = entries.filter((item) => item.mode === "self_service");
+    const missingDates = flexEntries.filter((entry) => !orderCreatedByShipment.has(entry.id) && batchOrderIds.has(entry.id));
+    for (let offset = 0; offset < missingDates.length; offset += 10) {
+      await Promise.all(missingDates.slice(offset, offset + 10).map(async (entry) => {
+        const orderIds = batchOrderIds.get(entry.id)?.filter((id) => /^\d{5,25}$/.test(id)) || [];
+        const dates = await Promise.all(orderIds.map(async (orderId) => {
+          try {
+            const order = await meliFetch(`/orders/${orderId}`, account) as Order;
+            return validDate(order.date_created);
+          } catch { return null; }
+        }));
+        const knownDates = dates.filter((date): date is number => date !== null);
+        if (knownDates.length) orderCreatedByShipment.set(entry.id, Math.min(...knownDates));
+      }));
+    }
+    const noon = new Date(`${target}T12:00:00-03:00`).getTime();
+    const flexGroup = (id: string) => {
+      const createdAt = orderCreatedByShipment.get(id);
+      return createdAt === undefined ? "unknown" : createdAt < noon ? "beforeNoon" : "afterNoon";
+    };
+    const flexByLocalityAndShift = new Map<string, { locality: string; beforeNoon: number; afterNoon: number; unknown: number; count: number }>();
+    for (const entry of flexEntries) {
       const locality = flexLocality(entry.locality, entry.province);
       const key = locality.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      const current = flexByLocality.get(key) || { locality, count: 0 };
-      current.count++;
-      flexByLocality.set(key, current);
+      const shift = flexByLocalityAndShift.get(key) || { locality, beforeNoon: 0, afterNoon: 0, unknown: 0, count: 0 };
+      shift[flexGroup(entry.id)]++;
+      shift.count++;
+      flexByLocalityAndShift.set(key, shift);
     }
     return NextResponse.json({
       day: target,
       checkedAt: new Date().toISOString(),
-      counts: { flex: entries.filter((item) => item.mode === "self_service").length, collection: entries.filter((item) => item.mode === "cross_docking").length, full: entries.filter((item) => item.mode === "fulfillment").length },
-      flexByLocality: [...flexByLocality.values()].sort((a, b) => b.count - a.count || a.locality.localeCompare(b.locality, "es-AR")),
+      counts: { flex: flexEntries.length, collection: entries.filter((item) => item.mode === "cross_docking").length, full: entries.filter((item) => item.mode === "fulfillment").length },
+      flexTiming: { beforeNoon: flexEntries.filter((item) => flexGroup(item.id) === "beforeNoon").length, afterNoon: flexEntries.filter((item) => flexGroup(item.id) === "afterNoon").length, unknown: flexEntries.filter((item) => flexGroup(item.id) === "unknown").length },
+      flexByLocality: [...flexByLocalityAndShift.values()].sort((a, b) => b.count - a.count || a.locality.localeCompare(b.locality, "es-AR")),
       unresolved,
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
