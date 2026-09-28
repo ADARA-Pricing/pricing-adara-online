@@ -104,7 +104,7 @@ export function LogisticsBatches({ refreshKey }: { refreshKey: number }) {
       setBatches((current) => current.map((item) => item.id === batch.id ? result.batch : item));
       setScan("");
       if (name === "assign_ean") { setUnknownEan(""); setAssignSku(""); setMissingProduct(false); setFeedbackTone("success"); setMessage(`EAN ${code} asignado a ${sku}. Volvé a escanearlo para registrar la unidad.`); }
-      else if (name === "manual_exception") { setShowManualException(false); setManualSku(""); setManualReason(""); setFeedbackTone("error"); setMessage(`Excepción manual registrada para ${sku}. La unidad NO fue verificada por EAN; revisar antes de despachar.`); }
+      else if (name === "manual_exception") { setUnknownEan(""); setShowManualException(false); setManualSku(""); setManualReason(""); setFeedbackTone("error"); setMessage(`Excepción manual registrada para ${sku}. La unidad NO fue verificada por EAN; revisar antes de despachar.`); }
       else if (name === "archive") { setFeedbackTone("success"); setMessage("Lote archivado en Google Drive."); }
       else if (name === "pack" && shipmentId) {
         const updated = result.batch as Batch;
