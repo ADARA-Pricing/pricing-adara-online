@@ -36,7 +36,8 @@ export async function batchPdf(batch: Batch, kind: "control" | "preparation" | "
       page.drawText("Buscar en depósito · total por producto", { x: margin, y: height - 82, font: regular, size: 10, color: rgb(0.35, 0.35, 0.35) });
       page.drawText(`${batch.mode === "self_service" ? "Flex" : "Colecta"} | Despacho ${batch.dispatch_day} | ${batch.shipments.length} envíos`, { x: margin, y: height - 98, font: regular, size: 8, color: rgb(0.35, 0.35, 0.35) });
       page.drawRectangle({ x: margin, y: height - 128, width: width - 2 * margin, height: 20, color: gray });
-      page.drawText("✓", { x: columns.check, y: height - 121, font: bold, size: 9, color: rgb(1, 1, 1) });
+      // Helvetica/WinAnsi no puede codificar ✓; el casillero se dibuja como vector.
+      page.drawRectangle({ x: columns.check, y: height - 121, width: 9, height: 9, borderWidth: 1, borderColor: rgb(1, 1, 1) });
       page.drawText("SKU", { x: columns.sku, y: height - 121, font: bold, size: 9, color: rgb(1, 1, 1) });
       page.drawText("PRODUCTO", { x: columns.product, y: height - 121, font: bold, size: 9, color: rgb(1, 1, 1) });
       page.drawText("CANT.", { x: columns.quantity, y: height - 121, font: bold, size: 9, color: rgb(1, 1, 1) });
