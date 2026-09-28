@@ -10,7 +10,8 @@ export const runtime = "nodejs";
 
 type Item = { sku: string; quantity: number; title: string; image?: string | null };
 type Shipment = { id: string; mode: "cross_docking" | "self_service"; dispatchAt: string; orderIds: string[]; buyer: string; items: Item[] };
-type Batch = { id: string; status: "printed" | "collecting" | "packing" | "completed"; shipments: Shipment[]; staged: Record<string, number>; packed: Record<string, Record<string, number>> };
+type ScanException = { step: "collecting" | "packing"; sku: string; shipmentId?: string; code: string; reason: string; userId: string; at: string };
+type Batch = { id: string; status: "printed" | "collecting" | "packing" | "completed"; shipments: Shipment[]; staged: Record<string, number> & { _exceptions?: ScanException[] }; packed: Record<string, Record<string, number>> & { _exceptions?: ScanException[] } };
 
 function argentinaDayKey(value = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const user = await requireApiUser(request);
-    const body = await request.json() as { batchId?: string; action?: string; code?: string; shipmentId?: string; sku?: string };
+    const body = await request.json() as { batchId?: string; action?: string; code?: string; shipmentId?: string; sku?: string; name?: string; costWithoutVat?: number; vatRate?: number; reason?: string };
     if (!/^[0-9a-f-]{36}$/i.test(body.batchId || "")) return NextResponse.json({ error: "Lote inválido." }, { status: 400 });
     const admin = createAdminClient();
     const { data, error } = await admin.from("logistics_batches").select("*").eq("id", body.batchId).single();
@@ -159,13 +160,44 @@ export async function PATCH(request: NextRequest) {
       if (!complete(batch.staged, expected)) return NextResponse.json({ error: "Todavía faltan productos por verificar en el paso 1." }, { status: 409 });
       update = { status: "packing" };
     } else if (body.action === "assign_ean") {
-      if (!/^[0-9]{8,14}$/.test(code) || !body.sku || !expected[body.sku]) return NextResponse.json({ error: "EAN o SKU inválido para este lote." }, { status: 400 });
-      const { data: product } = await admin.from("products").select("sku,ean").eq("sku", body.sku).maybeSingle();
-      if (!product) return NextResponse.json({ error: "Ese SKU no existe en Productos." }, { status: 404 });
+      if (barcodeProblem(code) || !body.sku || !expected[body.sku]) return NextResponse.json({ error: "EAN o SKU inválido para este lote." }, { status: 400 });
+      const existingSku = await skuForEan(admin, code);
+      if (existingSku && existingSku !== body.sku) return NextResponse.json({ error: `Ese EAN ya pertenece al SKU ${existingSku}. No se puede reasignar automáticamente.` }, { status: 409 });
+      let { data: product, error: productError } = await admin.from("products").select("sku,ean").eq("sku", body.sku).maybeSingle();
+      if (productError) throw productError;
+      if (!product) {
+        if (!body.name || !Number.isFinite(body.costWithoutVat) || Number(body.costWithoutVat) < 0 || ![21, 10.5].includes(Number(body.vatRate))) {
+          return NextResponse.json({ error: "Ese SKU no existe en Productos. Cargá nombre, costo sin IVA e IVA para crearlo; o registrá una excepción manual.", missingProduct: true }, { status: 409 });
+        }
+        const { data: created, error: createError } = await admin.from("products").insert({
+          sku: body.sku, name: body.name.trim(), cost_without_vat: body.costWithoutVat,
+          vat_rate: body.vatRate, ean: code, created_by: user.id,
+        }).select("sku,ean").single();
+        if (createError) return NextResponse.json({ error: `No se pudo crear el producto: ${createError.message}` }, { status: 409 });
+        product = created;
+      }
+      if (existingSku === body.sku) return NextResponse.json({ batch, assigned: { ean: code, sku: body.sku, existing: true } });
       const { error: insertError } = await admin.from("product_eans").insert({ ean: code, sku: body.sku, created_by: user.id });
       if (insertError) return NextResponse.json({ error: "Ese EAN ya está asignado o no se pudo guardar. Revisá el producto." }, { status: 409 });
       if (!product.ean) await admin.from("products").update({ ean: code }).eq("sku", body.sku).is("ean", null);
       return NextResponse.json({ batch, assigned: { ean: code, sku: body.sku } });
+    } else if (body.action === "manual_exception" && (batch.status === "collecting" || batch.status === "packing")) {
+      const sku = body.sku || "";
+      const reason = (body.reason || "").trim();
+      if (!expected[sku] || reason.length < 8 || reason.length > 300) return NextResponse.json({ error: "Elegí un SKU del lote y explicá la excepción (8 a 300 caracteres)." }, { status: 400 });
+      const exception: ScanException = { step: batch.status, sku, code, reason, userId: user.id, at: new Date().toISOString() };
+      if (batch.status === "collecting") {
+        if ((batch.staged[sku] || 0) >= expected[sku]) return NextResponse.json({ error: "Todas las unidades de ese SKU ya están verificadas." }, { status: 409 });
+        update = { staged: { ...batch.staged, [sku]: (batch.staged[sku] || 0) + 1, _exceptions: [...(batch.staged._exceptions || []), exception] } };
+      } else {
+        const shipment = batch.shipments.find((item) => item.id === body.shipmentId);
+        if (!shipment || !required([shipment])[sku]) return NextResponse.json({ error: "Ese SKU no corresponde a la etiqueta seleccionada." }, { status: 409 });
+        const current = (batch.packed[shipment.id] || {}) as Record<string, number>;
+        if ((current[sku] || 0) >= required([shipment])[sku]) return NextResponse.json({ error: "Todas las unidades de ese SKU ya están empaquetadas." }, { status: 409 });
+        const packed = { ...batch.packed, [shipment.id]: { ...current, [sku]: (current[sku] || 0) + 1 }, _exceptions: [...(batch.packed._exceptions || []), exception] };
+        update = { packed };
+        if (batch.shipments.every((item) => complete((packed[item.id] || {}) as Record<string, number>, required([item])))) update.status = "completed";
+      }
     } else if (body.action === "stage" && batch.status === "collecting") {
       const invalidBarcode = barcodeProblem(code);
       if (invalidBarcode) return NextResponse.json({ error: invalidBarcode }, { status: 409 });

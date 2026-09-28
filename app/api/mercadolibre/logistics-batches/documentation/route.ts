@@ -11,7 +11,7 @@ export const maxDuration = 60;
 
 type Item = { sku: string; title: string; quantity: number };
 type Shipment = { id: string; orderIds: string[]; buyer: string; items: Item[] };
-type Batch = { id: string; status: string; mode: string; dispatch_day: string; shipments: Shipment[] };
+type Batch = { id: string; status: string; mode: string; dispatch_day: string; shipments: Shipment[]; staged?: { _exceptions?: Array<{ step: string; sku: string; shipmentId?: string; code: string; reason: string; userId: string; at: string }> }; packed?: { _exceptions?: Array<{ step: string; sku: string; shipmentId?: string; code: string; reason: string; userId: string; at: string }> } };
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as { batchId?: string };
     if (!/^[0-9a-f-]{36}$/i.test(body.batchId || "")) return NextResponse.json({ error: "Lote inválido." }, { status: 400 });
     const admin = createAdminClient();
-    const { data, error } = await admin.from("logistics_batches").select("id,status,mode,dispatch_day,shipments").eq("id", body.batchId).maybeSingle();
+    const { data, error } = await admin.from("logistics_batches").select("id,status,mode,dispatch_day,shipments,staged,packed").eq("id", body.batchId).maybeSingle();
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "No se encontró el lote." }, { status: 404 });
     const batch = data as Batch;

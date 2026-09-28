@@ -2,7 +2,8 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 type Item = { sku: string; title: string; quantity: number };
 type Shipment = { id: string; orderIds: string[]; buyer: string; items: Item[] };
-type Batch = { id: string; mode: string; dispatch_day: string; shipments: Shipment[] };
+type ScanException = { step: string; sku: string; shipmentId?: string; code: string; reason: string; userId: string; at: string };
+type Batch = { id: string; mode: string; dispatch_day: string; shipments: Shipment[]; staged?: { _exceptions?: ScanException[] }; packed?: { _exceptions?: ScanException[] } };
 
 function printable(value: unknown) {
   return String(value ?? "").replace(/[\u2018\u2019]/g, "'").replace(/[\u2013\u2014]/g, "-")
@@ -167,6 +168,15 @@ export async function batchPdf(batch: Batch, kind: "control" | "preparation" | "
       line(`${item.quantity} x ${item.sku} - ${item.title}`, false, 10, 12);
     }
     y -= 4;
+  }
+  const exceptions = [...(batch.staged?._exceptions || []), ...(batch.packed?._exceptions || [])];
+  if (exceptions.length) {
+    y -= 12;
+    line("ATENCION: UNIDADES REGISTRADAS SIN VERIFICAR EAN", true, 12);
+    for (const exception of exceptions) {
+      line(`${exception.step === "packing" ? `Envio ${exception.shipmentId}` : "Deposito"} | SKU ${exception.sku} | Codigo ${exception.code || "sin lectura"}`, true, 9);
+      line(`Motivo: ${exception.reason} | ${exception.at} | Usuario ${exception.userId}`, false, 8, 12);
+    }
   }
   return pdf.save();
 }
