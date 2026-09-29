@@ -11,7 +11,7 @@ import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, ChevronDown, ChevronRight, ChevronUp, CircleCheck, Copy, FileSpreadsheet, Info, Package, PackageMinus, Pencil, Plus, RefreshCw, Search, Tags, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
-import type { MercadoLibreShippingCost, Product } from "@/lib/types";
+import type { MercadoLibreShippingCost, Product, TiendanubePublication } from "@/lib/types";
 import { money, toNumber } from "@/lib/pricing";
 import { PageHero } from "@/components/PageHero";
 
@@ -381,28 +381,6 @@ function productImage(shippings: MercadoLibreShippingCost[]) {
   return shippings.find((shipping) => Boolean(shipping.meli_thumbnail))?.meli_thumbnail || null;
 }
 
-function bestMeliPrice(shippings: MercadoLibreShippingCost[]) {
-  const activePrices = shippings
-    .filter((shipping) => shipping.meli_status === "active")
-    .map((shipping) => Number(shipping.meli_price || shipping.meli_promo_price || 0))
-    .filter((price) => Number.isFinite(price) && price > 0);
-  const prices = activePrices.length
-    ? activePrices
-    : shippings
-        .map((shipping) => Number(shipping.meli_price || shipping.meli_promo_price || 0))
-        .filter((price) => Number.isFinite(price) && price > 0);
-
-  return prices.length ? Math.min(...prices) : null;
-}
-
-function moneyRange(values: Array<number | null | undefined>) {
-  const amounts = values.map((value) => Number(value || 0)).filter((value) => Number.isFinite(value) && value > 0);
-  if (!amounts.length) return "-";
-  const min = Math.min(...amounts);
-  const max = Math.max(...amounts);
-  return min === max ? money(min) : `${money(min)} - ${money(max)}`;
-}
-
 function installmentCampaignTag(shipping?: MercadoLibreShippingCost | null) {
   if (!shipping?.meli_tags || !Array.isArray(shipping.meli_tags)) return null;
   const tags = shipping.meli_tags.map((tag) => String(tag).toLowerCase());
@@ -482,6 +460,7 @@ export default function ProductsPage() {
   const dataLoad = usePricingLoad('productos', supabase);
   const [products, setProducts] = useState<Product[]>([]);
   const [shippingCosts, setShippingCosts] = useState<MercadoLibreShippingCost[]>([]);
+  const [tiendanubePublications, setTiendanubePublications] = useState<TiendanubePublication[]>([]);
   const [form, setForm] = useState<Product>(emptyProduct);
   const [newCategory, setNewCategory] = useState("");
   const [query, setQuery] = useState("");
@@ -558,7 +537,17 @@ export default function ProductsPage() {
 
   async function loadProducts(options: {quiet?: boolean; initial?: boolean} = {}) {
     setLoading(true);
-    try { await dataLoad.run({"products":{"table":"products","order":"updated_at","ascending":false},"publications":{"table":"mercadolibre_shipping_costs","filters":[["eq","active",true]]}}, data => { setProducts(data.products); setShippingCosts(data.publications); }, !options.initial); }
+    try {
+      await dataLoad.run({
+        products: { table: "products", order: "updated_at", ascending: false },
+        publications: { table: "mercadolibre_shipping_costs", filters: [["eq", "active", true]] },
+        tiendanubePublications: { table: "tiendanube_publications", filters: [["eq", "active", true]] },
+      }, (data) => {
+        setProducts(data.products as Product[]);
+        setShippingCosts(data.publications as MercadoLibreShippingCost[]);
+        setTiendanubePublications(data.tiendanubePublications as TiendanubePublication[]);
+      }, !options.initial);
+    }
     finally { setLoading(false); }
   }
 
@@ -962,9 +951,15 @@ export default function ProductsPage() {
         return String(b.updated_at || b.meli_last_sync_at || "").localeCompare(String(a.updated_at || a.meli_last_sync_at || ""));
       });
 
-      return { product, products: groupProducts, shippings };
+      const tiendanube = tiendanubePublications.filter((publication) => {
+        const matchesProduct = Boolean(publication.product_id && productIds.has(publication.product_id));
+        const matchesSku = Boolean(publication.sku && productSkus.has(normalizeProductSku(publication.sku)));
+        return matchesProduct || matchesSku;
+      }).sort((a, b) => String(b.tn_last_sync_at || b.updated_at || "").localeCompare(String(a.tn_last_sync_at || a.updated_at || "")));
+
+      return { product, products: groupProducts, shippings, tiendanube };
     });
-  }, [products, shippingCosts]);
+  }, [products, shippingCosts, tiendanubePublications]);
 
   const filtered = useMemo(() => {
     const normalized = query.toLowerCase().trim();
@@ -1440,15 +1435,10 @@ export default function ProductsPage() {
               <span />
               <span>Producto</span>
               <span>Costo</span>
-              <span>Precio</span>
-              <span>Envio ML</span>
-              <span>Fijo ML</span>
-              <span>MLA</span>
-              <span>Stock</span>
-              <span>Estado</span>
+              <span>Canales</span>
               <span>Accion</span>
             </div>
-            {filtered.map(({ product, shippings }) => {
+            {filtered.map(({ product, shippings, tiendanube }) => {
               const expanded = expandedSku === product.sku;
               const publicationCount = shippings.length;
               const activePublications = shippings.filter((item) => item.meli_status === "active").length;
@@ -1461,9 +1451,6 @@ export default function ProductsPage() {
                 .sort()
                 .reverse()[0];
               const thumbnail = productImage(shippings);
-              const bestPrice = bestMeliPrice(shippings);
-              const shippingCostRange = moneyRange(shippings.map((item) => item.shipping_cost_amount));
-              const fixedFeeRange = moneyRange(shippings.map((item) => item.fixed_fee_amount));
               const productNotes = product.description || shippings[0]?.notes || "-";
               const noteSummary = productNoteSummary(productNotes);
               const detailId = `product-detail-${String(product.id || product.sku).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -1508,33 +1495,9 @@ export default function ProductsPage() {
                       <strong>{money(product.cost_without_vat)}</strong>
                     </div>
                     <div className="product-row-stat">
-                      <span>Precio ML</span>
-                      <strong>{bestPrice ? money(bestPrice) : "-"}</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>Envio ML</span>
-                      <strong>{shippingCostRange}</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>Fijo ML</span>
-                      <strong>{fixedFeeRange}</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>Publicaciones ML</span>
-                      <strong>{publicationCount || "-"}</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>Stock ML</span>
-                      <strong>{publicationCount ? sharedMlStock : "-"}</strong>
-                    </div>
-                    <div className="product-row-stat">
-                      <span>Estado ML</span>
+                      <span>Canales</span>
                       <strong>
-                        {publicationCount ? (
-                          <span className="badge">{activePublications} activas{pausedPublications ? ` · ${pausedPublications} pausadas` : ""}</span>
-                        ) : (
-                          <span className="badge meli-status-none">Sin publicar</span>
-                        )}
+                        <span className="badge">ML {publicationCount} · TN {tiendanube.length}</span>
                       </strong>
                     </div>
                     <button className="product-expand-button" type="button" aria-label={expanded ? "Cerrar detalle" : "Ver detalle"} onClick={(event) => { event.stopPropagation(); toggleProductRow(); }}>
@@ -1667,6 +1630,33 @@ export default function ProductsPage() {
                           </div>
                         </div>
                       )}
+
+                      <div className="product-publications-section product-tiendanube-section">
+                        <div className="product-publications-header">
+                          <div>
+                            <h3>Tienda Nube</h3>
+                            <p>{tiendanube.length ? `${tiendanube.length} variante${tiendanube.length === 1 ? "" : "s"} sincronizada${tiendanube.length === 1 ? "" : "s"}` : "No hay variantes sincronizadas para este SKU."}</p>
+                          </div>
+                        </div>
+                        {tiendanube.length > 0 ? (
+                          <div className="table-wrap product-publications-table">
+                            <table>
+                              <thead><tr><th>Producto / variante</th><th>Estado</th><th>Precio</th><th>Stock</th><th>Última sync</th><th></th></tr></thead>
+                              <tbody>{tiendanube.map((publication) => (
+                                <tr key={publication.id || `${publication.tiendanube_store_id}-${publication.tiendanube_variant_id}`}>
+                                  <td><strong className="product-publication-title">{publication.title || product.name}</strong><br /><span className="small">{publication.variant_name || `Variante ${publication.tiendanube_variant_id}`}</span></td>
+                                  <td><span className={`badge ${publication.published ? "meli-status-active" : "meli-status-paused"}`}>{publication.published ? "Publicada" : "No publicada"}</span></td>
+                                  <td className="numeric"><strong>{publication.price ? money(publication.price) : "-"}</strong>{publication.promotional_price ? <small>Promo: {money(publication.promotional_price)}</small> : null}</td>
+                                  <td className="numeric">{publication.stock_management ? (publication.stock ?? "-") : "Sin control"}</td>
+                                  <td className="numeric">{formatDateTime(publication.tn_last_sync_at || publication.updated_at)}</td>
+                                  <td>{publication.permalink ? <a className="item-action product-publication-open" href={publication.permalink} target="_blank" rel="noreferrer">Abrir <ChevronRight aria-hidden="true" /></a> : null}</td>
+                                </tr>
+                              ))}</tbody>
+                            </table>
+                          </div>
+                        ) : null}
+                        <p className="product-channel-note"><Info aria-hidden="true" />Tienda Nube hoy aporta publicación, precio y stock. Sus costos propios se configurarán en Precios cuando estén definidos por canal.</p>
+                      </div>
 
                       <div className="product-row-actions">
                         <button className="button product-detail-action primary" onClick={() => editProduct(product)}><Pencil aria-hidden="true" />Editar</button>
