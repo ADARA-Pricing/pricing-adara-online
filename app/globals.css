@@ -11512,7 +11512,7 @@ textarea:focus,
 
 .products-list-columns {
   display: grid;
-  grid-template-columns: 22px 50px minmax(280px, 1.5fr) minmax(86px, 0.45fr) minmax(86px, 0.45fr) minmax(92px, 0.45fr) minmax(92px, 0.45fr) minmax(92px, 0.45fr) minmax(78px, 0.35fr) minmax(128px, 0.55fr) 40px;
+  grid-template-columns: 22px 50px minmax(280px, 1.5fr) minmax(86px, 0.45fr) minmax(128px, 0.55fr) 40px;
   gap: 12px;
   align-items: center;
   padding: 9px 13px;
@@ -11547,7 +11547,7 @@ textarea:focus,
 }
 
 .product-row-main {
-  grid-template-columns: 22px 50px minmax(280px, 1.5fr) minmax(86px, 0.45fr) minmax(86px, 0.45fr) minmax(92px, 0.45fr) minmax(92px, 0.45fr) minmax(92px, 0.45fr) minmax(78px, 0.35fr) minmax(128px, 0.55fr) 40px;
+  grid-template-columns: 22px 50px minmax(280px, 1.5fr) minmax(86px, 0.45fr) minmax(128px, 0.55fr) 40px;
   gap: 12px;
   min-height: 52px;
   padding: 7px 13px;
@@ -11770,6 +11770,28 @@ textarea:focus,
   border-radius: 10px;
   background: #f8fbff;
   overflow: visible;
+}
+
+.product-tiendanube-section {
+  margin-top: 12px;
+}
+
+.product-channel-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 10px 14px;
+  border-top: 1px solid #e5edf7;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.product-channel-note svg {
+  width: 15px;
+  min-width: 15px;
+  margin-top: 1px;
 }
 
 .product-publications-header {
