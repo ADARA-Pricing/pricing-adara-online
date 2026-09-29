@@ -6,6 +6,7 @@ import {
   mercadoLibreClassicOption,
 } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabaseAdmin";
+import { shouldCreditFlexReceiverDiscount } from "@/lib/mercadolibreFlexCredit";
 import type {
   MercadoLibreCategoryFee,
   MercadoLibreShippingCost,
@@ -534,12 +535,14 @@ async function shipmentCostForOrder(order: MeliOrder, account: Awaited<ReturnTyp
     // descontará, incluso cuando el payload incluya el descuento mayorista.
     // En Flex, los pedidos de hasta $33.000 tienen envío a cargo del comprador:
     // la bonificación aparece en `receiver.discounts`, pero ML la acredita en
-    // el cobro del vendedor (tal como figura en la liquidación). Sobre ese
-    // umbral, sólo se consideran descuentos directos del vendedor.
+    // el cobro del vendedor (tal como figura en la liquidación). El umbral
+    // corresponde al precio por unidad: varias unidades pueden superar
+    // $33.000 en el pedido sin cambiar quién pagó el envío.
     const senderDiscount = (sender?.discounts || []).reduce((sum, discount) => sum + Number(discount.promoted_amount || 0), 0);
     const receiverDiscount = (costs.receiver?.discounts || []).reduce((sum, discount) => sum + Number(discount.promoted_amount || 0), 0);
     const orderAmount = Number(order.total_amount || order.order_items?.reduce((sum, item) => sum + Number(item.unit_price || 0) * Number(item.quantity || 0), 0) || 0);
-    const sellerCredit = isFlex ? senderDiscount + (orderAmount < 33000 ? receiverDiscount : 0) : 0;
+    const buyerPaidShipping = shouldCreditFlexReceiverDiscount(orderAmount, order.order_items);
+    const sellerCredit = isFlex ? senderDiscount + (buyerPaidShipping ? receiverDiscount : 0) : 0;
     const flexZone = isFlex ? flexZoneForAddress(shipment.receiver_address?.state?.name, shipment.receiver_address?.city?.name) : null;
     const zoneRate = flexRateForZone(flexRates, flexZone);
     const fallbackFlexCost = isFlex && flexCharge <= 0 ? Number(zoneRate?.amount || 0) : 0;
