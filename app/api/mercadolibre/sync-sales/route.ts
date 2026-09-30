@@ -777,6 +777,7 @@ export async function POST(request: Request) {
               raw: orderItem,
               // Fecha de negocio independiente del timestamp técnico del upsert.
               meli_last_updated: order.last_updated || order.date_closed || order.date_created,
+              meli_closed_at: order.date_closed || null,
               updated_at: new Date().toISOString(),
             });
           }
