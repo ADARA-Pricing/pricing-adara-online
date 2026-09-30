@@ -109,7 +109,9 @@ export default function SalesMonitorPage() {
     const today = argentinaDayStart();
     try {
       await dataLoad.run({
-        sales: { table: "mercadolibre_order_items", columns: "id,order_id,order_date,status,meli_item_id,variation_id,sku,product_id,title,quantity,total_amount,real_total_net_profit,normalized_total_net_profit,real_net_sale_price,normalized_net_sale_price,shipping_logistic_type,updated_at", filters: [["gte", "order_date", today.toISOString()]], order: "order_date", ascending: false },
+        // “Ventas de hoy” es operativo: incluye órdenes acreditadas o
+        // actualizadas hoy, aunque ML las haya creado días antes.
+        sales: { table: "mercadolibre_order_items", columns: "id,order_id,order_date,status,meli_item_id,variation_id,sku,product_id,title,quantity,total_amount,real_total_net_profit,normalized_total_net_profit,real_net_sale_price,normalized_net_sale_price,shipping_logistic_type,updated_at", filters: [["gte", "updated_at", today.toISOString()]], order: "updated_at", ascending: false },
         products: { table: "products", columns: "id,sku,name,stock", filters: [["neq", "status", "discontinued"]] },
         publications: { table: "mercadolibre_shipping_costs", columns: "product_id,sku,meli_item_id,meli_status,meli_stock,meli_thumbnail,meli_last_sync_at", filters: [["eq", "active", true]] },
       }, (data) => {
