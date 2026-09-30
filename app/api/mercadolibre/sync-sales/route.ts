@@ -656,12 +656,16 @@ export async function POST(request: Request) {
       while (offset < 1000) {
         const params = new URLSearchParams({
           seller: String(account.meli_user_id),
-          "order.date_created.from": window.from,
-          "order.date_created.to": window.to,
           sort: "date_desc",
           limit: String(limit),
           offset: String(offset),
         });
+        // Una orden puede crearse días antes y recién quedar pagada, cancelada
+        // o con envío resuelto hoy. En la sync incremental el delta correcto es
+        // la última actualización, no la fecha de creación.
+        const dateField = incrementalToday ? "order.date_last_updated" : "order.date_created";
+        params.set(`${dateField}.from`, window.from);
+        params.set(`${dateField}.to`, window.to);
         const data = await meliFetch(`/orders/search?${params.toString()}`, account);
         const searchOrders = (Array.isArray(data?.results) ? data.results : []) as MeliOrder[];
         const orders = onlyOrderId ? searchOrders.filter((order) => asString(order.id) === onlyOrderId) : searchOrders;
