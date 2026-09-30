@@ -34,6 +34,8 @@ type MeliOrderItem = {
 type MeliOrder = {
   id?: string | number;
   date_created?: string;
+  date_closed?: string | null;
+  last_updated?: string | null;
   status?: string | null;
   total_amount?: number | null;
   pack_id?: string | number | null;
@@ -105,24 +107,13 @@ function argentinaDayStartIso(now = new Date()) {
 }
 
 async function incrementalTodayStart(
-  supabase: ReturnType<typeof createAdminClient>,
   dayStartIso: string,
 ) {
-  // Conservamos unos minutos de solapamiento: ML puede terminar de completar
-  // un pago o un envío después de que el pedido aparece por primera vez.
-  const { data, error } = await supabase
-    .from("mercadolibre_order_items")
-    .select("updated_at")
-    .gte("order_date", dayStartIso)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-
-  const latestSync = Date.parse(String(data?.updated_at || ""));
+  // La ventana depende del reloj, no de updated_at local: esa columna guarda
+  // la hora real que ML modificó/cerró la orden y no la hora de la sync.
   const dayStart = Date.parse(dayStartIso);
-  if (!Number.isFinite(latestSync) || !Number.isFinite(dayStart)) return dayStartIso;
-  return new Date(Math.max(dayStart, latestSync - RECENT_SALES_OVERLAP_MS)).toISOString();
+  if (!Number.isFinite(dayStart)) return new Date(Date.now() - RECENT_SALES_OVERLAP_MS).toISOString();
+  return new Date(Math.max(dayStart, Date.now() - RECENT_SALES_OVERLAP_MS)).toISOString();
 }
 
 function mapBySku<T extends { sku?: string | null }>(items: T[]) {
@@ -584,7 +575,7 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
     const dayStart = incrementalToday ? argentinaDayStartIso() : null;
     const from = body?.from || (dayStart
-      ? await incrementalTodayStart(supabase, dayStart)
+      ? await incrementalTodayStart(dayStart)
       : daysAgo(days));
 
     const [
@@ -784,7 +775,9 @@ export async function POST(request: Request) {
               shipping_cost_source: shipment?.source || null,
               ...profitability,
               raw: orderItem,
-              updated_at: new Date().toISOString(),
+              // Conservamos la fecha de negocio de ML. Usar la hora local de
+              // la sync hacía que órdenes viejas reaparecieran como “hoy”.
+              updated_at: order.last_updated || order.date_closed || order.date_created,
             });
           }
         }
