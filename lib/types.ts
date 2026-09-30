@@ -214,6 +214,7 @@ export type MercadoLibreOrderItem = {
   normalized_profit_error?: string | null;
   profitability_calculated_at?: string | null;
   raw?: unknown;
+  meli_last_updated?: string | null;
   created_at?: string;
   updated_at?: string;
 };

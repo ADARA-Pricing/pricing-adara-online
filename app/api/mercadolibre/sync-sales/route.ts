@@ -775,9 +775,9 @@ export async function POST(request: Request) {
               shipping_cost_source: shipment?.source || null,
               ...profitability,
               raw: orderItem,
-              // Conservamos la fecha de negocio de ML. Usar la hora local de
-              // la sync hacía que órdenes viejas reaparecieran como “hoy”.
-              updated_at: order.last_updated || order.date_closed || order.date_created,
+              // Fecha de negocio independiente del timestamp técnico del upsert.
+              meli_last_updated: order.last_updated || order.date_closed || order.date_created,
+              updated_at: new Date().toISOString(),
             });
           }
         }
