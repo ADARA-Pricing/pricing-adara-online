@@ -109,9 +109,9 @@ export default function SalesMonitorPage() {
     const today = argentinaDayStart();
     try {
       await dataLoad.run({
-        // “Ventas de hoy” usa la hora real que ML acreditó/actualizó la orden,
-        // no la hora técnica de la última sincronización.
-        sales: { table: "mercadolibre_order_items", columns: "id,order_id,order_date,status,meli_item_id,variation_id,sku,product_id,title,quantity,total_amount,real_total_net_profit,normalized_total_net_profit,real_net_sale_price,normalized_net_sale_price,shipping_logistic_type,meli_last_updated,updated_at", filters: [["gte", "meli_last_updated", today.toISOString()]], order: "meli_last_updated", ascending: false },
+        // “Ventas de hoy” es facturación generada hoy. Las órdenes viejas que
+        // ML actualiza tardíamente se sincronizan, pero no se suman al día.
+        sales: { table: "mercadolibre_order_items", columns: "id,order_id,order_date,status,meli_item_id,variation_id,sku,product_id,title,quantity,total_amount,real_total_net_profit,normalized_total_net_profit,real_net_sale_price,normalized_net_sale_price,shipping_logistic_type,updated_at", filters: [["gte", "order_date", today.toISOString()]], order: "order_date", ascending: false },
         products: { table: "products", columns: "id,sku,name,stock", filters: [["neq", "status", "discontinued"]] },
         publications: { table: "mercadolibre_shipping_costs", columns: "product_id,sku,meli_item_id,meli_status,meli_stock,meli_thumbnail,meli_last_sync_at", filters: [["eq", "active", true]] },
       }, (data) => {
