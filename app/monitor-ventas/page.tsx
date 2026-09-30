@@ -25,19 +25,6 @@ function argentinaDayKey() {
   }).format(new Date());
 }
 
-function incrementalTodayStart() {
-  const dayStart = argentinaDayStart().getTime();
-  try {
-    const lastSuccess = Number(window.localStorage.getItem(`adara-monitor-sales-sync:${argentinaDayKey()}`));
-    if (Number.isFinite(lastSuccess) && lastSuccess > 0) {
-      return new Date(Math.max(dayStart, lastSuccess - 5 * 60 * 1000)).toISOString();
-    }
-  } catch {
-    // La sincronización sigue funcionando si el navegador no permite storage.
-  }
-  return new Date(dayStart).toISOString();
-}
-
 function numberValue(value: unknown) {
   const number = Number(value || 0);
   return Number.isFinite(number) ? number : 0;
@@ -104,15 +91,10 @@ export default function SalesMonitorPage() {
       const response = await fetch("/api/mercadolibre/sync-sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ incrementalToday: true, from: incrementalTodayStart(), to: new Date().toISOString(), chunkDays: 1 }),
+        body: JSON.stringify({ incrementalToday: true, to: new Date().toISOString(), chunkDays: 1 }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error || "No se pudieron actualizar las ventas desde Mercado Libre.");
-      try {
-        window.localStorage.setItem(`adara-monitor-sales-sync:${argentinaDayKey()}`, String(Date.now()));
-      } catch {
-        // La sincronización sigue funcionando si el navegador no permite storage.
-      }
       setSyncInfo(`${Number(data.saved || 0)} ventas nuevas o modificadas actualizadas desde Mercado Libre.`);
     } catch (error) {
       setSyncInfo(error instanceof Error ? error.message : "No se pudieron actualizar las ventas desde Mercado Libre.");

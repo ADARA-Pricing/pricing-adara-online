@@ -90,7 +90,9 @@ function daysAgo(days: number) {
   return date.toISOString();
 }
 
-const RECENT_SALES_OVERLAP_MS = 5 * 60 * 1000;
+// ML puede cerrar o acreditar una orden bastante después de crearla. Dos horas
+// cubren esa demora y una caída transitoria sin reconsultar días completos.
+const RECENT_SALES_OVERLAP_MS = 2 * 60 * 60 * 1000;
 
 function argentinaDayStartIso(now = new Date()) {
   const day = new Intl.DateTimeFormat("en-CA", {
